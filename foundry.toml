@@ -1,0 +1,14 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc = "0.8.28"
+ffi = true
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+
+[rpc_endpoints]
+mainnet = "https://mainnet.hashio.io/api"
+testnet = "https://testnet.hashio.io/api"
+previewnet = "https://previewnet.hashio.io/api"
+localnode = "http://localhost:7546"
