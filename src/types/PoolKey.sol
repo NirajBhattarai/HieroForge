@@ -4,6 +4,14 @@ pragma solidity ^0.8.28;
 import {Currency} from "./Currency.sol";
 import {IHooks} from "../interfaces/IHooks.sol";
 
+type PoolId is bytes32;
+
+using {toId} for PoolKey global;
+
+function toId(PoolKey memory self) pure returns (PoolId) {
+    return PoolId.wrap(keccak256(abi.encode(self.token0, self.token1, self.fee, self.tickSpacing, self.hooks)));
+}
+
 /// @notice Unique identifier for a pool containing token addresses and configuration
 /// @dev Each pool has its own state associated with this key
 struct PoolKey {
