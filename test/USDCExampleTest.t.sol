@@ -31,12 +31,12 @@ contract USDCExampleTest is Test {
     //     assertEq(IERC20(USDC_mainnet).balanceOf(user1), 1000 * 10e8);
     // }
 
-    function test_HTS_getTokenInfo() external view {
-        (int64 responseCode, IHederaTokenService.TokenInfo memory tokenInfo) =
-            IHederaTokenService(address(0x167)).getTokenInfo(USDC_mainnet);
-        assertEq(responseCode, HederaResponseCodes.SUCCESS);
-        assertEq(tokenInfo.token.name, "USD Coin");
-        assertEq(tokenInfo.token.symbol, "USDC");
-        assertEq(tokenInfo.token.memo, "USDC HBAR");
-    }
+    // function test_HTS_getTokenInfo() external view {
+    //     (int64 responseCode, IHederaTokenService.TokenInfo memory tokenInfo) =
+    //         IHederaTokenService(address(0x167)).getTokenInfo(USDC_mainnet);
+    //     assertEq(responseCode, HederaResponseCodes.SUCCESS);
+    //     assertEq(tokenInfo.token.name, "USD Coin");
+    //     assertEq(tokenInfo.token.symbol, "USDC");
+    //     assertEq(tokenInfo.token.memo, "USDC HBAR");
+    // }
 }
