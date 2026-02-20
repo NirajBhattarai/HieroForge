@@ -34,8 +34,13 @@ jobs:
 
       - name: Run Forge build
         run: |
-          forge build --sizes
+          forge build
         id: build
+
+      - name: Check contract sizes (project contracts only)
+        run: |
+          forge build --sizes src/
+        id: sizes
 
       - name: Run Forge tests
         run: |
