@@ -8,6 +8,7 @@ type PoolId is bytes32;
 
 using {toId} for PoolKey global;
 
+// TODO: use low level function to hash the pool key
 function toId(PoolKey memory self) pure returns (PoolId) {
     return PoolId.wrap(keccak256(abi.encode(self.token0, self.token1, self.fee, self.tickSpacing, self.hooks)));
 }

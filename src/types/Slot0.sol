@@ -1,0 +1,91 @@
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity ^0.8.28;
+
+/**
+ * @dev Slot0 is a packed version of solidity structure.
+ * Using the packaged version saves gas by not storing the structure fields in memory slots.
+ *
+ * Layout:
+ * 24 bits empty | 24 bits lpFee | 12 bits protocolFee 1->0 | 12 bits protocolFee 0->1 | 24 bits tick | 160 bits sqrtPriceX96
+ *
+ * Fields in the direction from the least significant bit:
+ *
+ * The current price
+ * uint160 sqrtPriceX96;
+ *
+ * The current tick
+ * int24 tick;
+ *
+ * Protocol fee, expressed in hundredths of a bip, upper 12 bits are for 1->0, and the lower 12 are for 0->1
+ * the maximum is 1000 - meaning the maximum protocol fee is 0.1%
+ * the protocolFee is taken from the input first, then the lpFee is taken from the remaining input
+ * uint24 protocolFee;
+ *
+ * The current LP fee of the pool. If the pool is dynamic, this does not include the dynamic fee flag.
+ * uint24 lpFee;
+ */
+type Slot0 is bytes32;
+
+using {setSqrtPriceX96, setTick, setLpFee, setProtocolFee} for Slot0 global;
+
+uint160 constant MASK_160_BITS = 0x00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+uint24 constant MASK_24_BITS = 0xFFFFFF;
+
+uint8 constant TICK_OFFSET = 160;
+uint8 constant PROTOCOL_FEE_OFFSET = 184;
+uint8 constant LP_FEE_OFFSET = 208;
+
+// #### GLOBAL FREE FUNCTIONS ####
+
+function sqrtPriceX96(Slot0 _packed) pure returns (uint160 _sqrtPriceX96) {
+    assembly ("memory-safe") {
+        _sqrtPriceX96 := and(MASK_160_BITS, _packed)
+    }
+}
+
+function tick(Slot0 _packed) pure returns (int24 _tick) {
+    assembly ("memory-safe") {
+        _tick := signextend(2, shr(TICK_OFFSET, _packed))
+    }
+}
+
+function protocolFee(Slot0 _packed) pure returns (uint24 _protocolFee) {
+    assembly ("memory-safe") {
+        _protocolFee := and(MASK_24_BITS, shr(PROTOCOL_FEE_OFFSET, _packed))
+    }
+}
+
+function lpFee(Slot0 _packed) pure returns (uint24 _lpFee) {
+    assembly ("memory-safe") {
+        _lpFee := and(MASK_24_BITS, shr(LP_FEE_OFFSET, _packed))
+    }
+}
+
+function setSqrtPriceX96(Slot0 _packed, uint160 _sqrtPriceX96) pure returns (Slot0 _result) {
+    assembly ("memory-safe") {
+        _result := or(and(not(MASK_160_BITS), _packed), and(MASK_160_BITS, _sqrtPriceX96))
+    }
+}
+
+function setTick(Slot0 _packed, int24 _tick) pure returns (Slot0 _result) {
+    assembly ("memory-safe") {
+        _result := or(and(not(shl(TICK_OFFSET, MASK_24_BITS)), _packed), shl(TICK_OFFSET, and(MASK_24_BITS, _tick)))
+    }
+}
+
+function setProtocolFee(Slot0 _packed, uint24 _protocolFee) pure returns (Slot0 _result) {
+    assembly ("memory-safe") {
+        _result :=
+            or(
+                and(not(shl(PROTOCOL_FEE_OFFSET, MASK_24_BITS)), _packed),
+                shl(PROTOCOL_FEE_OFFSET, and(MASK_24_BITS, _protocolFee))
+            )
+    }
+}
+
+function setLpFee(Slot0 _packed, uint24 _lpFee) pure returns (Slot0 _result) {
+    assembly ("memory-safe") {
+        _result :=
+            or(and(not(shl(LP_FEE_OFFSET, MASK_24_BITS)), _packed), shl(LP_FEE_OFFSET, and(MASK_24_BITS, _lpFee)))
+    }
+}
