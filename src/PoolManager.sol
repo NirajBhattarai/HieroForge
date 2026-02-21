@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.28;
 
-import {ICore} from "./interfaces/ICore.sol";
+import {IPoolManager} from "./interfaces/IPoolManager.sol";
 import {PoolKey} from "./types/PoolKey.sol";
 import {PoolId} from "./types/PoolKey.sol";
 import {Currency} from "./types/Currency.sol";
 import {MIN_TICK_SPACING, MAX_TICK_SPACING} from "./math/constants.sol";
 import {PoolState} from "./types/PoolState.sol";
 
-contract Core is ICore {
+contract PoolManager is IPoolManager {
     mapping(PoolId id => PoolState) internal _pools;
 
     function initialize(PoolKey memory key, uint160 sqrtPriceX96) external returns (int24 tick) {

@@ -28,9 +28,9 @@ forge test --fork-url https://mainnet.hashio.io/api
 ```
 HieroForge/
 ├── src/
-│   ├── Core.sol              # Core contract (implements ICore)
+│   ├── PoolManager.sol        # Pool manager contract (implements IPoolManager)
 │   ├── interfaces/
-│   │   ├── ICore.sol
+│   │   ├── IPoolManager.sol
 │   │   └── IHooks.sol
 │   └── types/
 │       ├── Currency.sol      # address wrapper for token/currency id

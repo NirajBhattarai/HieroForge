@@ -6,7 +6,7 @@ import {Currency} from "../types/Currency.sol";
 import {IHooks} from "./IHooks.sol";
 import {PoolKey} from "../types/PoolKey.sol";
 
-interface ICore {
+interface IPoolManager {
     /// @notice Pools require tickSpacing >= MIN_TICK_SPACING (1) in #initialize to prevent underflow
     error TickSpacingTooSmall(int24 tickSpacing);
     /// @notice Pools are limited to type(int16).max tickSpacing in #initialize, to prevent overflow

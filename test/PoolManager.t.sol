@@ -6,26 +6,26 @@ import {htsSetup} from "hedera-forking/htsSetup.sol";
 import {HTS_ADDRESS} from "hedera-forking/HtsSystemContract.sol";
 import {IHederaTokenService} from "hedera-forking/IHederaTokenService.sol";
 import {HederaResponseCodes} from "hedera-forking/HederaResponseCodes.sol";
-import {Core} from "../src/Core.sol";
-import {ICore} from "../src/interfaces/ICore.sol";
+import {PoolManager} from "../src/PoolManager.sol";
+import {IPoolManager} from "../src/interfaces/IPoolManager.sol";
 import {PoolKey} from "../src/types/PoolKey.sol";
 import {Currency} from "../src/types/Currency.sol";
 import {IHooks} from "../src/interfaces/IHooks.sol";
 import {MIN_TICK_SPACING, MAX_TICK_SPACING} from "../src/math/constants.sol";
 
 /**
- * Tests for Core using HTS (Hedera Token Service) tokens only.
+ * Tests for PoolManager using HTS (Hedera Token Service) tokens only.
  * Requires --ffi; use --fork-url for mirror node if needed.
  */
-contract CoreTest is Test {
-    Core public core;
+contract PoolManagerTest is Test {
+    PoolManager public poolManager;
     address internal signer;
     address internal tokenA;
     address internal tokenB;
 
     function setUp() external {
         htsSetup();
-        core = new Core();
+        poolManager = new PoolManager();
         signer = makeAddr("signer");
         vm.deal(signer, 100 ether);
 
@@ -71,24 +71,24 @@ contract CoreTest is Test {
         PoolKey memory key = _validPoolKey();
         key.tickSpacing = 0;
 
-        vm.expectRevert(abi.encodeWithSelector(ICore.TickSpacingTooSmall.selector, int24(0)));
-        core.initialize(key, 1);
+        vm.expectRevert(abi.encodeWithSelector(IPoolManager.TickSpacingTooSmall.selector, int24(0)));
+        poolManager.initialize(key, 1);
     }
 
     function test_initialize_revertWhenTickSpacingTooSmall_negative() external {
         PoolKey memory key = _validPoolKey();
         key.tickSpacing = -1;
 
-        vm.expectRevert(abi.encodeWithSelector(ICore.TickSpacingTooSmall.selector, int24(-1)));
-        core.initialize(key, 1);
+        vm.expectRevert(abi.encodeWithSelector(IPoolManager.TickSpacingTooSmall.selector, int24(-1)));
+        poolManager.initialize(key, 1);
     }
 
     function test_initialize_revertWhenTickSpacingTooLarge() external {
         PoolKey memory key = _validPoolKey();
         key.tickSpacing = int24(int256(type(int16).max) + 1);
 
-        vm.expectRevert(abi.encodeWithSelector(ICore.TickSpacingTooLarge.selector, key.tickSpacing));
-        core.initialize(key, 1);
+        vm.expectRevert(abi.encodeWithSelector(IPoolManager.TickSpacingTooLarge.selector, key.tickSpacing));
+        poolManager.initialize(key, 1);
     }
 
     function test_initialize_revertWhenCurrenciesOutOfOrder() external {
@@ -96,8 +96,8 @@ contract CoreTest is Test {
         key.token0 = Currency.wrap(tokenB);
         key.token1 = Currency.wrap(tokenA);
 
-        vm.expectRevert(abi.encodeWithSelector(ICore.CurrenciesOutOfOrderOrEqual.selector, tokenB, tokenA));
-        core.initialize(key, 1);
+        vm.expectRevert(abi.encodeWithSelector(IPoolManager.CurrenciesOutOfOrderOrEqual.selector, tokenB, tokenA));
+        poolManager.initialize(key, 1);
     }
 
     function test_initialize_revertWhenCurrenciesEqual() external {
@@ -105,15 +105,15 @@ contract CoreTest is Test {
         key.token0 = Currency.wrap(tokenA);
         key.token1 = Currency.wrap(tokenA);
 
-        vm.expectRevert(abi.encodeWithSelector(ICore.CurrenciesOutOfOrderOrEqual.selector, tokenA, tokenA));
-        core.initialize(key, 1);
+        vm.expectRevert(abi.encodeWithSelector(IPoolManager.CurrenciesOutOfOrderOrEqual.selector, tokenA, tokenA));
+        poolManager.initialize(key, 1);
     }
 
     function test_initialize_success() external {
         PoolKey memory key = _validPoolKey();
         uint160 sqrtPriceX96 = 79228162514264337593543950336;
 
-        int24 tick = core.initialize(key, sqrtPriceX96);
+        int24 tick = poolManager.initialize(key, sqrtPriceX96);
 
         assertEq(tick, 0);
     }
@@ -122,7 +122,7 @@ contract CoreTest is Test {
         PoolKey memory key = _validPoolKey();
         key.tickSpacing = MIN_TICK_SPACING;
 
-        int24 tick = core.initialize(key, 1);
+        int24 tick = poolManager.initialize(key, 1);
         assertEq(tick, 0);
     }
 
@@ -130,7 +130,7 @@ contract CoreTest is Test {
         PoolKey memory key = _validPoolKey();
         key.tickSpacing = MAX_TICK_SPACING;
 
-        int24 tick = core.initialize(key, 1);
+        int24 tick = poolManager.initialize(key, 1);
         assertEq(tick, 0);
     }
 }
