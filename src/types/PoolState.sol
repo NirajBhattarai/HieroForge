@@ -5,8 +5,13 @@ import {Slot0} from "./Slot0.sol";
 import {TickInfo} from "./TickInfo.sol";
 import {PositionState} from "./PositionState.sol";
 import {TickMath} from "../libraries/TickMath.sol";
+import {ModifyLiquidityParams} from "./PoolOperation.sol";
+import {BalanceDelta} from "./BalanceDelta.sol";
+import {IPoolManager} from "../interfaces/IPoolManager.sol";
+import {ModifyLiquidityState} from "./ModifyLiquidityState.sol";
+import {LiquidityMath} from "../math/LiquidityMath.sol";
 
-using {initialize} for PoolState global;
+using {initialize, checkPoolInitialized, modifyLiquidity} for PoolState global;
 
 struct PoolState {
     Slot0 slot0;
@@ -20,4 +25,73 @@ struct PoolState {
 function initialize(PoolState storage self, uint160 sqrtPriceX96, uint24 lpFee) returns (int24 tick) {
     tick = TickMath.getTickAtSqrtPrice(sqrtPriceX96);
     self.slot0 = Slot0.wrap(bytes32(0)).setSqrtPriceX96(sqrtPriceX96).setTick(tick).setLpFee(lpFee).setProtocolFee(0);
+}
+
+/// @notice Reverts if the given pool has not been initialized
+function checkPoolInitialized(PoolState storage self) view {
+    if (self.slot0.sqrtPriceX96() == 0) revert IPoolManager.PoolNotInitialized();
+}
+
+function updateTick(PoolState storage self, int24 tick, int128 liquidityDelta, bool upper)
+    returns (bool flipped, uint128 liquidityGrossAfter)
+{
+    TickInfo storage tickInfo = self.ticks[tick];
+
+    uint128 liquidityGrossBefore = tickInfo.liquidityGross;
+    int128 liquidityNetBefore = tickInfo.liquidityNet;
+
+    liquidityGrossAfter = LiquidityMath.addDelta(liquidityGrossBefore, liquidityDelta);
+
+    flipped = (liquidityGrossAfter == 0) != (liquidityGrossBefore == 0);
+
+    if (liquidityGrossBefore == 0) {
+        // by convention, we assume that all growth before a tick was initialized happened _below_ the tick
+        if (tick <= self.slot0.tick()) {
+            // tickInfo.feeGrowthOutside0X128 = self.feeGrowthGlobal0X128;
+            // tickInfo.feeGrowthOutside1X128 = self.feeGrowthGlobal1X128;
+        }
+    }
+
+    // when the lower (upper) tick is crossed left to right, liquidity must be added (removed)
+    // when the lower (upper) tick is crossed right to left, liquidity must be removed (added)
+    int128 liquidityNet = upper ? liquidityNetBefore - liquidityDelta : liquidityNetBefore + liquidityDelta;
+
+    assembly ("memory-safe") {
+        // liquidityGrossAfter and liquidityNet are packed in the first slot of `info`
+        // So we can store them with a single sstore by packing them ourselves first
+        sstore(
+            tickInfo.slot,
+            // bitwise OR to pack liquidityGrossAfter and liquidityNet
+            or(
+                // Put liquidityGrossAfter in the lower bits, clearing out the upper bits
+                and(liquidityGrossAfter, 0xffffffffffffffffffffffffffffffff),
+                // Shift liquidityNet to put it in the upper bits (no need for signextend since we're shifting left)
+                shl(128, liquidityNet)
+            )
+        )
+    }
+}
+
+function modifyLiquidity(PoolState storage self, ModifyLiquidityParams memory params, bytes calldata hookData)
+    returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
+{
+    int128 liquidityDelta = params.liquidityDelta;
+    int24 tickLower = params.tickLower;
+    int24 tickUpper = params.tickUpper;
+    checkTicks(tickLower, tickUpper);
+    {
+        ModifyLiquidityState memory state;
+
+        if (liquidityDelta != 0) {
+            (state.flippedLower, state.liquidityGrossAfterLower) = updateTick(self, tickLower, liquidityDelta, false);
+            (state.flippedUpper, state.liquidityGrossAfterUpper) = updateTick(self, tickUpper, liquidityDelta, true);
+        }
+    }
+}
+
+/// @dev Common checks for valid tick inputs.
+function checkTicks(int24 tickLower, int24 tickUpper) pure {
+    if (tickLower >= tickUpper) revert IPoolManager.TicksMisordered(tickLower, tickUpper);
+    if (tickLower < TickMath.MIN_TICK) revert IPoolManager.TickLowerOutOfBounds(tickLower);
+    if (tickUpper > TickMath.MAX_TICK) revert IPoolManager.TickUpperOutOfBounds(tickUpper);
 }

@@ -26,7 +26,7 @@ pragma solidity ^0.8.28;
  */
 type Slot0 is bytes32;
 
-using {setSqrtPriceX96, setTick, setLpFee, setProtocolFee} for Slot0 global;
+using {sqrtPriceX96, setSqrtPriceX96, setTick, setLpFee, setProtocolFee, tick} for Slot0 global;
 
 uint160 constant MASK_160_BITS = 0x00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
 uint24 constant MASK_24_BITS = 0xFFFFFF;

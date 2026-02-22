@@ -7,6 +7,8 @@ import {PoolId} from "./types/PoolKey.sol";
 import {Currency} from "./types/Currency.sol";
 import {MIN_TICK_SPACING, MAX_TICK_SPACING} from "./math/constants.sol";
 import {PoolState} from "./types/PoolState.sol";
+import {BalanceDelta} from "./types/BalanceDelta.sol";
+import {ModifyLiquidityParams} from "./types/PoolOperation.sol";
 
 contract PoolManager is IPoolManager {
     mapping(PoolId id => PoolState) internal _pools;
@@ -20,10 +22,58 @@ contract PoolManager is IPoolManager {
             revert CurrenciesOutOfOrderOrEqual(Currency.unwrap(key.token0), Currency.unwrap(key.token1));
         }
 
+        // TODO: Fee We will get
+        // uint24 lpFee = key.fee.getInitialLPFee();
+
         // NOTE: Hooks are not yet wired into the pool. Current flow is create-pool → swap only.
         // Hooks will be added once this minimal path is in place.
 
         PoolId id = key.toId();
-        return 0;
+        tick = _pools[id].initialize(sqrtPriceX96, 0);
+
+        emit Initialize(id, key.token0, key.token1, 0, key.tickSpacing, key.hooks, sqrtPriceX96, tick);
+    }
+
+    /// @inheritdoc IPoolManager
+    function modifyLiquidity(PoolKey memory key, ModifyLiquidityParams memory params, bytes calldata hookData)
+        external
+        returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
+    {
+        PoolId id = key.toId();
+
+        {
+            PoolState storage poolState = _getPool(id);
+            poolState.checkPoolInitialized();
+
+            BalanceDelta principalDelta;
+            (principalDelta, feesAccrued) = poolState.modifyLiquidity(params, hookData);
+        }
+
+        // event is emitted before the afterModifyLiquidity call to ensure events are always emitted in order
+        emit ModifyLiquidity(id, msg.sender, params.tickLower, params.tickUpper, params.liquidityDelta, params.salt);
+    }
+
+    /// @notice Accounts the deltas of 2 currencies to a target address
+    function _accountPoolBalanceDelta(PoolKey memory key, BalanceDelta delta, address target) internal {
+        _accountDelta(key.token0, delta.amount0(), target);
+        _accountDelta(key.token1, delta.amount1(), target);
+    }
+
+    /// @notice Adds a balance delta in a currency for a target address
+    function _accountDelta(Currency currency, int128 delta, address target) internal {
+        if (delta == 0) return;
+
+        (int256 previous, int256 next) = currency.applyDelta(target, delta);
+
+        // if (next == 0) {
+        //     NonzeroDeltaCount.decrement();
+        // } else if (previous == 0) {
+        //     NonzeroDeltaCount.increment();
+        // }
+    }
+
+    /// @notice Implementation of the _getPool function defined in ProtocolFees
+    function _getPool(PoolId id) internal view returns (PoolState storage) {
+        return _pools[id];
     }
 }
