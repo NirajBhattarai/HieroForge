@@ -5,7 +5,17 @@ pragma solidity ^0.8.28;
 /// and the lower 128 bits represent the amount1.
 type BalanceDelta is int256;
 
-using {amount0, amount1} for BalanceDelta global;
+using {amount0, amount1, add as +} for BalanceDelta global;
+
+function toBalanceDelta(int128 _amount0, int128 _amount1) pure returns (BalanceDelta balanceDelta) {
+    assembly ("memory-safe") {
+        balanceDelta := or(shl(128, _amount0), and(sub(shl(128, 1), 1), _amount1))
+    }
+}
+
+function add(BalanceDelta a, BalanceDelta b) pure returns (BalanceDelta) {
+    return BalanceDelta.wrap(BalanceDelta.unwrap(a) + BalanceDelta.unwrap(b));
+}
 
 function amount0(BalanceDelta delta) pure returns (int128) {
     return int128(int256(BalanceDelta.unwrap(delta)) >> 128);

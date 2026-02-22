@@ -20,10 +20,9 @@ struct ModifyLiquidityParams {
 
 /// @notice Parameter struct for `Swap` pool operations
 struct SwapParams {
-    /// Whether to swap token0 for token1 or vice versa
-    bool zeroForOne;
-    /// The desired input amount if negative (exactIn), or the desired output amount if positive (exactOut)
     int256 amountSpecified;
-    /// The sqrt price at which, if reached, the swap will stop executing
+    int24 tickSpacing;
+    bool zeroForOne;
     uint160 sqrtPriceLimitX96;
+    uint24 lpFeeOverride;
 }

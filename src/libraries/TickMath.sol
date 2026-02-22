@@ -49,6 +49,28 @@ library TickMath {
         }
     }
 
+    /// @notice Derives max liquidity per tick from given tick spacing
+    /// @dev Executed when adding liquidity
+    /// @param tickSpacing The amount of required tick separation, realized in multiples of `tickSpacing`
+    ///     e.g., a tickSpacing of 3 requires ticks to be initialized every 3rd tick i.e., ..., -6, -3, 0, 3, 6, ...
+    /// @return result The max liquidity per tick
+    function tickSpacingToMaxLiquidityPerTick(int24 tickSpacing) internal pure returns (uint128 result) {
+        // Equivalent to:
+        // int24 minTick = (TickMath.MIN_TICK / tickSpacing);
+        // if (TickMath.MIN_TICK  % tickSpacing != 0) minTick--;
+        // int24 maxTick = (TickMath.MAX_TICK / tickSpacing);
+        // uint24 numTicks = maxTick - minTick + 1;
+        // return type(uint128).max / numTicks;
+        // tick spacing will never be 0 since MIN_TICK_SPACING is 1
+        assembly ("memory-safe") {
+            tickSpacing := signextend(2, tickSpacing)
+            let minTick := sub(sdiv(MIN_TICK, tickSpacing), slt(smod(MIN_TICK, tickSpacing), 0))
+            let maxTick := sdiv(MAX_TICK, tickSpacing)
+            let numTicks := add(sub(maxTick, minTick), 1)
+            result := div(sub(shl(128, 1), 1), numTicks)
+        }
+    }
+
     /// @notice Calculates sqrt(1.0001^tick) * 2^96
     /// @dev Throws if |tick| > max tick
     /// @param tick The input tick for the above formula

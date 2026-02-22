@@ -8,9 +8,13 @@ import {Currency} from "./types/Currency.sol";
 import {MIN_TICK_SPACING, MAX_TICK_SPACING} from "./math/constants.sol";
 import {PoolState} from "./types/PoolState.sol";
 import {BalanceDelta} from "./types/BalanceDelta.sol";
-import {ModifyLiquidityParams} from "./types/PoolOperation.sol";
+import {ModifyLiquidityParams, SwapParams} from "./types/PoolOperation.sol";
+import {CustomRevert} from "./libraries/CustomRevert.sol";
+import {BeforeSwapDelta} from "./types/BeforeSwapDelta.sol";
 
 contract PoolManager is IPoolManager {
+    using CustomRevert for bytes4;
+
     mapping(PoolId id => PoolState) internal _pools;
 
     function initialize(PoolKey memory key, uint160 sqrtPriceX96) external returns (int24 tick) {
@@ -47,10 +51,13 @@ contract PoolManager is IPoolManager {
 
             BalanceDelta principalDelta;
             (principalDelta, feesAccrued) = poolState.modifyLiquidity(params, hookData);
+
+            callerDelta = principalDelta + feesAccrued;
         }
 
         // event is emitted before the afterModifyLiquidity call to ensure events are always emitted in order
         emit ModifyLiquidity(id, msg.sender, params.tickLower, params.tickUpper, params.liquidityDelta, params.salt);
+        _accountPoolBalanceDelta(key, callerDelta, msg.sender);
     }
 
     /// @notice Accounts the deltas of 2 currencies to a target address
@@ -70,6 +77,23 @@ contract PoolManager is IPoolManager {
         // } else if (previous == 0) {
         //     NonzeroDeltaCount.increment();
         // }
+    }
+
+    /// @inheritdoc IPoolManager
+    function swap(PoolKey memory key, SwapParams memory params, bytes calldata hookData)
+        external
+        returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
+    {
+        if (params.amountSpecified == 0) SwapAmountCannotBeZero.selector.revertWith();
+        PoolId id = key.toId();
+
+        PoolState storage pool = _getPool(id);
+        pool.checkPoolInitialized();
+
+        BeforeSwapDelta beforeSwapDelta;
+        {
+            
+        }
     }
 
     /// @notice Implementation of the _getPool function defined in ProtocolFees

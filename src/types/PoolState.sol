@@ -6,10 +6,13 @@ import {TickInfo} from "./TickInfo.sol";
 import {PositionState} from "./PositionState.sol";
 import {TickMath} from "../libraries/TickMath.sol";
 import {ModifyLiquidityParams} from "./PoolOperation.sol";
-import {BalanceDelta} from "./BalanceDelta.sol";
+import {BalanceDelta, toBalanceDelta} from "./BalanceDelta.sol";
+import {SafeCast} from "../libraries/SafeCast.sol";
 import {IPoolManager} from "../interfaces/IPoolManager.sol";
 import {ModifyLiquidityState} from "./ModifyLiquidityState.sol";
 import {LiquidityMath} from "../math/LiquidityMath.sol";
+import {TickBitmap} from "../libraries/TickBitmap.sol";
+import {SqrtPriceMath} from "../libraries/SqrtPriceMath.sol";
 
 using {initialize, checkPoolInitialized, modifyLiquidity} for PoolState global;
 
@@ -73,7 +76,7 @@ function updateTick(PoolState storage self, int24 tick, int128 liquidityDelta, b
 }
 
 function modifyLiquidity(PoolState storage self, ModifyLiquidityParams memory params, bytes calldata hookData)
-    returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
+    returns (BalanceDelta delta, BalanceDelta feesAccrued)
 {
     int128 liquidityDelta = params.liquidityDelta;
     int24 tickLower = params.tickLower;
@@ -85,6 +88,76 @@ function modifyLiquidity(PoolState storage self, ModifyLiquidityParams memory pa
         if (liquidityDelta != 0) {
             (state.flippedLower, state.liquidityGrossAfterLower) = updateTick(self, tickLower, liquidityDelta, false);
             (state.flippedUpper, state.liquidityGrossAfterUpper) = updateTick(self, tickUpper, liquidityDelta, true);
+
+            if (liquidityDelta >= 0) {
+                uint128 maxLiquidityPerTick = TickMath.tickSpacingToMaxLiquidityPerTick(params.tickSpacing);
+
+                if (state.liquidityGrossAfterLower > maxLiquidityPerTick) {
+                    revert IPoolManager.TickLiquidityOverflow(tickLower);
+                }
+                if (state.liquidityGrossAfterUpper > maxLiquidityPerTick) {
+                    revert IPoolManager.TickLiquidityOverflow(tickUpper);
+                }
+
+                if (state.flippedLower) {
+                    TickBitmap.flipTick(self.tickBitmap, tickLower, params.tickSpacing);
+                }
+                if (state.flippedUpper) {
+                    TickBitmap.flipTick(self.tickBitmap, tickUpper, params.tickSpacing);
+                }
+
+                {
+                    PositionState storage position =
+                        self.positions[keccak256(abi.encode(params.owner, tickLower, tickUpper, params.salt))];
+                }
+
+                if (liquidityDelta != 0) {
+                    Slot0 _slot0 = self.slot0;
+                    (int24 tick, uint160 sqrtPriceX96) = (_slot0.tick(), _slot0.sqrtPriceX96());
+                    if (tick < tickLower) {
+                        // current tick is below the passed range; liquidity can only become in range by crossing from left to
+                        // right, when we'll need _more_ currency0 (it's becoming more valuable) so user must provide it
+                        delta = toBalanceDelta(
+                            SafeCast.toInt128(
+                                SqrtPriceMath.getAmount0Delta(
+                                    TickMath.getSqrtPriceAtTick(tickLower),
+                                    TickMath.getSqrtPriceAtTick(tickUpper),
+                                    liquidityDelta
+                                )
+                            ),
+                            0
+                        );
+                    } else if (tick < tickUpper) {
+                        delta = toBalanceDelta(
+                            SafeCast.toInt128(
+                                SqrtPriceMath.getAmount0Delta(
+                                    sqrtPriceX96, TickMath.getSqrtPriceAtTick(tickUpper), liquidityDelta
+                                )
+                            ),
+                            SafeCast.toInt128(
+                                SqrtPriceMath.getAmount1Delta(
+                                    TickMath.getSqrtPriceAtTick(tickLower), sqrtPriceX96, liquidityDelta
+                                )
+                            )
+                        );
+
+                        self.liquidity = LiquidityMath.addDelta(self.liquidity, liquidityDelta);
+                    } else {
+                        // current tick is above the passed range; liquidity can only become in range by crossing from right to
+                        // left, when we'll need _more_ currency1 (it's becoming more valuable) so user must provide it
+                        delta = toBalanceDelta(
+                            0,
+                            SafeCast.toInt128(
+                                SqrtPriceMath.getAmount1Delta(
+                                    TickMath.getSqrtPriceAtTick(tickLower),
+                                    TickMath.getSqrtPriceAtTick(tickUpper),
+                                    liquidityDelta
+                                )
+                            )
+                        );
+                    }
+                }
+            }
         }
     }
 }

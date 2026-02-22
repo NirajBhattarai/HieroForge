@@ -6,7 +6,7 @@ import {Currency} from "../types/Currency.sol";
 import {IHooks} from "./IHooks.sol";
 import {PoolKey} from "../types/PoolKey.sol";
 import {BalanceDelta} from "../types/BalanceDelta.sol";
-import {ModifyLiquidityParams} from "../types/PoolOperation.sol";
+import {ModifyLiquidityParams, SwapParams} from "../types/PoolOperation.sol";
 
 interface IPoolManager {
     /// @notice Pools require tickSpacing >= MIN_TICK_SPACING (1) in #initialize to prevent underflow
@@ -23,6 +23,10 @@ interface IPoolManager {
     error TickLowerOutOfBounds(int24 tickLower);
     /// @notice tickUpper must be <= MAX_TICK
     error TickUpperOutOfBounds(int24 tickUpper);
+    /// @notice Liquidity at a tick would exceed the maximum allowed per tick for the pool's tick spacing
+    error TickLiquidityOverflow(int24 tick);
+    /// @notice Reverts when swap is called with amountSpecified equal to zero
+    error SwapAmountCannotBeZero();
 
     /// @notice Emitted when a new pool is initialized
     /// @param id The abi encoded hash of the pool key struct for the new pool
@@ -69,6 +73,16 @@ interface IPoolManager {
     /// @return callerDelta The balance delta for the caller (amounts to settle)
     /// @return feesAccrued The fees accrued to the position
     function modifyLiquidity(PoolKey memory key, ModifyLiquidityParams memory params, bytes calldata hookData)
+        external
+        returns (BalanceDelta callerDelta, BalanceDelta feesAccrued);
+
+    /// @notice Swap in a pool
+    /// @param key The pool key
+    /// @param params The swap parameters (amountSpecified, tickSpacing, zeroForOne, sqrtPriceLimitX96, lpFeeOverride)
+    /// @param hookData Optional data to pass to the pool's hooks
+    /// @return callerDelta The balance delta for the caller (amounts to settle)
+    /// @return feesAccrued The fees accrued
+    function swap(PoolKey memory key, SwapParams memory params, bytes calldata hookData)
         external
         returns (BalanceDelta callerDelta, BalanceDelta feesAccrued);
 }

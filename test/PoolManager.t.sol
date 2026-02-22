@@ -10,7 +10,7 @@ import {PoolManager} from "../src/PoolManager.sol";
 import {IPoolManager} from "../src/interfaces/IPoolManager.sol";
 import {PoolKey} from "../src/types/PoolKey.sol";
 import {Currency} from "../src/types/Currency.sol";
-import {ModifyLiquidityParams} from "../src/types/PoolOperation.sol";
+import {ModifyLiquidityParams, SwapParams} from "../src/types/PoolOperation.sol";
 import {IHooks} from "../src/interfaces/IHooks.sol";
 import {MIN_TICK_SPACING, MAX_TICK_SPACING} from "../src/math/constants.sol";
 import {PoolState} from "../src/types/PoolState.sol";
@@ -145,6 +145,38 @@ contract PoolManagerTest is Test {
         uint160 sqrtPriceX96 = uint160(2 ** 96);
         int24 tick = poolManager.initialize(key, sqrtPriceX96);
         assertEq(tick, 0);
+    }
+
+    function test_swap_revertWhenAmountSpecifiedZero() external {
+        PoolKey memory key = _validPoolKey();
+        poolManager.initialize(key, uint160(2 ** 96));
+
+        SwapParams memory params = SwapParams({
+            amountSpecified: 0,
+            tickSpacing: 60,
+            zeroForOne: true,
+            sqrtPriceLimitX96: 0,
+            lpFeeOverride: 0
+        });
+
+        vm.expectRevert(IPoolManager.SwapAmountCannotBeZero.selector);
+        poolManager.swap(key, params, "");
+    }
+
+    function test_swap_revertWhenPoolNotInitialized() external {
+        PoolKey memory key = _validPoolKey();
+        // Do not call initialize(key, ...) so the pool does not exist.
+
+        SwapParams memory params = SwapParams({
+            amountSpecified: -1000, // non-zero so we pass the first check and hit checkPoolInitialized
+            tickSpacing: 60,
+            zeroForOne: true,
+            sqrtPriceLimitX96: 0,
+            lpFeeOverride: 0
+        });
+
+        vm.expectRevert(IPoolManager.PoolNotInitialized.selector);
+        poolManager.swap(key, params, "");
     }
 
     function test_modifyLiquidity_revertWhenPoolNotInitialized() external {

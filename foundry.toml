@@ -2,12 +2,14 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+script = "script"
 solc = "0.8.28"
 evm_version = "cancun"
 ffi = true
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
 
+# Hedera network RPC endpoints (Hashio)
 [rpc_endpoints]
 mainnet = "https://mainnet.hashio.io/api"
 testnet = "https://testnet.hashio.io/api"

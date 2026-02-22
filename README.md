@@ -54,6 +54,67 @@ HieroForge/
   - `hedera-forking/=lib/hedera-forking/contracts/`
 - **RPC endpoints** (in `foundry.toml`): `mainnet`, `testnet`, `previewnet`, `localnode` (Hashio / Hedera)
 
+## Deploy to Hedera Testnet
+
+1. **Get testnet HBAR**  
+   Create an account and use the [Hedera Portal Faucet](https://portal.hedera.com/faucet) (or another testnet faucet).
+
+2. **Configure environment**  
+   Copy `.env.example` to `.env` and set your deployer private key:
+   ```bash
+   cp .env.example .env
+   # Edit .env and set PRIVATE_KEY=0x<your_hex_private_key>
+   ```
+
+3. **Run the deploy script**  
+   Dry run (simulation only):
+   ```bash
+   forge script script/Deploy.s.sol --rpc-url testnet
+   ```
+   Broadcast to Hedera testnet (chain ID 296):
+   ```bash
+   forge script script/Deploy.s.sol --rpc-url testnet --broadcast --private-key $PRIVATE_KEY
+   ```
+   Or load the key from `.env` (ensure `foundry.toml` has no `no_storage_caching` that would block `vm.envOr`):
+   ```bash
+   source .env && forge script script/Deploy.s.sol --rpc-url testnet --broadcast --private-key $PRIVATE_KEY
+   ```
+
+4. **Optional**  
+   If the RPC does not return chain ID, pass it explicitly:
+   ```bash
+   forge script script/Deploy.s.sol --rpc-url testnet --broadcast --chain-id 296 --private-key $PRIVATE_KEY
+   ```
+
+## Verify on HashScan (Hedera testnet)
+
+After deploying, verify the contract source on [HashScan](https://hashscan.io/) so the bytecode is publicly verified.
+
+1. **Using the script (recommended)**  
+   From the project root, pass the deployed contract address (chain ID 296 = testnet by default):
+   ```bash
+   chmod +x script/verify.sh
+   ./script/verify.sh <DEPLOYED_CONTRACT_ADDRESS>
+   ```
+   For mainnet (295) or previewnet (297):
+   ```bash
+   ./script/verify.sh <DEPLOYED_CONTRACT_ADDRESS> 295
+   ```
+
+2. **Using Forge directly**  
+   PoolManager has no constructor arguments. Run:
+   ```bash
+   forge verify-contract <CONTRACT_ADDRESS> src/PoolManager.sol:PoolManager \
+     --chain-id 296 \
+     --verifier sourcify \
+     --verifier-url "https://server-verify.hashscan.io/" \
+     --rpc-url testnet
+   ```
+   Replace `<CONTRACT_ADDRESS>` with the address from the deploy step. Use `--chain-id 295` for mainnet or `297` for previewnet.
+
+3. **Check result**  
+   Open [HashScan](https://hashscan.io/), switch to the correct network (Testnet/Mainnet/Previewnet), search for your contract address. The "Contract" tab should show verified source after a short delay.
+
 ## Commands
 
 | Command | Description |
@@ -61,6 +122,8 @@ HieroForge/
 | `forge build` | Compile contracts |
 | `forge test` | Run tests |
 | `forge test --fork-url <url>` | Run tests against a forked network (e.g. Hedera mainnet) |
+| `forge script script/Deploy.s.sol --rpc-url testnet --broadcast` | Deploy PoolManager to Hedera testnet |
+| `./script/verify.sh <CONTRACT_ADDRESS>` | Verify PoolManager on HashScan (testnet) |
 | `forge fmt` | Format Solidity |
 | `forge snapshot` | Gas snapshots |
 | `anvil` | Start local node |
