@@ -151,13 +151,8 @@ contract PoolManagerTest is Test {
         PoolKey memory key = _validPoolKey();
         poolManager.initialize(key, uint160(2 ** 96));
 
-        SwapParams memory params = SwapParams({
-            amountSpecified: 0,
-            tickSpacing: 60,
-            zeroForOne: true,
-            sqrtPriceLimitX96: 0,
-            lpFeeOverride: 0
-        });
+        SwapParams memory params =
+            SwapParams({amountSpecified: 0, tickSpacing: 60, zeroForOne: true, sqrtPriceLimitX96: 0, lpFeeOverride: 0});
 
         vm.expectRevert(IPoolManager.SwapAmountCannotBeZero.selector);
         poolManager.swap(key, params, "");
@@ -184,12 +179,7 @@ contract PoolManagerTest is Test {
         // Do not call initialize(key, ...) so the pool does not exist.
 
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: signer,
-            tickLower: -60,
-            tickUpper: 60,
-            liquidityDelta: 1000,
-            tickSpacing: 60,
-            salt: bytes32(0)
+            owner: signer, tickLower: -60, tickUpper: 60, liquidityDelta: 1000, tickSpacing: 60, salt: bytes32(0)
         });
 
         vm.expectRevert(IPoolManager.PoolNotInitialized.selector);

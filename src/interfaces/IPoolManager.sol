@@ -27,6 +27,10 @@ interface IPoolManager {
     error TickLiquidityOverflow(int24 tick);
     /// @notice Reverts when swap is called with amountSpecified equal to zero
     error SwapAmountCannotBeZero();
+    /// @notice Reverts when sqrtPriceLimitX96 is already exceeded by current price for the swap direction
+    error PriceLimitAlreadyExceeded(uint160 currentSqrtPriceX96, uint160 limitSqrtPriceX96);
+    /// @notice Reverts when sqrtPriceLimitX96 is outside valid range (e.g. below MIN_SQRT_PRICE or above MAX_SQRT_PRICE)
+    error PriceLimitOutOfBounds(uint160 sqrtPriceLimitX96);
 
     /// @notice Emitted when a new pool is initialized
     /// @param id The abi encoded hash of the pool key struct for the new pool

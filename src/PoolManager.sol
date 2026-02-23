@@ -6,7 +6,7 @@ import {PoolKey} from "./types/PoolKey.sol";
 import {PoolId} from "./types/PoolKey.sol";
 import {Currency} from "./types/Currency.sol";
 import {MIN_TICK_SPACING, MAX_TICK_SPACING} from "./math/constants.sol";
-import {PoolState} from "./types/PoolState.sol";
+import {PoolState, SwapResult, swap as poolSwap} from "./types/PoolState.sol";
 import {BalanceDelta} from "./types/BalanceDelta.sol";
 import {ModifyLiquidityParams, SwapParams} from "./types/PoolOperation.sol";
 import {CustomRevert} from "./libraries/CustomRevert.sol";
@@ -79,6 +79,14 @@ contract PoolManager is IPoolManager {
         // }
     }
 
+    function _swap(PoolState storage pool, PoolId id, SwapParams memory params, Currency inputCurrency)
+        internal
+        returns (BalanceDelta)
+    {
+        (BalanceDelta delta, uint256 amountToProtocol, uint24 swapFee, SwapResult memory swapResult) =
+            poolSwap(pool, params);
+    }
+
     /// @inheritdoc IPoolManager
     function swap(PoolKey memory key, SwapParams memory params, bytes calldata hookData)
         external
@@ -91,9 +99,7 @@ contract PoolManager is IPoolManager {
         pool.checkPoolInitialized();
 
         BeforeSwapDelta beforeSwapDelta;
-        {
-            
-        }
+        {}
     }
 
     /// @notice Implementation of the _getPool function defined in ProtocolFees
