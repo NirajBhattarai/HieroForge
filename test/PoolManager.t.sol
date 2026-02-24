@@ -22,6 +22,17 @@ contract PoolManagerTestHarness is PoolManager {
         PoolState storage pool = _getPool(id);
         return (pool.ticks[tick].liquidityGross, pool.ticks[tick].liquidityNet);
     }
+
+    /// @notice Returns the tickBitmap word at wordPos for a pool (for tests).
+    function getTickBitmapWord(PoolId id, int16 wordPos) external view returns (uint256) {
+        PoolState storage pool = _getPool(id);
+        return pool.tickBitmap[wordPos];
+    }
+
+    /// @notice Exposes _pools.slot for storage layout tests (slot of _pools in PoolManager).
+    function getPoolsSlot() external pure returns (uint256) {
+        return 0; // _pools is first state var in PoolManager
+    }
 }
 
 /**
@@ -366,5 +377,50 @@ contract PoolManagerTest is Test {
         (uint128 g120, int128 n120) = poolManager.getTickInfo(id, 120);
         assertEq(g120, uint128(int128(L_C)), "tick 120 liquidityGross");
         assertEq(n120, -L_C, "tick 120 liquidityNet");
+    }
+
+    /// @notice Demonstrates how storage slot is computed for key -> struct -> key->value:
+    ///   _pools[poolId] (PoolState) -> tickBitmap[wordPos] (uint256)
+    function test_storageSlot_keyStructKey_poolsTickBitmapWord() external {
+        PoolKey memory key = _validPoolKey();
+        poolManager.initialize(key, uint160(2 ** 96));
+
+        int24 tickLower = -60;
+        int24 tickUpper = 60;
+        ModifyLiquidityParams memory params = ModifyLiquidityParams({
+            owner: signer,
+            tickLower: tickLower,
+            tickUpper: tickUpper,
+            liquidityDelta: 1000,
+            tickSpacing: 60,
+            salt: bytes32(0)
+        });
+        poolManager.modifyLiquidity(key, params, "");
+
+        PoolId id = key.toId();
+
+        // For tick -60 with tickSpacing 60: compressed = -1, wordPos = -1, bitPos = 255
+        int16 wordPos = -1;
+        uint256 poolsSlot = poolManager.getPoolsSlot(); // 0
+
+        // Step 1: Base slot of PoolState for this poolId
+        // slot(base of struct) = keccak256(abi.encode(poolId, poolsSlot))
+        bytes32 poolIdBytes = PoolId.unwrap(id);
+        uint256 basePoolSlot = uint256(keccak256(abi.encode(poolIdBytes, poolsSlot)));
+
+        // Step 2: Slot of the tickBitmap mapping inside PoolState (offset 3: slot0=0, liquidity=1, ticks=2, tickBitmap=3)
+        uint256 tickBitmapMappingSlot = basePoolSlot + 3;
+
+        // Step 3: Slot of tickBitmap[wordPos] = keccak256(abi.encode(wordPos, tickBitmapMappingSlot))
+        uint256 tickBitmapWordSlot = uint256(keccak256(abi.encode(wordPos, tickBitmapMappingSlot)));
+
+        // Read storage directly
+        uint256 valueFromStorage = uint256(vm.load(address(poolManager), bytes32(tickBitmapWordSlot)));
+
+        // Read via the pool API
+        uint256 valueFromPool = poolManager.getTickBitmapWord(id, wordPos);
+
+        assertEq(valueFromStorage, valueFromPool, "storage slot should match pool.tickBitmap[wordPos]");
+        assertTrue(valueFromPool != 0, "tickBitmap[-1] should be non-zero after adding liquidity at -60");
     }
 }

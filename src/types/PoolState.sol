@@ -13,6 +13,7 @@ import {ModifyLiquidityState} from "./ModifyLiquidityState.sol";
 import {LiquidityMath} from "../math/LiquidityMath.sol";
 import {TickBitmap} from "../libraries/TickBitmap.sol";
 import {SqrtPriceMath} from "../libraries/SqrtPriceMath.sol";
+import {SwapMath} from "../libraries/SwapMath.sol";
 
 using {initialize, checkPoolInitialized, modifyLiquidity} for PoolState global;
 
@@ -37,6 +38,8 @@ struct StepComputations {
     uint256 amountIn;
     // how much is being swapped out
     uint256 amountOut;
+    // fee taken from the input amount in this step
+    uint256 feeAmount;
 }
 
 // Tracks the state of a pool throughout a swap, and returns these values at the end of the swap
@@ -248,5 +251,17 @@ function swap(PoolState storage self, SwapParams memory params)
         if (step.tickNext >= TickMath.MAX_TICK) {
             step.tickNext = TickMath.MAX_TICK;
         }
+
+        // get the price for the next tick
+        step.sqrtPriceNextX96 = TickMath.getSqrtPriceAtTick(step.tickNext);
+
+        // compute values to swap to the target tick, price limit, or point where input/output amount is exhausted
+        (result.sqrtPriceX96, step.amountIn, step.amountOut, step.feeAmount) = SwapMath.computeSwapStep(
+            result.sqrtPriceX96,
+            SwapMath.getSqrtPriceTarget(zeroForOne, step.sqrtPriceNextX96, params.sqrtPriceLimitX96),
+            result.liquidity,
+            amountSpecifiedRemaining,
+            swapFee
+        );
     }
 }

@@ -67,6 +67,7 @@ library TickBitmap {
         }
     }
 
+    // TODO: Continue from here
     /// @notice Returns the next initialized tick contained in the same word (or adjacent word) as the tick that is either
     /// to the left (less than or equal to) or right (greater than) of the given tick
     /// @param self The mapping in which to compute the next initialized tick
@@ -93,6 +94,7 @@ library TickBitmap {
                 // if there are no initialized ticks to the right of or at the current tick, return rightmost in the word
                 initialized = masked != 0;
                 // overflow/underflow is possible, but prevented externally by limiting both tickSpacing and tick
+                // TODO: Continue from here
                 next = initialized
                     ? (compressed - int24(uint24(bitPos - BitMath.mostSignificantBit(masked)))) * tickSpacing
                     : (compressed - int24(uint24(bitPos))) * tickSpacing;
