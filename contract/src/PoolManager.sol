@@ -82,10 +82,10 @@ contract PoolManager is IPoolManager {
         internal
         returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
     {
-        (BalanceDelta delta, uint256 amountToProtocol, uint24 swapFee, SwapResult memory swapResult) =
-            poolSwap(pool, params);
-        callerDelta = delta;
-        feesAccrued = toBalanceDelta(0, 0); // TODO: derive from amountToProtocol/swapFee when fee accounting is wired
+        (BalanceDelta delta, uint256 amountToProtocol, uint24 swapFee, SwapResult memory swapResult) = pool.swap(params);
+        // poolSwap(pool, params);
+        // callerDelta = delta;
+        // feesAccrued = toBalanceDelta(0, 0); // TODO: derive from amountToProtocol/swapFee when fee accounting is wired
     }
 
     /// @inheritdoc IPoolManager

@@ -14,8 +14,9 @@ import {LiquidityMath} from "../math/LiquidityMath.sol";
 import {TickBitmap} from "../libraries/TickBitmap.sol";
 import {SqrtPriceMath} from "../libraries/SqrtPriceMath.sol";
 import {SwapMath} from "../libraries/SwapMath.sol";
+import "forge-std/console.sol";
 
-using {initialize, checkPoolInitialized, modifyLiquidity} for PoolState global;
+using {initialize, checkPoolInitialized, modifyLiquidity, swap} for PoolState global;
 
 struct PoolState {
     Slot0 slot0;
@@ -134,10 +135,10 @@ function modifyLiquidity(PoolState storage self, ModifyLiquidityParams memory pa
                     TickBitmap.flipTick(self.tickBitmap, tickUpper, params.tickSpacing);
                 }
 
-                {
-                    PositionState storage position =
-                        self.positions[keccak256(abi.encode(params.owner, tickLower, tickUpper, params.salt))];
-                }
+                // {
+                //     PositionState storage position =
+                //         self.positions[keccak256(abi.encode(params.owner, tickLower, tickUpper, params.salt))];
+                // }
 
                 if (liquidityDelta != 0) {
                     Slot0 _slot0 = self.slot0;
@@ -197,6 +198,11 @@ function checkTicks(int24 tickLower, int24 tickUpper) pure {
     if (tickUpper > TickMath.MAX_TICK) revert IPoolManager.TickUpperOutOfBounds(tickUpper);
 }
 
+/// @dev Called when crossing an initialized tick during a swap; returns liquidityNet for updating active liquidity.
+function crossTick(PoolState storage self, int24 tick) view returns (int128 liquidityNet) {
+    liquidityNet = self.ticks[tick].liquidityNet;
+}
+
 /// @notice Executes a swap against the state, and returns the amount deltas of the pool
 /// @dev PoolManager checks that the pool is initialized before calling
 function swap(PoolState storage self, SwapParams memory params)
@@ -235,14 +241,24 @@ function swap(PoolState storage self, SwapParams memory params)
             revert IPoolManager.PriceLimitOutOfBounds(params.sqrtPriceLimitX96);
         }
     }
+
+    swapFee = slot0Start.lpFee();
+    if (params.amountSpecified == 0) return (toBalanceDelta(0, 0), 0, swapFee, result);
+
     StepComputations memory step;
 
     // continue swapping as long as we haven't used the entire input/output and haven't reached the price limit
     while (!(amountSpecifiedRemaining == 0 || result.sqrtPriceX96 == params.sqrtPriceLimitX96)) {
         step.sqrtPriceStartX96 = result.sqrtPriceX96;
 
+        console.log("result.tick:---->", int256(result.tick));
+        console.log("zeroForOne:---->", zeroForOne);
+
         (step.tickNext, step.initialized) =
             TickBitmap.nextInitializedTickWithinOneWord(self.tickBitmap, result.tick, params.tickSpacing, zeroForOne);
+
+        console.log("tickNext:", int256(step.tickNext));
+        console.log("initialized:", step.initialized);
 
         // ensure that we do not overshoot the min/max tick, as the tick bitmap is not aware of these bounds
         if (step.tickNext <= TickMath.MIN_TICK) {
@@ -263,5 +279,54 @@ function swap(PoolState storage self, SwapParams memory params)
             amountSpecifiedRemaining,
             swapFee
         );
+
+        if (params.amountSpecified > 0) {
+            unchecked {
+                amountSpecifiedRemaining -= SafeCast.toInt256(step.amountOut);
+            }
+            amountCalculated -= SafeCast.toInt256(step.amountIn + step.feeAmount);
+        } else {
+            unchecked {
+                amountSpecifiedRemaining += SafeCast.toInt256(step.amountIn + step.feeAmount);
+            }
+            amountCalculated += SafeCast.toInt256(step.amountOut);
+        }
+
+        // Advance tick if we reached the next price; when we do, cross the tick and update liquidity if initialized
+        if (result.sqrtPriceX96 == step.sqrtPriceNextX96) {
+            if (step.initialized) {
+                int128 liquidityNet = crossTick(self, step.tickNext);
+                if (zeroForOne) liquidityNet = -liquidityNet;
+                result.liquidity = LiquidityMath.addDelta(result.liquidity, liquidityNet);
+            }
+            unchecked {
+                result.tick = zeroForOne ? step.tickNext - 1 : step.tickNext;
+            }
+        } else if (result.sqrtPriceX96 != step.sqrtPriceStartX96) {
+            result.tick = TickMath.getTickAtSqrtPrice(result.sqrtPriceX96);
+        }
+
+        console.log("  amountIn:", step.amountIn, "amountOut:", step.amountOut);
+        console.log("  result.tick after step:", result.tick);
+        console.log("  result.liquidity:", result.liquidity);
+    }
+
+    console.log("swap done -> final result.tick:", int256(result.tick));
+
+    self.slot0 = slot0Start.setTick(result.tick).setSqrtPriceX96(result.sqrtPriceX96);
+    if (self.liquidity != result.liquidity) self.liquidity = result.liquidity;
+
+    unchecked {
+        if (zeroForOne != (params.amountSpecified < 0)) {
+            swapDelta = toBalanceDelta(
+                SafeCast.toInt128(amountCalculated),
+                SafeCast.toInt128(params.amountSpecified - amountSpecifiedRemaining)
+            );
+        } else {
+            swapDelta = toBalanceDelta(
+                SafeCast.toInt128(params.amountSpecified - amountSpecifiedRemaining),
+                SafeCast.toInt128(amountCalculated)
+            );
+        }
     }
 }

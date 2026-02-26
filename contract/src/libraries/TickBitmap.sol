@@ -86,16 +86,21 @@ library TickBitmap {
             int24 compressed = compress(tick, tickSpacing);
 
             if (lte) {
+                // 0                   1 
                 (int16 wordPos, uint8 bitPos) = position(compressed);
                 // all the 1s at or to the right of the current bitPos
+                 // 11
                 uint256 mask = type(uint256).max >> (uint256(type(uint8).max) - bitPos);
+                // 0b00....0011
                 uint256 masked = self[wordPos] & mask;
 
                 // if there are no initialized ticks to the right of or at the current tick, return rightmost in the word
                 initialized = masked != 0;
                 // overflow/underflow is possible, but prevented externally by limiting both tickSpacing and tick
                 // TODO: Continue from here
+                 // true 
                 next = initialized
+                //     1 -                        1 - 10           
                     ? (compressed - int24(uint24(bitPos - BitMath.mostSignificantBit(masked)))) * tickSpacing
                     : (compressed - int24(uint24(bitPos))) * tickSpacing;
             } else {

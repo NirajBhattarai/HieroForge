@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
+import "forge-std/console.sol";
 import {htsSetup} from "hedera-forking/htsSetup.sol";
 import {HTS_ADDRESS} from "hedera-forking/HtsSystemContract.sol";
 import {IHederaTokenService} from "hedera-forking/IHederaTokenService.sol";
@@ -15,6 +16,7 @@ import {IHooks} from "../src/interfaces/IHooks.sol";
 import {MIN_TICK_SPACING, MAX_TICK_SPACING} from "../src/math/constants.sol";
 import {PoolState} from "../src/types/PoolState.sol";
 import {PoolId} from "../src/types/PoolKey.sol";
+import {TickMath} from "../src/libraries/TickMath.sol";
 
 /// @notice Exposes pool tick state for tests (liquidityGross, liquidityNet at ticks).
 contract PoolManagerTestHarness is PoolManager {
@@ -44,6 +46,17 @@ contract PoolManagerTest is Test {
     address internal signer;
     address internal tokenA;
     address internal tokenB;
+
+    /// @notice Converts a uint256 to a base-2 string (0s and 1s), MSB first.
+    function _toBinaryString(uint256 x) internal pure returns (string memory) {
+        if (x == 0) return "0";
+        string memory s;
+        while (x > 0) {
+            s = string.concat((x & 1 == 1 ? "1" : "0"), s);
+            x >>= 1;
+        }
+        return s;
+    }
 
     function setUp() external {
         htsSetup();
@@ -386,7 +399,7 @@ contract PoolManagerTest is Test {
         poolManager.initialize(key, uint160(2 ** 96));
 
         int24 tickLower = -60;
-        int24 tickUpper = 60;
+        int24 tickUpper = 120;
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
             owner: signer,
             tickLower: tickLower,
@@ -422,5 +435,74 @@ contract PoolManagerTest is Test {
 
         assertEq(valueFromStorage, valueFromPool, "storage slot should match pool.tickBitmap[wordPos]");
         assertTrue(valueFromPool != 0, "tickBitmap[-1] should be non-zero after adding liquidity at -60");
+    }
+
+    function test_modifyLiquidity_keyStructAndSwap() external {
+        PoolKey memory key = _validPoolKey();
+        poolManager.initialize(key, uint160(2 ** 96));
+
+        int24 tickLower = 60;
+        int24 tickUpper = 120;
+
+        ModifyLiquidityParams memory params = ModifyLiquidityParams({
+            owner: signer,
+            tickLower: tickLower,
+            tickUpper: tickUpper,
+            liquidityDelta: 1000,
+            tickSpacing: 60,
+            salt: bytes32(0)
+        });
+        poolManager.modifyLiquidity(key, params, "");
+
+        params = ModifyLiquidityParams({
+            owner: signer, tickLower: 120, tickUpper: 180, liquidityDelta: 1000, tickSpacing: 60, salt: bytes32(0)
+        });
+        poolManager.modifyLiquidity(key, params, "");
+
+        params = ModifyLiquidityParams({
+            owner: signer, tickLower: -120, tickUpper: 0, liquidityDelta: 1000, tickSpacing: 60, salt: bytes32(0)
+        });
+
+        params = ModifyLiquidityParams({
+            owner: signer, tickLower: -180, tickUpper: -60, liquidityDelta: 1000, tickSpacing: 60, salt: bytes32(0)
+        });
+        params = ModifyLiquidityParams({
+            owner: signer, tickLower: -180, tickUpper: -60, liquidityDelta: 1000, tickSpacing: 60, salt: bytes32(0)
+        });
+        poolManager.modifyLiquidity(key, params, "");
+
+        uint256 poolsSlot = 0;
+
+        PoolId id = key.toId();
+        bytes32 poolIdBytes = PoolId.unwrap(id);
+
+        // uint256 basePoolSlot = uint256(keccak256(abi.encode(p)));
+        uint256 basePoolSlot = uint256(keccak256(abi.encode(poolIdBytes, poolsSlot)));
+
+        // Ticks 60 and 120 with spacing 60 → compressed 1 and 2 → both in word 0 (wordPos = compressed >> 8)
+        int16 wordPos = 0;
+        uint256 tickBitmapMappingSlot = basePoolSlot + 3;
+        uint256 tickBitmapWordSlot = uint256(keccak256(abi.encode(wordPos, tickBitmapMappingSlot)));
+
+        // Read storage directly
+        uint256 valueFromStorage = uint256(vm.load(address(poolManager), bytes32(tickBitmapWordSlot)));
+
+        console.log("valueFromStorage (decimal)", valueFromStorage);
+        // Hex (raw bytes) - standard way to inspect storage
+        console.log("valueFromStorage (hex):");
+        console.logBytes(abi.encodePacked(bytes32(valueFromStorage)));
+        // Base-2 (0s and 1s)
+        console.log("valueFromStorage (binary):", _toBinaryString(valueFromStorage));
+
+        // zeroForOne: price must decrease. sqrtPriceLimitX96 must be > MIN_SQRT_PRICE and < current price.
+        uint160 sqrtPriceLimitX96 = TickMath.getSqrtPriceAtTick(-180);
+        SwapParams memory swapParams = SwapParams({
+            amountSpecified: 4000,
+            tickSpacing: 60,
+            zeroForOne: true,
+            sqrtPriceLimitX96: sqrtPriceLimitX96,
+            lpFeeOverride: 0
+        });
+        poolManager.swap(key, swapParams, "");
     }
 }
