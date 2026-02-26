@@ -1,6 +1,8 @@
 # Compiler files
 cache/
 out/
+smart-contract/cache/
+smart-contract/out/
 
 # Forge script broadcast output (deployment artifacts)
 broadcast/
@@ -10,3 +12,7 @@ docs/
 
 # Dotenv file
 .env
+
+# UI (Vite / Node)
+ui/node_modules/
+ui/dist/
