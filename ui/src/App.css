@@ -1,0 +1,247 @@
+/* Layout */
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+}
+
+.logo {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+.nav {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+.nav-btn:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.06);
+}
+.nav-btn.active {
+  color: #fff;
+  background: rgba(88, 166, 255, 0.15);
+}
+
+.connect-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: #fff;
+  font-size: 0.875rem;
+}
+.connect-btn:hover {
+  border-color: var(--accent);
+  background: rgba(88, 166, 255, 0.1);
+}
+.connect-btn.connected {
+  border-color: var(--success);
+  color: var(--success);
+}
+.connect-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.header-error {
+  font-size: 0.75rem;
+  color: #f85149;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Main content */
+.main {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 32px 16px;
+}
+
+/* Card (Swap / Pool / Add Liquidity) */
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.card-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 20px 0;
+}
+
+/* Token row (amount input + token select) */
+.token-row {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+}
+
+.token-row-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.token-row-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.token-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 1.25rem;
+  outline: none;
+}
+.token-input::placeholder {
+  color: var(--muted);
+}
+
+.token-select {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: #fff;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+/* Swap direction flip */
+.flip-row {
+  display: flex;
+  justify-content: center;
+  margin: -4px 0;
+}
+.flip-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+}
+.flip-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Primary action button */
+.primary-btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 14px 24px;
+  border-radius: 12px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.primary-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.primary-btn:disabled {
+  background: var(--bg-input);
+  color: var(--muted);
+}
+
+/* Form group for Add Liquidity */
+.form-group {
+  margin-bottom: 16px;
+}
+.form-group label {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.form-group input {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: #fff;
+  font-size: 1rem;
+}
+.form-group input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Pool list */
+.pool-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.pool-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: var(--bg-input);
+}
+.pool-item:hover {
+  border-color: var(--accent);
+}
+.pool-pair {
+  font-weight: 600;
+  color: #fff;
+}
+.pool-meta {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+/* Small helper text */
+.helper {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 8px;
+}

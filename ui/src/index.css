@@ -1,0 +1,47 @@
+:root {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #eef2f5;
+  background: #0d1117;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --bg-elevated: #161b22;
+  --bg-input: #21262d;
+  --border: #30363d;
+  --accent: #58a6ff;
+  --accent-hover: #79b8ff;
+  --success: #3fb950;
+  --muted: #8b949e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+input, button, select {
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--accent-hover);
+}
