@@ -153,12 +153,8 @@ contract PoolManagerTest is Test {
 
     function test_ModifyLiquidity_RevertWhen_PoolNotInitialized() public {
         PoolKey memory key = _makeKey(address(0x1), address(0x2), 3000, 60);
-        ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            tickLower: -60,
-            tickUpper: 60,
-            liquidityDelta: 1000,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: bytes32(0)});
         vm.expectRevert(IPoolManager.PoolNotInitialized.selector);
         poolManager.modifyLiquidity(key, params, "");
     }
@@ -166,12 +162,8 @@ contract PoolManagerTest is Test {
     function test_ModifyLiquidity_ReturnsZeroDeltas_WhenPoolInitialized() public {
         PoolKey memory key = _makeKey(address(0x1), address(0x2), 3000, 60);
         poolManager.initialize(key, 79228162514264337593543950336);
-        ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            tickLower: -60,
-            tickUpper: 60,
-            liquidityDelta: 1000,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: bytes32(0)});
         (BalanceDelta callerDelta, BalanceDelta feesAccrued) = poolManager.modifyLiquidity(key, params, "");
         assertEq(callerDelta.amount0(), 0);
         assertEq(callerDelta.amount1(), 0);

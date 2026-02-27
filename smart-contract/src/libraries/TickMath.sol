@@ -19,8 +19,7 @@ library TickMath {
     uint160 internal constant MIN_SQRT_PRICE = 4295128739;
     /// @dev Maximum value from getSqrtPriceAtTick(MAX_TICK)
     uint160 internal constant MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970342;
-    uint160 internal constant MAX_SQRT_PRICE_MINUS_MIN_SQRT_PRICE_MINUS_ONE =
-        MAX_SQRT_PRICE - MIN_SQRT_PRICE - 1;
+    uint160 internal constant MAX_SQRT_PRICE_MINUS_MIN_SQRT_PRICE_MINUS_ONE = MAX_SQRT_PRICE - MIN_SQRT_PRICE - 1;
 
     /// @notice Calculates sqrt(1.0001^tick) * 2^96
     /// @param tick The input tick

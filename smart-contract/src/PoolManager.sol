@@ -16,9 +16,9 @@ contract PoolManager is IPoolManager {
 
     /// @inheritdoc IPoolManager
     function initialize(PoolKey memory key, uint160 sqrtPriceX96) external override returns (int24 tick) {
-        // Validate that the currencies are sorted in ascending order, ensuring that currency0 is less than currency1. 
+        // Validate that the currencies are sorted in ascending order, ensuring that currency0 is less than currency1.
         // This maintains consistency for all pool identifiers, preventing duplicates with reversed keys.
-        // Also, check that the provided tickSpacing in the PoolKey is within the allowed range, 
+        // Also, check that the provided tickSpacing in the PoolKey is within the allowed range,
         // which helps to manage pool granularity and ensure protocol safety.
         key.validate();
         PoolId id = key.toId();
@@ -26,9 +26,7 @@ contract PoolManager is IPoolManager {
         if (state.slot0.sqrtPriceX96() != 0) revert PoolAlreadyInitialized();
         (state.slot0, tick, state.feeGrowthGlobal0X128, state.feeGrowthGlobal1X128, state.liquidity) =
             initialPoolState(sqrtPriceX96, key.fee);
-        emit Initialize(
-            id, key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks, sqrtPriceX96, tick
-        );
+        emit Initialize(id, key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks, sqrtPriceX96, tick);
     }
 
     /// @inheritdoc IPoolManager

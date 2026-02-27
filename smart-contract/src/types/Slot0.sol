@@ -89,7 +89,13 @@ function initialSlot0(uint160 sqrtPriceX96, uint24 lpFee) pure returns (Slot0 _s
 /// @param lpFee Fee in basis points (e.g. 3000 = 0.3%)
 function initialPoolState(uint160 sqrtPriceX96, uint24 lpFee)
     pure
-    returns (Slot0 _slot0, int24 _tick, uint256 _feeGrowthGlobal0X128, uint256 _feeGrowthGlobal1X128, uint128 _liquidity)
+    returns (
+        Slot0 _slot0,
+        int24 _tick,
+        uint256 _feeGrowthGlobal0X128,
+        uint256 _feeGrowthGlobal1X128,
+        uint128 _liquidity
+    )
 {
     (_slot0, _tick) = initialSlot0(sqrtPriceX96, lpFee);
     _feeGrowthGlobal0X128 = 1;
