@@ -2,6 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {BitMath} from "./BitMath.sol";
+import {MIN_TICK as C_MIN_TICK, MAX_TICK as C_MAX_TICK} from "../constants.sol";
 
 /// @title TickMath
 /// @notice Math for computing sqrt price from tick and vice versa (Uniswap v4-style)
@@ -12,8 +13,9 @@ library TickMath {
     /// @notice Thrown when the price passed to getTickAtSqrtPrice is not between MIN_SQRT_PRICE and MAX_SQRT_PRICE
     error InvalidSqrtPrice(uint160 sqrtPriceX96);
 
-    int24 internal constant MIN_TICK = -887272;
-    int24 internal constant MAX_TICK = 887272;
+    /// @dev Tick bounds sourced from constants.sol for protocol-wide consistency
+    int24 internal constant MIN_TICK = C_MIN_TICK;
+    int24 internal constant MAX_TICK = C_MAX_TICK;
 
     /// @dev Minimum value from getSqrtPriceAtTick(MIN_TICK)
     uint160 internal constant MIN_SQRT_PRICE = 4295128739;
