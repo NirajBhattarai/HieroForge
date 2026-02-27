@@ -4,10 +4,10 @@ pragma solidity ^0.8.13;
 import {IPoolManager} from "./interfaces/IPoolManager.sol";
 import {PoolKey} from "./types/PoolKey.sol";
 import {PoolId} from "./types/PoolId.sol";
-import {PoolState, checkPoolInitialized} from "./types/PoolState.sol";
+import {PoolState, modifyLiquidity} from "./types/PoolState.sol";
 import {initialPoolState} from "./types/Slot0.sol";
 import {ModifyLiquidityParams} from "./types/ModifyLiquidityParams.sol";
-import {BalanceDelta, toBalanceDelta} from "./types/BalanceDelta.sol";
+import {BalanceDelta} from "./types/BalanceDelta.sol";
 
 /// @title PoolManager
 /// @notice Holds pool state and implements initialize (Uniswap v4-style)
@@ -38,12 +38,23 @@ contract PoolManager is IPoolManager {
         key.validate();
         PoolId id = key.toId();
         PoolState storage state = _getPool(id);
-        checkPoolInitialized(state);
-        // TODO: implement liquidity modification (tick updates, position, fees)
-        hookData; // silence unused
-        params; // silence unused
-        callerDelta = toBalanceDelta(0, 0);
-        feesAccrued = toBalanceDelta(0, 0);
+
+        BalanceDelta principalDelta;
+        state.checkPoolInitialized();
+        (principalDelta, feesAccrued) = state.modifyLiquidity(params, hookData);
+
+        // fee delta and principal delta are both accrued to the caller
+        // callerDelta = principalDelta + feesAccrued;
+        emit ModifyLiquidity(
+            id,
+            msg.sender,
+            params.owner,
+            params.tickLower,
+            params.tickUpper,
+            params.liquidityDelta,
+            callerDelta.amount0(),
+            callerDelta.amount1()
+        );
     }
 
     /// @notice Returns pool state: initialized flag, sqrt price, and tick from slot0

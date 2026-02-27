@@ -3,12 +3,15 @@ pragma solidity ^0.8.13;
 
 /// @notice Parameters for modifyLiquidity (Uniswap v4-style)
 struct ModifyLiquidityParams {
-    /// @notice The lower tick of the position
+    // the address that owns the position
+    address owner;
+    // the lower and upper tick of the position
     int24 tickLower;
-    /// @notice The upper tick of the position
     int24 tickUpper;
-    /// @notice Amount of liquidity to add (positive) or remove (negative)
-    int256 liquidityDelta;
-    /// @notice Salt for unique positions in the same tick range
+    // any change in liquidity
+    int128 liquidityDelta;
+    // the spacing between ticks
+    int24 tickSpacing;
+    // used to distinguish positions of the same owner, at the same tick range
     bytes32 salt;
 }

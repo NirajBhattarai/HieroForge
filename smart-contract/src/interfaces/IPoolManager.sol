@@ -35,6 +35,26 @@ interface IPoolManager {
         int24 tick
     );
 
+    /// @notice Emitted when liquidity is modified in a pool
+    /// @param id The pool id
+    /// @param sender The address that called modifyLiquidity
+    /// @param owner The owner of the position (from params)
+    /// @param tickLower The lower tick of the position
+    /// @param tickUpper The upper tick of the position
+    /// @param liquidityDelta The change in liquidity (L)
+    /// @param amount0 The balance delta for currency0 (caller)
+    /// @param amount1 The balance delta for currency1 (caller)
+    event ModifyLiquidity(
+        PoolId indexed id,
+        address indexed sender,
+        address owner,
+        int24 tickLower,
+        int24 tickUpper,
+        int128 liquidityDelta,
+        int128 amount0,
+        int128 amount1
+    );
+
     /// @notice Initialize a pool with an initial sqrt price
     /// @param key Pool key identifying the pool
     /// @param sqrtPriceX96 Initial sqrt price (Q64.96)
