@@ -6,14 +6,17 @@ import {PoolId} from "../types/PoolId.sol";
 import {Currency} from "../types/Currency.sol";
 import {BalanceDelta} from "../types/BalanceDelta.sol";
 import {ModifyLiquidityParams} from "../types/ModifyLiquidityParams.sol";
+import {SwapParams} from "../types/SwapParams.sol";
 
 /// @title IPoolManager
-/// @notice Minimal interface for pool initialization (Uniswap v4-style)
+/// @notice Minimal interface for pool operations (Uniswap v4-style)
 interface IPoolManager {
     /// @notice Thrown when initializing an already initialized pool
     error PoolAlreadyInitialized();
     /// @notice Thrown when interacting with a pool that is not initialized
     error PoolNotInitialized();
+    /// @notice Thrown when swap is called with amountSpecified == 0
+    error SwapAmountCannotBeZero();
 
     /// @notice Emitted when a new pool is initialized (Uniswap v4-style)
     /// @param id The abi encoded hash of the pool key struct for the new pool
@@ -55,6 +58,26 @@ interface IPoolManager {
         int128 amount1
     );
 
+    /// @notice Emitted for swaps between currency0 and currency1 (Uniswap v4-style)
+    /// @param id The pool id
+    /// @param sender The address that initiated the swap
+    /// @param amount0 The delta of the currency0 balance of the pool
+    /// @param amount1 The delta of the currency1 balance of the pool
+    /// @param sqrtPriceX96 The sqrt(price) of the pool after the swap (Q64.96)
+    /// @param liquidity The liquidity of the pool after the swap
+    /// @param tick The tick after the swap
+    /// @param fee The swap fee in hundredths of a bip
+    event Swap(
+        PoolId indexed id,
+        address indexed sender,
+        int128 amount0,
+        int128 amount1,
+        uint160 sqrtPriceX96,
+        uint128 liquidity,
+        int24 tick,
+        uint24 fee
+    );
+
     /// @notice Initialize a pool with an initial sqrt price
     /// @param key Pool key identifying the pool
     /// @param sqrtPriceX96 Initial sqrt price (Q64.96)
@@ -70,4 +93,13 @@ interface IPoolManager {
     function modifyLiquidity(PoolKey memory key, ModifyLiquidityParams memory params, bytes calldata hookData)
         external
         returns (BalanceDelta callerDelta, BalanceDelta feesAccrued);
+
+    /// @notice Swap against the given pool (Uniswap v4-style)
+    /// @param key The pool to swap in
+    /// @param params zeroForOne, amountSpecified (exact-in if negative, exact-out if positive), sqrtPriceLimitX96
+    /// @param hookData Data passed to swap hooks (if any)
+    /// @return swapDelta The balance delta of the address swapping (amount0, amount1)
+    function swap(PoolKey memory key, SwapParams memory params, bytes calldata hookData)
+        external
+        returns (BalanceDelta swapDelta);
 }

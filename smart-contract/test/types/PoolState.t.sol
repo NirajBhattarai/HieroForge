@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {Test} from "forge-std/Test.sol";
-import {PoolState, checkPoolInitialized, modifyLiquidity, getLiquidity} from "../../src/types/PoolState.sol";
+import {PoolState, checkPoolInitialized, doModifyLiquidity, getLiquidity} from "../../src/types/PoolState.sol";
 import {initialSlot0} from "../../src/types/Slot0.sol";
 import {IPoolManager} from "../../src/interfaces/IPoolManager.sol";
 import {ModifyLiquidityParams} from "../../src/types/ModifyLiquidityParams.sol";
@@ -36,7 +36,7 @@ contract PoolStateCheckHelper {
         external
         returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
     {
-        return modifyLiquidity(state, params, hookData);
+        return doModifyLiquidity(state, params, hookData);
     }
 }
 

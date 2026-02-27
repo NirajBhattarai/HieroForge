@@ -11,14 +11,28 @@ type Slot0 is bytes32;
 
 using Slot0Library for Slot0 global;
 
+uint160 constant MASK_160_BITS = 0x00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+uint24 constant MASK_24_BITS = 0xFFFFFF;
+
+uint8 constant TICK_OFFSET = 160;
+uint8 constant PROTOCOL_FEE_OFFSET = 184;
+uint8 constant LP_FEE_OFFSET = 208;
+
+library ProtocolFeeLibrary {
+    /// @notice Returns the protocol fee for swap direction 0->1 (lower 12 bits)
+    function getZeroForOneFee(uint24 self) internal pure returns (uint16) {
+        return uint16(self & 0xfff);
+    }
+
+    /// @notice Returns the protocol fee for swap direction 1->0 (upper 12 bits)
+    function getOneForZeroFee(uint24 self) internal pure returns (uint16) {
+        return uint16((self >> 12) & 0xfff);
+    }
+}
+
+using ProtocolFeeLibrary for uint24;
+
 library Slot0Library {
-    uint160 internal constant MASK_160_BITS = 0x00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
-    uint24 internal constant MASK_24_BITS = 0xFFFFFF;
-
-    uint8 internal constant TICK_OFFSET = 160;
-    uint8 internal constant PROTOCOL_FEE_OFFSET = 184;
-    uint8 internal constant LP_FEE_OFFSET = 208;
-
     function sqrtPriceX96(Slot0 _packed) internal pure returns (uint160 _sqrtPriceX96) {
         assembly ("memory-safe") {
             _sqrtPriceX96 := and(MASK_160_BITS, _packed)
@@ -31,15 +45,15 @@ library Slot0Library {
         }
     }
 
-    function protocolFee(Slot0 _packed) internal pure returns (uint24 _protocolFee) {
-        assembly ("memory-safe") {
-            _protocolFee := and(MASK_24_BITS, shr(PROTOCOL_FEE_OFFSET, _packed))
-        }
-    }
-
     function lpFee(Slot0 _packed) internal pure returns (uint24 _lpFee) {
         assembly ("memory-safe") {
             _lpFee := and(MASK_24_BITS, shr(LP_FEE_OFFSET, _packed))
+        }
+    }
+
+    function protocolFee(Slot0 _packed) internal pure returns (uint24 _protocolFee) {
+        assembly ("memory-safe") {
+            _protocolFee := and(MASK_24_BITS, shr(PROTOCOL_FEE_OFFSET, _packed))
         }
     }
 

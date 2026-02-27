@@ -4,13 +4,16 @@ pragma solidity ^0.8.13;
 import {IPoolManager} from "./interfaces/IPoolManager.sol";
 import {PoolKey} from "./types/PoolKey.sol";
 import {PoolId} from "./types/PoolId.sol";
-import {PoolState, modifyLiquidity} from "./types/PoolState.sol";
+import {Currency} from "./types/Currency.sol";
+import {PoolState} from "./types/PoolState.sol";
 import {initialPoolState} from "./types/Slot0.sol";
 import {ModifyLiquidityParams} from "./types/ModifyLiquidityParams.sol";
-import {BalanceDelta} from "./types/BalanceDelta.sol";
+import {SwapParams} from "./types/SwapParams.sol";
+import {SwapResult} from "./types/SwapResult.sol";
+import {BalanceDelta, toBalanceDelta} from "./types/BalanceDelta.sol";
 
 /// @title PoolManager
-/// @notice Holds pool state and implements initialize (Uniswap v4-style)
+/// @notice Holds pool state and implements initialize and swap (Uniswap v4-style)
 contract PoolManager is IPoolManager {
     mapping(PoolId id => PoolState) internal _pools;
 
@@ -41,10 +44,12 @@ contract PoolManager is IPoolManager {
 
         BalanceDelta principalDelta;
         state.checkPoolInitialized();
-        (principalDelta, feesAccrued) = state.modifyLiquidity(params, hookData);
+        (principalDelta, feesAccrued) = state.doModifyLiquidity(params, hookData);
 
         // fee delta and principal delta are both accrued to the caller
-        // callerDelta = principalDelta + feesAccrued;
+        callerDelta = toBalanceDelta(
+            principalDelta.amount0() + feesAccrued.amount0(), principalDelta.amount1() + feesAccrued.amount1()
+        );
         emit ModifyLiquidity(
             id,
             msg.sender,
@@ -55,6 +60,43 @@ contract PoolManager is IPoolManager {
             callerDelta.amount0(),
             callerDelta.amount1()
         );
+    }
+
+    function _swap(PoolState storage poolState, PoolId id, SwapParams memory params, Currency inputCurrency)
+        internal
+        returns (BalanceDelta)
+    {
+        (BalanceDelta delta, uint256 amountToProtocol, uint24 swapFee, SwapResult memory result) =
+            poolState.swap(params);
+
+        // event is emitted before the afterSwap call to ensure events are always emitted in order
+        emit Swap(
+            id,
+            msg.sender,
+            delta.amount0(),
+            delta.amount1(),
+            result.sqrtPriceX96,
+            result.liquidity,
+            result.tick,
+            swapFee
+        );
+        return delta;
+    }
+
+    /// @inheritdoc IPoolManager
+    function swap(PoolKey memory key, SwapParams memory params, bytes calldata hookData)
+        external
+        override
+        returns (BalanceDelta swapDelta)
+    {
+        if (params.amountSpecified == 0) revert IPoolManager.SwapAmountCannotBeZero();
+        key.validate();
+        PoolId id = key.toId();
+        PoolState storage state = _getPool(id);
+        state.checkPoolInitialized();
+
+        Currency inputCurrency = params.zeroForOne ? key.currency0 : key.currency1;
+        swapDelta = _swap(state, id, params, inputCurrency);
     }
 
     /// @notice Returns pool state: initialized flag, sqrt price, and tick from slot0

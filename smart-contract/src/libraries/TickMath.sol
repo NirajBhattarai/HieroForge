@@ -23,6 +23,16 @@ library TickMath {
     uint160 internal constant MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970342;
     uint160 internal constant MAX_SQRT_PRICE_MINUS_MIN_SQRT_PRICE_MINUS_ONE = MAX_SQRT_PRICE - MIN_SQRT_PRICE - 1;
 
+    /// @notice Minimum sqrt price (at MIN_TICK) for use by callers (e.g. swap price limit checks)
+    function minSqrtPrice() public pure returns (uint160) {
+        return MIN_SQRT_PRICE;
+    }
+
+    /// @notice Maximum sqrt price (at MAX_TICK) for use by callers (e.g. swap price limit checks)
+    function maxSqrtPrice() public pure returns (uint160) {
+        return MAX_SQRT_PRICE;
+    }
+
     /// @notice Calculates sqrt(1.0001^tick) * 2^96
     /// @param tick The input tick
     /// @return sqrtPriceX96 Q64.96 sqrt price (currency1/currency0)
