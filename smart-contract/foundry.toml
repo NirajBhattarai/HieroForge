@@ -2,5 +2,17 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+evm_version = "cancun"
+# Required for hedera-forking (HTS emulation) in fork tests
+ffi = true
+
+[rpc_endpoints]
+local = "http://localhost:7546"
+testnet = "https://testnet.hashio.io/api"
+mainnet = "https://mainnet.hashio.io/api"
+previewnet = "https://previewnet.hashio.io/api"
+
+# Hedera: use --rpc-url $HEDERA_RPC_URL when running scripts (testnet or local node)
+# For fork tests: forge test --fork-url https://testnet.hashio.io/api
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

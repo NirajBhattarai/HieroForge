@@ -60,9 +60,22 @@ Then install the [HashPack](https://www.hashpack.app/) browser extension and cli
 | What        | Command |
 |------------|--------|
 | Build contracts | `cd smart-contract && forge build` |
-| Test contracts  | `cd smart-contract && forge test` |
+| Test contracts (HTS token creation) | `cd smart-contract && forge test` |
+| HTS tests on forked testnet | `cd smart-contract && forge test --match-contract CreateHtsTokenTest --fork-url https://testnet.hashio.io/api` |
+| **Create HTS token** (testnet or local) | `cd smart-contract && source ../.env 2>/dev/null; forge script script/CreateHtsToken.s.sol:CreateHtsTokenScript --rpc-url ${HEDERA_RPC_URL:-https://testnet.hashio.io/api} --broadcast --private-key $PRIVATE_KEY` |
 | Run UI dev server | `cd ui && npm run dev` |
 | Build UI for production | `cd ui && npm run build` |
+
+### HTS token (Foundry)
+
+The project uses [Hedera Token Service](https://docs.hedera.com/hedera/sdks-and-apis/sdks/smart-contracts/hedera-service-solidity-libraries) via the HTS precompile. To create a fungible token on **Hedera testnet** or a **local Hedera node**:
+
+1. Set `PRIVATE_KEY` in `.env` (account must have HBAR for fees).
+2. Optional: set `TREASURY` (EVM address) or it defaults to the signer.
+3. Optional: set `HEDERA_RPC_URL` (default: testnet hashio).
+4. From repo root: `cd smart-contract && forge script script/CreateHtsToken.s.sol:CreateHtsTokenScript --rpc-url $HEDERA_RPC_URL --broadcast --private-key $PRIVATE_KEY`
+
+For a **local Hedera node**, run the same command with `HEDERA_RPC_URL` pointing at your node’s EVM RPC (e.g. `http://127.0.0.1:7546`). The created token’s address is emitted in the `CreatedToken` event.
 
 ## Documentation
 
@@ -70,6 +83,10 @@ Then install the [HashPack](https://www.hashpack.app/) browser extension and cli
 - [Hedera](https://docs.hedera.com/)
 - [HashPack](https://www.hashpack.app/)
 - [WalletConnect Cloud](https://cloud.walletconnect.com/) (project ID for dApps)
+
+### For later: HTS fork testing
+
+- **[hedera-forking](https://github.com/hashgraph/hedera-forking)** — Foundry library (and Hardhat plugin) that emulates the Hedera Token Service at `0x167` so you can run **fork tests** against Hedera (e.g. `forge test --fork-url https://testnet.hashio.io/api`). Use `Hsc.htsSetup()` in test `setUp()` and optional `--skip-simulation` for scripts. Lets you test HTS token creation/transfers locally without a live node. See repo README for setup (`ffi = true`, RPC endpoints, and supported HTS methods).
 
 ## License
 

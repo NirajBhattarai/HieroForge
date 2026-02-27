@@ -45,10 +45,10 @@ $ forge snapshot
 $ anvil
 ```
 
-### Deploy
+### Deploy / Create HTS token
 
 ```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+$ forge script script/CreateHtsToken.s.sol:CreateHtsTokenScript --rpc-url $HEDERA_RPC_URL --broadcast --private-key $PRIVATE_KEY
 ```
 
 ### Cast
