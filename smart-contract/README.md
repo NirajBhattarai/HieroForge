@@ -45,6 +45,29 @@ $ forge snapshot
 $ anvil
 ```
 
+### Deploy PoolManager (and optionally Router)
+
+**Deploy PoolManager only:**
+
+```shell
+export PRIVATE_KEY=0x...
+forge script script/DeployPoolManagerOnly.s.sol:DeployPoolManagerOnlyScript --rpc-url testnet --broadcast --private-key $PRIVATE_KEY
+```
+
+**Deploy PoolManager and ModifyLiquidityRouter:**
+
+```shell
+forge script script/DeployPoolManager.s.sol:DeployPoolManagerScript --rpc-url testnet --broadcast --private-key $PRIVATE_KEY
+```
+
+Or with explicit RPC URL:
+
+```shell
+forge script script/DeployPoolManager.s.sol:DeployPoolManagerScript --rpc-url https://testnet.hashio.io/api --broadcast --private-key $PRIVATE_KEY
+```
+
+The scripts log the deployed address(es). Set `VITE_POOL_MANAGER_ADDRESS` in the UI `.env` to enable the Create Pool form.
+
 ### Deploy / Create HTS token
 
 ```shell

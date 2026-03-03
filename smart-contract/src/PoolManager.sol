@@ -40,6 +40,7 @@ contract PoolManager is IPoolManager {
     }
 
     /// @inheritdoc IPoolManager
+    /// @dev Pools accept any currency combination: ERC20-ERC20, ERC20-HTS, or HTS-HTS. Use TokenClassifier to identify token types.
     function initialize(PoolKey memory key, uint160 sqrtPriceX96) external override returns (int24 tick) {
         // Validate that the currencies are sorted in ascending order, ensuring that currency0 is less than currency1.
         // This maintains consistency for all pool identifiers, preventing duplicates with reversed keys.

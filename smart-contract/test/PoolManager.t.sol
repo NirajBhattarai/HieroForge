@@ -3,7 +3,6 @@ pragma solidity ^0.8.13;
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {console} from "forge-std/console.sol";
 import {PoolManager} from "../src/PoolManager.sol";
 import {PoolKey, InvalidTickSpacing} from "../src/types/PoolKey.sol";
 import {Currency} from "../src/types/Currency.sol";
@@ -14,6 +13,10 @@ import {ModifyLiquidityParams} from "../src/types/ModifyLiquidityParams.sol";
 import {SwapParams} from "../src/types/SwapParams.sol";
 import {BalanceDelta} from "../src/types/BalanceDelta.sol";
 import {TickMath} from "../src/libraries/TickMath.sol";
+import {Deployers} from "./utils/Deployers.sol";
+import {ModifyLiquidityRouter} from "./utils/ModifyLiquidityRouter.sol";
+import {MockERC20} from "./utils/MockERC20.sol";
+import {IERC20} from "hedera-forking/IERC20.sol";
 
 contract PoolManagerTest is Test {
     PoolManager public poolManager;
@@ -283,5 +286,221 @@ contract PoolManagerTest is Test {
             tickSpacing: tickSpacing,
             hooks: address(0)
         });
+    }
+}
+
+// ========== modifyLiquidity tests for all token combinations ==========
+// Combinations: HTS-HTS | ERC20-ERC20 | ERC20-HTS | HTS-ERC20 | Native-ERC20 | Native-HTS
+
+/// @notice Tests PoolManager.modifyLiquidity with real settle/take for all token0/token1 combinations
+contract PoolManagerModifyLiquidityCombinationsTest is Test, Deployers {
+    function setUp() public {
+        // Base setup: manager + router. HTS tests also need initializeManagerRoutersAndPools()
+        deployFreshManagerAndRouters();
+    }
+
+    /// @notice Combination 1: token0 = HTS, token1 = HTS — add liquidity with real HTS transfer
+    function test_modifyLiquidity_addLiquidity_htsHts() public {
+        deployMintAndApprove2CurrenciesHTS();
+        (key,) = initPool(currency0, currency1, 3000, 60, SQRT_PRICE_1_1);
+        LIQUIDITY_PARAMS.owner = address(modifyLiquidityRouter);
+        LIQUIDITY_PARAMS.liquidityDelta = 1000;
+
+        uint256 fundAmount = 5e9;
+        require(IERC20(Currency.unwrap(currency0)).transfer(address(modifyLiquidityRouter), fundAmount), "t0");
+        require(IERC20(Currency.unwrap(currency1)).transfer(address(modifyLiquidityRouter), fundAmount), "t1");
+
+        uint256 bal0Before = IERC20(Currency.unwrap(currency0)).balanceOf(address(manager));
+        uint256 bal1Before = IERC20(Currency.unwrap(currency1)).balanceOf(address(manager));
+
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(key, LIQUIDITY_PARAMS, ZERO_BYTES);
+
+        assertLt(int256(delta.amount0()), 0, "delta0 negative");
+        assertLt(int256(delta.amount1()), 0, "delta1 negative");
+        assertEq(
+            IERC20(Currency.unwrap(currency0)).balanceOf(address(manager)),
+            bal0Before + uint256(uint128(-delta.amount0())),
+            "manager received token0"
+        );
+        assertEq(
+            IERC20(Currency.unwrap(currency1)).balanceOf(address(manager)),
+            bal1Before + uint256(uint128(-delta.amount1())),
+            "manager received token1"
+        );
+    }
+
+    /// @notice Combination 2: token0 = ERC20, token1 = ERC20 — add liquidity with real ERC20 transfer
+    function test_modifyLiquidity_addLiquidity_erc20Erc20() public {
+        MockERC20 mock0 = new MockERC20();
+        MockERC20 mock1 = new MockERC20();
+        mock0.mint(address(this), 1e18);
+        mock1.mint(address(this), 1e18);
+        address a0 = address(mock0);
+        address a1 = address(mock1);
+        (Currency c0, Currency c1) = a0 < a1 ? (Currency.wrap(a0), Currency.wrap(a1)) : (Currency.wrap(a1), Currency.wrap(a0));
+
+        mock0.approve(address(modifyLiquidityRouter), type(uint256).max);
+        mock1.approve(address(modifyLiquidityRouter), type(uint256).max);
+
+        PoolKey memory poolKey = PoolKey({
+            currency0: c0,
+            currency1: c1,
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: address(0)
+        });
+        initPool(c0, c1, 3000, 60, SQRT_PRICE_1_1);
+        key = poolKey;
+
+        ModifyLiquidityParams memory params = ModifyLiquidityParams({
+            owner: address(modifyLiquidityRouter),
+            tickLower: -120,
+            tickUpper: 120,
+            liquidityDelta: 1000,
+            tickSpacing: 60,
+            salt: bytes32(0)
+        });
+
+        uint256 fundAmount = 1e17;
+        require(IERC20(Currency.unwrap(c0)).transfer(address(modifyLiquidityRouter), fundAmount), "t0");
+        require(IERC20(Currency.unwrap(c1)).transfer(address(modifyLiquidityRouter), fundAmount), "t1");
+
+        uint256 bal0Before = IERC20(Currency.unwrap(c0)).balanceOf(address(manager));
+        uint256 bal1Before = IERC20(Currency.unwrap(c1)).balanceOf(address(manager));
+
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(poolKey, params, ZERO_BYTES);
+
+        assertLt(int256(delta.amount0()), 0);
+        assertLt(int256(delta.amount1()), 0);
+        assertEq(
+            IERC20(Currency.unwrap(c0)).balanceOf(address(manager)),
+            bal0Before + uint256(uint128(-delta.amount0())),
+            "manager received token0"
+        );
+        assertEq(
+            IERC20(Currency.unwrap(c1)).balanceOf(address(manager)),
+            bal1Before + uint256(uint128(-delta.amount1())),
+            "manager received token1"
+        );
+    }
+
+    /// @notice Combination 3: token0 = ERC20, token1 = HTS (or token0 = HTS, token1 = ERC20) — mixed pair
+    function test_modifyLiquidity_addLiquidity_erc20Hts_mixed() public {
+        deployMintAndApprove2CurrenciesHTS();
+        MockERC20 mockErc20 = new MockERC20();
+        mockErc20.mint(address(this), 1e18);
+        address erc20Addr = address(mockErc20);
+        address htsAddr = Currency.unwrap(currency0);
+
+        (Currency c0, Currency c1) = erc20Addr < htsAddr
+            ? (Currency.wrap(erc20Addr), currency0)
+            : (currency0, Currency.wrap(erc20Addr));
+        mockErc20.approve(address(modifyLiquidityRouter), type(uint256).max);
+        // currency0 already approved in deployMintAndApprove2CurrenciesHTS
+
+        PoolKey memory poolKey = PoolKey({
+            currency0: c0,
+            currency1: c1,
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: address(0)
+        });
+        initPool(c0, c1, 3000, 60, SQRT_PRICE_1_1);
+        key = poolKey;
+
+        ModifyLiquidityParams memory params = ModifyLiquidityParams({
+            owner: address(modifyLiquidityRouter),
+            tickLower: -120,
+            tickUpper: 120,
+            liquidityDelta: 1000,
+            tickSpacing: 60,
+            salt: bytes32(0)
+        });
+
+        uint256 fundErc20 = 1e17;
+        uint256 fundHts = 5e9;
+        // c0 is ERC20 when erc20Addr < htsAddr, so fund c0 with ERC20 amount and c1 with HTS amount
+        require(
+            IERC20(Currency.unwrap(c0)).transfer(address(modifyLiquidityRouter), erc20Addr < htsAddr ? fundErc20 : fundHts),
+            "t0"
+        );
+        require(
+            IERC20(Currency.unwrap(c1)).transfer(address(modifyLiquidityRouter), erc20Addr < htsAddr ? fundHts : fundErc20),
+            "t1"
+        );
+
+        uint256 bal0Before = IERC20(Currency.unwrap(c0)).balanceOf(address(manager));
+        uint256 bal1Before = IERC20(Currency.unwrap(c1)).balanceOf(address(manager));
+
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(poolKey, params, ZERO_BYTES);
+
+        assertLt(int256(delta.amount0()), 0);
+        assertLt(int256(delta.amount1()), 0);
+        assertEq(
+            IERC20(Currency.unwrap(c0)).balanceOf(address(manager)),
+            bal0Before + uint256(uint128(-delta.amount0())),
+            "manager received token0"
+        );
+        assertEq(
+            IERC20(Currency.unwrap(c1)).balanceOf(address(manager)),
+            bal1Before + uint256(uint128(-delta.amount1())),
+            "manager received token1"
+        );
+    }
+
+    /// @notice Same as mixed but with HTS as token0 and ERC20 as token1 (opposite address order)
+    function test_modifyLiquidity_addLiquidity_htsErc20_mixed() public {
+        deployMintAndApprove2CurrenciesHTS();
+        MockERC20 mockErc20 = new MockERC20();
+        mockErc20.mint(address(this), 1e18);
+        address erc20Addr = address(mockErc20);
+        address htsAddr = Currency.unwrap(currency1);
+
+        (Currency c0, Currency c1) = htsAddr < erc20Addr
+            ? (currency1, Currency.wrap(erc20Addr))
+            : (Currency.wrap(erc20Addr), currency1);
+        mockErc20.approve(address(modifyLiquidityRouter), type(uint256).max);
+
+        PoolKey memory poolKey = PoolKey({
+            currency0: c0,
+            currency1: c1,
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: address(0)
+        });
+        initPool(c0, c1, 3000, 60, SQRT_PRICE_1_1);
+        key = poolKey;
+
+        ModifyLiquidityParams memory params = ModifyLiquidityParams({
+            owner: address(modifyLiquidityRouter),
+            tickLower: -120,
+            tickUpper: 120,
+            liquidityDelta: 1000,
+            tickSpacing: 60,
+            salt: bytes32(0)
+        });
+
+        uint256 fundHts = 5e9;
+        uint256 fundErc20 = 1e17;
+        require(IERC20(Currency.unwrap(c0)).transfer(address(modifyLiquidityRouter), fundHts), "t0");
+        require(IERC20(Currency.unwrap(c1)).transfer(address(modifyLiquidityRouter), fundErc20), "t1");
+
+        uint256 bal0Before = IERC20(Currency.unwrap(c0)).balanceOf(address(manager));
+        uint256 bal1Before = IERC20(Currency.unwrap(c1)).balanceOf(address(manager));
+
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(poolKey, params, ZERO_BYTES);
+
+        assertLt(int256(delta.amount0()), 0);
+        assertLt(int256(delta.amount1()), 0);
+        assertEq(
+            IERC20(Currency.unwrap(c0)).balanceOf(address(manager)),
+            bal0Before + uint256(uint128(-delta.amount0())),
+            "manager received token0"
+        );
+        assertEq(
+            IERC20(Currency.unwrap(c1)).balanceOf(address(manager)),
+            bal1Before + uint256(uint128(-delta.amount1())),
+            "manager received token1"
+        );
     }
 }

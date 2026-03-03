@@ -1,8 +1,19 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
+import { createWalletClient, custom } from 'viem'
 import './App.css'
 import { useHashPack } from './context/HashPackContext.jsx'
+import { PoolManagerAbi, SQRT_PRICE_PRESETS } from './abis/PoolManager.js'
 
 const TAB = { SWAP: 'swap', POOL: 'pool', LIQUIDITY: 'liquidity' }
+
+// Hedera testnet
+const hederaTestnet = {
+  id: 296,
+  name: 'Hedera Testnet',
+  nativeCurrency: { name: 'HBAR', symbol: 'HBAR', decimals: 8 },
+  rpcUrls: { default: { http: ['https://testnet.hashio.io/api'] } },
+  blockExplorers: { default: { name: 'HashScan', url: 'https://hashscan.io/testnet' } },
+}
 
 const DEFAULT_TOKENS = [
   { id: 'token0', symbol: 'HBAR' },
@@ -35,6 +46,77 @@ function App() {
   const [liquidityAmount, setLiquidityAmount] = useState('')
   const [liquidityToken0, setLiquidityToken0] = useState(DEFAULT_TOKENS[0])
   const [liquidityToken1, setLiquidityToken1] = useState(DEFAULT_TOKENS[1])
+
+  // Create pool state
+  const [token0Address, setToken0Address] = useState('')
+  const [token1Address, setToken1Address] = useState('')
+  const [fee, setFee] = useState('3000')
+  const [tickSpacing, setTickSpacing] = useState('60')
+  const [initialPriceKey, setInitialPriceKey] = useState('1')
+  const [createPoolTx, setCreatePoolTx] = useState(null)
+  const [createPoolError, setCreatePoolError] = useState(null)
+  const [createPoolPending, setCreatePoolPending] = useState(false)
+
+  const poolManagerAddress = import.meta.env.VITE_POOL_MANAGER_ADDRESS || ''
+
+  const createPool = useCallback(async () => {
+    if (!poolManagerAddress || !token0Address || !token1Address) {
+      setCreatePoolError('Set VITE_POOL_MANAGER_ADDRESS and both token addresses.')
+      return
+    }
+    const addr0 = token0Address.trim()
+    const addr1 = token1Address.trim()
+    if (addr0 === addr1) {
+      setCreatePoolError('Token addresses must be different.')
+      return
+    }
+    const currency0 = addr0.toLowerCase() < addr1.toLowerCase() ? addr0 : addr1
+    const currency1 = addr0.toLowerCase() < addr1.toLowerCase() ? addr1 : addr0
+    const feeNum = parseInt(fee, 10)
+    const tickSpacingNum = parseInt(tickSpacing, 10)
+    if (isNaN(feeNum) || feeNum < 0 || feeNum > 1_000_000) {
+      setCreatePoolError('Fee must be 0–1000000 (e.g. 3000 = 0.3%).')
+      return
+    }
+    if (isNaN(tickSpacingNum) || tickSpacingNum < 1 || tickSpacingNum > 32767) {
+      setCreatePoolError('Tick spacing must be 1–32767.')
+      return
+    }
+    const sqrtPriceX96 = BigInt(SQRT_PRICE_PRESETS[initialPriceKey] || SQRT_PRICE_PRESETS['1'])
+    const poolKey = { currency0, currency1, fee: feeNum, tickSpacing: tickSpacingNum, hooks: '0x0000000000000000000000000000000000000000' }
+
+    const provider = typeof window !== 'undefined' && window.ethereum
+    if (!provider) {
+      setCreatePoolError('No EVM wallet found. Install MetaMask or use an EVM-compatible wallet on Hedera Testnet.')
+      return
+    }
+
+    setCreatePoolError(null)
+    setCreatePoolPending(true)
+    setCreatePoolTx(null)
+    try {
+      const chainId = Number(import.meta.env.VITE_CHAIN_ID || '296')
+      const walletClient = createWalletClient({ chain: hederaTestnet, transport: custom(provider) })
+      const [address] = await walletClient.requestAddresses()
+      if (!address) {
+        setCreatePoolError('Connect your EVM wallet first.')
+        setCreatePoolPending(false)
+        return
+      }
+      const hash = await walletClient.writeContract({
+        address: poolManagerAddress,
+        abi: PoolManagerAbi,
+        functionName: 'initialize',
+        args: [poolKey, sqrtPriceX96],
+        account: address,
+      })
+      setCreatePoolTx({ hash })
+    } catch (err) {
+      setCreatePoolError(err?.shortMessage || err?.message || 'Transaction failed.')
+    } finally {
+      setCreatePoolPending(false)
+    }
+  }, [poolManagerAddress, token0Address, token1Address, fee, tickSpacing, initialPriceKey])
 
   const flipTokens = () => {
     setTokenIn(tokenOut)
@@ -172,7 +254,74 @@ function App() {
                 </li>
               ))}
             </ul>
-            <p className="helper">Initialize new pools from smart contract (PoolManager).</p>
+
+            <h3 className="create-pool-title">Create pool</h3>
+            <p className="helper">Token addresses must be sorted (currency0 &lt; currency1). Use an EVM wallet on Hedera Testnet (chain 296).</p>
+            {poolManagerAddress ? null : (
+              <p className="helper create-pool-warn">Set VITE_POOL_MANAGER_ADDRESS in .env to enable.</p>
+            )}
+            <div className="form-group">
+              <label>Token 0 address (currency0)</label>
+              <input
+                type="text"
+                value={token0Address}
+                onChange={(e) => setToken0Address(e.target.value)}
+                placeholder="0x..."
+              />
+            </div>
+            <div className="form-group">
+              <label>Token 1 address (currency1)</label>
+              <input
+                type="text"
+                value={token1Address}
+                onChange={(e) => setToken1Address(e.target.value)}
+                placeholder="0x..."
+              />
+            </div>
+            <div className="form-group">
+              <label>Fee (hundredths of a bip, e.g. 3000 = 0.3%)</label>
+              <input
+                type="text"
+                value={fee}
+                onChange={(e) => setFee(e.target.value)}
+                placeholder="3000"
+              />
+            </div>
+            <div className="form-group">
+              <label>Tick spacing (e.g. 60)</label>
+              <input
+                type="text"
+                value={tickSpacing}
+                onChange={(e) => setTickSpacing(e.target.value)}
+                placeholder="60"
+              />
+            </div>
+            <div className="form-group">
+              <label>Initial price (token1 per token0)</label>
+              <select
+                className="token-select"
+                value={initialPriceKey}
+                onChange={(e) => setInitialPriceKey(e.target.value)}
+              >
+                {Object.entries(SQRT_PRICE_PRESETS).map(([k]) => (
+                  <option key={k} value={k}>{k}</option>
+                ))}
+              </select>
+            </div>
+            {createPoolError && <p className="header-error create-pool-err">{createPoolError}</p>}
+            {createPoolTx && (
+              <p className="helper create-pool-success">
+                Tx: <a href={`https://hashscan.io/testnet/transaction/${createPoolTx.hash}`} target="_blank" rel="noreferrer">{createPoolTx.hash?.slice(0, 10)}…</a>
+              </p>
+            )}
+            <button
+              type="button"
+              className="primary-btn"
+              disabled={!poolManagerAddress || createPoolPending}
+              onClick={createPool}
+            >
+              {createPoolPending ? 'Creating…' : 'Create pool'}
+            </button>
           </div>
         )}
 

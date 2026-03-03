@@ -13,7 +13,8 @@
     "@hashgraph/sdk": "^2.80.0",
     "hashconnect": "^3.0.14",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "viem": "^2.46.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

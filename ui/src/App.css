@@ -245,3 +245,30 @@
   color: var(--muted);
   margin-top: 8px;
 }
+
+/* Create pool section */
+.create-pool-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 24px 0 8px 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.create-pool-warn {
+  color: var(--accent);
+}
+
+.create-pool-err {
+  margin: 8px 0;
+  max-width: 100%;
+}
+
+.create-pool-success {
+  color: var(--success);
+}
+
+.create-pool-success a {
+  color: var(--accent);
+}
