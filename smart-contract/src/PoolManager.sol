@@ -4,8 +4,9 @@ pragma solidity ^0.8.13;
 import {IPoolManager} from "./interfaces/IPoolManager.sol";
 import {PoolKey} from "./types/PoolKey.sol";
 import {PoolId} from "./types/PoolId.sol";
-import {Currency} from "./types/Currency.sol";
+import {Currency, CurrencyDelta, CurrencyLibrary} from "./types/Currency.sol";
 import {PoolState} from "./types/PoolState.sol";
+import {SafeCast} from "./libraries/SafeCast.sol";
 import {initialPoolState} from "./types/Slot0.sol";
 import {ModifyLiquidityParams} from "./types/ModifyLiquidityParams.sol";
 import {SwapParams} from "./types/SwapParams.sol";
@@ -17,11 +18,20 @@ import {CustomRevert} from "./libraries/CustomRevert.sol";
 import {IUnlockCallback} from "./callback/IUnlockCallback.sol";
 
 using CustomRevert for bytes4;
+using CurrencyDelta for Currency;
+using CurrencyLibrary for Currency;
+using SafeCast for uint256;
+
+/// @notice Thrown when settling an ERC20 currency but msg.value is nonzero
+error NonzeroNativeValue();
 
 /// @title PoolManager
 /// @notice Holds pool state and implements initialize and swap (Uniswap v4-style)
 contract PoolManager is IPoolManager {
     mapping(PoolId id => PoolState) internal _pools;
+
+    bytes32 private constant SYNCED_CURRENCY_SLOT = keccak256("PoolManager.syncedCurrency");
+    bytes32 private constant SYNCED_RESERVES_SLOT = keccak256("PoolManager.syncedReserves");
 
     /// @notice This will revert if the contract is locked
     modifier onlyWhenUnlocked() {
@@ -61,9 +71,10 @@ contract PoolManager is IPoolManager {
         BalanceDelta principalDelta;
         (principalDelta, feesAccrued) = state.modifyLiquidity(params, hookData);
 
-        // fee delta and principal delta are both accrued to the caller
+        // Fee delta and principal delta are both accrued to the caller
         callerDelta = toBalanceDelta(
-            principalDelta.amount0() + feesAccrued.amount0(), principalDelta.amount1() + feesAccrued.amount1()
+            principalDelta.amount0() + feesAccrued.amount0(),
+            principalDelta.amount1() + feesAccrued.amount1()
         );
         emit ModifyLiquidity(
             id,
@@ -75,6 +86,27 @@ contract PoolManager is IPoolManager {
             callerDelta.amount0(),
             callerDelta.amount1()
         );
+
+        _accountPoolBalanceDelta(key, callerDelta, msg.sender);
+    }
+
+    /// @notice Adds a balance delta in a currency for a target address
+    function _accountDelta(Currency currency, int128 delta, address target) internal {
+        if (delta == 0) return;
+
+        (int256 previous, int256 next) = currency.applyDelta(target, delta);
+
+        if (next == 0) {
+            NonzeroDeltaCount.decrement();
+        } else if (previous == 0) {
+            NonzeroDeltaCount.increment();
+        }
+    }
+
+    /// @notice Accounts the deltas of 2 currencies to a target address
+    function _accountPoolBalanceDelta(PoolKey memory key, BalanceDelta delta, address target) internal {
+        _accountDelta(key.currency0, delta.amount0(), target);
+        _accountDelta(key.currency1, delta.amount1(), target);
     }
 
     function _swap(PoolState storage poolState, PoolId id, SwapParams memory params, Currency inputCurrency)
@@ -124,6 +156,71 @@ contract PoolManager is IPoolManager {
 
         if (NonzeroDeltaCount.read() != 0) IPoolManager.CurrencyNotSettled.selector.revertWith();
         Lock.lock();
+    }
+
+    /// @inheritdoc IPoolManager
+    function sync(Currency currency) external {
+        bytes32 slotC = SYNCED_CURRENCY_SLOT;
+        bytes32 slotR = SYNCED_RESERVES_SLOT;
+        uint256 cur = uint256(uint160(Currency.unwrap(currency)));
+        assembly ("memory-safe") {
+            tstore(slotC, cur)
+        }
+        if (currency.isAddressZero()) {
+            assembly ("memory-safe") {
+                tstore(slotR, 0)
+            }
+        } else {
+            uint256 bal = currency.balanceOfSelf();
+            assembly ("memory-safe") {
+                tstore(slotR, bal)
+            }
+        }
+    }
+
+    /// @inheritdoc IPoolManager
+    function settle() external payable onlyWhenUnlocked returns (uint256 paid) {
+        Currency currency = _getSyncedCurrency();
+        if (currency.isAddressZero()) {
+            paid = msg.value;
+            _resetSynced();
+        } else {
+            if (msg.value > 0) revert NonzeroNativeValue();
+            bytes32 slotR = SYNCED_RESERVES_SLOT;
+            uint256 reservesBefore;
+            assembly ("memory-safe") {
+                reservesBefore := tload(slotR)
+            }
+            paid = currency.balanceOfSelf() - reservesBefore;
+            _resetSynced();
+        }
+        _accountDelta(currency, paid.toInt128(), msg.sender);
+    }
+
+    /// @inheritdoc IPoolManager
+    function take(Currency currency, address to, uint256 amount) external onlyWhenUnlocked {
+        unchecked {
+            _accountDelta(currency, -int128(int256(amount)), msg.sender);
+            currency.transfer(to, amount);
+        }
+    }
+
+    function _getSyncedCurrency() internal view returns (Currency currency) {
+        bytes32 slotC = SYNCED_CURRENCY_SLOT;
+        uint256 v;
+        assembly ("memory-safe") {
+            v := tload(slotC)
+        }
+        currency = Currency.wrap(address(uint160(v)));
+    }
+
+    function _resetSynced() internal {
+        bytes32 slotC = SYNCED_CURRENCY_SLOT;
+        bytes32 slotR = SYNCED_RESERVES_SLOT;
+        assembly ("memory-safe") {
+            tstore(slotC, 0)
+            tstore(slotR, 0)
+        }
     }
 
     /// @notice Returns pool state: initialized flag, sqrt price, and tick from slot0

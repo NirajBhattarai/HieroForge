@@ -7,7 +7,7 @@ evm_version = "cancun"
 via_ir = true
 optimizer = true
 optimizer_runs = 200
-# Required for hedera-forking (HTS emulation) in fork tests
+# Required for HTS token tests (hedera-forking emulation at 0x167). Enables forge test without --ffi.
 ffi = true
 
 [rpc_endpoints]

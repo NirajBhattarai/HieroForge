@@ -113,4 +113,13 @@ interface IPoolManager {
     /// @param data Data passed to the callback
     /// @return result Return value from the callback
     function unlock(bytes calldata data) external returns (bytes memory result);
+
+    /// @notice Sync manager's view of a currency (call before transfer to manager, then settle)
+    function sync(Currency currency) external;
+
+    /// @notice Credit sender's delta with tokens received (call after transferring tokens to manager, or with msg.value for native)
+    function settle() external payable returns (uint256 paid);
+
+    /// @notice Debit sender's delta and transfer tokens from manager to recipient
+    function take(Currency currency, address to, uint256 amount) external;
 }
