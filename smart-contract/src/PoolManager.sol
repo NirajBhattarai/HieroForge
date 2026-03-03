@@ -11,11 +11,23 @@ import {ModifyLiquidityParams} from "./types/ModifyLiquidityParams.sol";
 import {SwapParams} from "./types/SwapParams.sol";
 import {SwapResult} from "./types/SwapResult.sol";
 import {BalanceDelta, toBalanceDelta} from "./types/BalanceDelta.sol";
+import {Lock} from "./libraries/Lock.sol";
+import {NonzeroDeltaCount} from "./libraries/NonzeroDeltaCount.sol";
+import {CustomRevert} from "./libraries/CustomRevert.sol";
+import {IUnlockCallback} from "./callback/IUnlockCallback.sol";
+
+using CustomRevert for bytes4;
 
 /// @title PoolManager
 /// @notice Holds pool state and implements initialize and swap (Uniswap v4-style)
 contract PoolManager is IPoolManager {
     mapping(PoolId id => PoolState) internal _pools;
+
+    /// @notice This will revert if the contract is locked
+    modifier onlyWhenUnlocked() {
+        if (!Lock.isUnlocked()) IPoolManager.ManagerLocked.selector.revertWith();
+        _;
+    }
 
     /// @inheritdoc IPoolManager
     function initialize(PoolKey memory key, uint160 sqrtPriceX96) external override returns (int24 tick) {
@@ -36,15 +48,18 @@ contract PoolManager is IPoolManager {
     function modifyLiquidity(PoolKey memory key, ModifyLiquidityParams memory params, bytes calldata hookData)
         external
         override
+        onlyWhenUnlocked
         returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
     {
+        // Validate:
+        // - currencies are sorted in ascending order (currency0 < currency1) to prevent duplicates with reversed keys
+        // - tickSpacing in PoolKey is within the allowed range for safety and granularity of pools
         key.validate();
         PoolId id = key.toId();
         PoolState storage state = _getPool(id);
 
         BalanceDelta principalDelta;
-        state.checkPoolInitialized();
-        (principalDelta, feesAccrued) = state.doModifyLiquidity(params, hookData);
+        (principalDelta, feesAccrued) = state.modifyLiquidity(params, hookData);
 
         // fee delta and principal delta are both accrued to the caller
         callerDelta = toBalanceDelta(
@@ -93,10 +108,22 @@ contract PoolManager is IPoolManager {
         key.validate();
         PoolId id = key.toId();
         PoolState storage state = _getPool(id);
-        state.checkPoolInitialized();
 
         Currency inputCurrency = params.zeroForOne ? key.currency0 : key.currency1;
         swapDelta = _swap(state, id, params, inputCurrency);
+    }
+
+    /// @inheritdoc IPoolManager
+    function unlock(bytes calldata data) external override returns (bytes memory result) {
+        if (Lock.isUnlocked()) IPoolManager.AlreadyUnlocked.selector.revertWith();
+
+        Lock.unlock();
+
+        // the caller does everything in this callback, including paying what they owe via calls to settle
+        result = IUnlockCallback(msg.sender).unlockCallback(data);
+
+        if (NonzeroDeltaCount.read() != 0) IPoolManager.CurrencyNotSettled.selector.revertWith();
+        Lock.lock();
     }
 
     /// @notice Returns pool state: initialized flag, sqrt price, and tick from slot0

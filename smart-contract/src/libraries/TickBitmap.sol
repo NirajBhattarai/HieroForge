@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {BitMath} from "./BitMath.sol";
+import {console} from "forge-std/console.sol";
 
 /// @title Packed tick initialized state library
 /// @notice Stores a packed mapping of tick index to its initialized state
@@ -89,26 +90,41 @@ library TickBitmap {
     ) internal view returns (int24 next, bool initialized) {
         unchecked {
             int24 compressed = compress(tick, tickSpacing);
+            console.log("compressed--->", compressed);
 
             if (lte) {
                 (int16 wordPos, uint8 bitPos) = position(compressed);
+                console.log("wordPos--->", wordPos);
+                console.log("bitPos--->", bitPos);
                 // all the 1s at or to the right of the current bitPos
                 uint256 mask = type(uint256).max >> (uint256(type(uint8).max) - bitPos);
+                console.log("mask---> inside TickBitMap", mask);
                 uint256 masked = self[wordPos] & mask;
-
+                console.log("masked---> inside TickBitMap", masked);
                 // if there are no initialized ticks to the right of or at the current tick, return rightmost in the word
                 initialized = masked != 0;
                 // overflow/underflow is possible, but prevented externally by limiting both tickSpacing and tick
+                uint8 msb;
+                if (initialized) {
+                    msb = BitMath.mostSignificantBit(masked);
+                    console.log("mostSignificantBit--->", msb);
+                }
+                // 2 - 2 -
                 next = initialized
-                    ? (compressed - int24(uint24(bitPos - BitMath.mostSignificantBit(masked)))) * tickSpacing
+                    ? (compressed - int24(uint24(bitPos - msb))) * tickSpacing
                     : (compressed - int24(uint24(bitPos))) * tickSpacing;
+                console.log("next---> inside TickBitMap", next);
             } else {
                 // start from the word of the next tick, since the current tick state doesn't matter
                 (int16 wordPos, uint8 bitPos) = position(++compressed);
+                console.log("wordPos---> inside TickBitMap", wordPos);
+                console.log("bitPos---> inside TickBitMap", bitPos);
                 // all the 1s at or to the left of the bitPos
+                // TODO: we need to understand this later
                 uint256 mask = ~((1 << bitPos) - 1);
+                console.log("mask---> inside TickBitMap", mask);
                 uint256 masked = self[wordPos] & mask;
-
+                console.log("masked---> inside TickBitMap", masked);
                 // if there are no initialized ticks to the left of the current tick, return leftmost in the word
                 initialized = masked != 0;
                 // overflow/underflow is possible, but prevented externally by limiting both tickSpacing and tick

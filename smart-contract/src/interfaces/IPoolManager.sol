@@ -17,6 +17,12 @@ interface IPoolManager {
     error PoolNotInitialized();
     /// @notice Thrown when swap is called with amountSpecified == 0
     error SwapAmountCannotBeZero();
+    /// @notice Thrown when unlock is called when already unlocked
+    error AlreadyUnlocked();
+    /// @notice Thrown when callback returns with nonzero balance delta (currency not settled)
+    error CurrencyNotSettled();
+    /// @notice Thrown when a pool operation is attempted while the manager is locked
+    error ManagerLocked();
 
     /// @notice Emitted when a new pool is initialized (Uniswap v4-style)
     /// @param id The abi encoded hash of the pool key struct for the new pool
@@ -102,4 +108,9 @@ interface IPoolManager {
     function swap(PoolKey memory key, SwapParams memory params, bytes calldata hookData)
         external
         returns (BalanceDelta swapDelta);
+
+    /// @notice Execute a callback in an unlocked context; caller must settle currency in the callback
+    /// @param data Data passed to the callback
+    /// @return result Return value from the callback
+    function unlock(bytes calldata data) external returns (bytes memory result);
 }

@@ -13,12 +13,15 @@ import {SwapParams} from "./SwapParams.sol";
 import {SwapResult} from "./SwapResult.sol";
 import {LiquidityMath} from "../libraries/LiquidityMath.sol";
 import {TickMath} from "../libraries/TickMath.sol";
+import {SqrtPriceMath} from "../libraries/SqrtPriceMath.sol";
 import {SwapMath} from "../libraries/SwapMath.sol";
 import {TickBitmap} from "../libraries/TickBitmap.sol";
+import {UnsafeMath} from "../libraries/UnsafeMath.sol";
 import {MIN_TICK, MAX_TICK} from "../constants.sol";
 import {CustomRevert} from "../libraries/CustomRevert.sol";
 import {SafeCast} from "../libraries/SafeCast.sol";
 import {StepComputations} from "./StepComputations.sol";
+import {console} from "forge-std/console.sol";
 
 using CustomRevert for bytes4;
 using SafeCast for uint256;
@@ -57,7 +60,7 @@ struct PoolState {
     mapping(bytes32 positionKey => PositionState) positions;
 }
 
-using {checkPoolInitialized, doModifyLiquidity, swap, crossTick} for PoolState global;
+using {checkPoolInitialized, modifyLiquidity, swap, crossTick, clearTick} for PoolState global;
 
 /// @notice Reverts if the given pool has not been initialized (Uniswap v4-style)
 /// @param self The pool state storage
@@ -87,6 +90,13 @@ function crossTick(PoolState storage self, int24 tick, uint256 feeGrowthGlobal0X
         info.feeGrowthOutside1X128 = feeGrowthGlobal1X128 - info.feeGrowthOutside1X128;
         liquidityNet = info.liquidityNet;
     }
+}
+
+/// @notice Clears tick data
+/// @param self The pool state containing all initialized tick information
+/// @param tick The tick that will be cleared
+function clearTick(PoolState storage self, int24 tick) {
+    delete self.ticks[tick];
 }
 
 /// @notice Updates a tick and returns true if the tick was flipped from initialized to uninitialized, or vice versa
@@ -145,6 +155,7 @@ function updateTick(PoolState storage self, int24 tick, int128 liquidityDelta, b
 function swap(PoolState storage self, SwapParams memory params)
     returns (BalanceDelta swapDelta, uint256 amountToProtocol, uint24 swapFee, SwapResult memory result)
 {
+    checkPoolInitialized(self);
     Slot0 slot0Start = self.slot0;
     bool zeroForOne = params.zeroForOne;
 
@@ -180,12 +191,19 @@ function swap(PoolState storage self, SwapParams memory params)
         }
     }
 
+    // Set swap fee from pool (lpFee) or override (Uniswap v4-style)
+    swapFee = params.lpFeeOverride != 0 ? params.lpFeeOverride : slot0Start.lpFee();
+
     StepComputations memory step;
     step.feeGrowthGlobalX128 = zeroForOne ? self.feeGrowthGlobal0X128 : self.feeGrowthGlobal1X128;
 
     // continue swapping as long as we haven't used the entire input/output and haven't reached the price limit
     while (!(amountSpecifiedRemaining == 0 || result.sqrtPriceX96 == params.sqrtPriceLimitX96)) {
         step.sqrtPriceStartX96 = result.sqrtPriceX96;
+
+        console.log("result.tick", result.tick);
+        console.log("params.tickSpacing", params.tickSpacing);
+        console.log("zeroForOne", zeroForOne);
 
         (step.tickNext, step.initialized) =
             self.tickBitmap.nextInitializedTickWithinOneWord(result.tick, params.tickSpacing, zeroForOne);
@@ -201,6 +219,14 @@ function swap(PoolState storage self, SwapParams memory params)
         // get the price for the next tick
         step.sqrtPriceNextX96 = TickMath.getSqrtPriceAtTick(step.tickNext);
 
+        console.log("step.tickNext---->", step.tickNext);
+        console.log("step.sqrtPriceNextX96---->", step.sqrtPriceNextX96);
+
+        // When we start exactly ON an initialized tick (e.g. tick 120), nextInitializedTickWithinOneWord(lte=true)
+        // returns that same tick (120). So sqrtPriceTarget == current price → no price movement in this step →
+        // amountIn=0, amountOut=0, feeAmount=0. We then cross the tick (120 → 119) and continue; the next
+        // step has tickNext=60 and real swap amounts.
+
         // compute values to swap to the target tick, price limit, or point where input/output amount is exhausted
         (result.sqrtPriceX96, step.amountIn, step.amountOut, step.feeAmount) = SwapMath.computeSwapStep(
             result.sqrtPriceX96,
@@ -209,6 +235,20 @@ function swap(PoolState storage self, SwapParams memory params)
             amountSpecifiedRemaining,
             swapFee
         );
+
+        console.log("result.sqrtPriceX96---->", result.sqrtPriceX96);
+        console.log("step.amountIn---->", step.amountIn);
+        console.log("step.amountOut---->", step.amountOut);
+        console.log("step.feeAmount---->", step.feeAmount);
+
+        // Update global fee tracker (Uniswap v4-style)
+        if (result.liquidity > 0) {
+            unchecked {
+                step.feeGrowthGlobalX128 += UnsafeMath.simpleMulDiv(
+                    step.feeAmount, 0x100000000000000000000000000000000, result.liquidity
+                );
+            }
+        }
 
         // if exactOutput
         if (params.amountSpecified > 0) {
@@ -268,13 +308,11 @@ function swap(PoolState storage self, SwapParams memory params)
         // "if currency1 is specified"
         if (zeroForOne != (params.amountSpecified < 0)) {
             swapDelta = toBalanceDelta(
-                amountCalculated.toInt128(),
-                (params.amountSpecified - amountSpecifiedRemaining).toInt128()
+                amountCalculated.toInt128(), (params.amountSpecified - amountSpecifiedRemaining).toInt128()
             );
         } else {
             swapDelta = toBalanceDelta(
-                (params.amountSpecified - amountSpecifiedRemaining).toInt128(),
-                amountCalculated.toInt128()
+                (params.amountSpecified - amountSpecifiedRemaining).toInt128(), amountCalculated.toInt128()
             );
         }
     }
@@ -286,13 +324,14 @@ function swap(PoolState storage self, SwapParams memory params)
 /// @param hookData Data passed to hooks (if any)
 /// @return callerDelta Balance delta for the caller (principal + fees)
 /// @return feesAccrued Fee delta in the liquidity range (informational)
-function doModifyLiquidity(PoolState storage self, ModifyLiquidityParams memory params, bytes calldata hookData)
+function modifyLiquidity(PoolState storage self, ModifyLiquidityParams memory params, bytes calldata hookData)
     returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
 {
     checkPoolInitialized(self);
     int128 liquidityDelta = params.liquidityDelta;
     int24 tickLower = params.tickLower;
     int24 tickUpper = params.tickUpper;
+    BalanceDelta principalDelta;
     {
         ModifyLiquidityState memory state;
 
@@ -319,7 +358,51 @@ function doModifyLiquidity(PoolState storage self, ModifyLiquidityParams memory 
                 flipTick(self.tickBitmap, tickUpper, params.tickSpacing);
             }
         }
+
+        // clear any tick data that is no longer needed
+        if (liquidityDelta < 0) {
+            if (state.flippedLower) {
+                clearTick(self, tickLower);
+            }
+            if (state.flippedUpper) {
+                clearTick(self, tickUpper);
+            }
+        }
     }
+
+    // TODO:  we need add freeGrowthGlobal0X128 and freeGrowthGlobal1X128 to the pool state later on
+
+    // Update active liquidity and compute principal delta (Uniswap v4-style)
+    if (liquidityDelta != 0) {
+        Slot0 _slot0 = self.slot0;
+        (int24 tick, uint160 sqrtPriceX96) = (_slot0.tick(), _slot0.sqrtPriceX96());
+        if (tick < tickLower) {
+            principalDelta = toBalanceDelta(
+                SqrtPriceMath.getAmount0Delta(
+                        TickMath.getSqrtPriceAtTick(tickLower), TickMath.getSqrtPriceAtTick(tickUpper), liquidityDelta
+                    ).toInt128(),
+                0
+            );
+        } else if (tick < tickUpper) {
+            principalDelta = toBalanceDelta(
+                SqrtPriceMath.getAmount0Delta(sqrtPriceX96, TickMath.getSqrtPriceAtTick(tickUpper), liquidityDelta)
+                    .toInt128(),
+                SqrtPriceMath.getAmount1Delta(TickMath.getSqrtPriceAtTick(tickLower), sqrtPriceX96, liquidityDelta)
+                    .toInt128()
+            );
+            self.liquidity = LiquidityMath.addDelta(self.liquidity, liquidityDelta);
+        } else {
+            principalDelta = toBalanceDelta(
+                0,
+                SqrtPriceMath.getAmount1Delta(
+                        TickMath.getSqrtPriceAtTick(tickLower), TickMath.getSqrtPriceAtTick(tickUpper), liquidityDelta
+                    ).toInt128()
+            );
+        }
+    }
+
+    callerDelta = principalDelta;
+    feesAccrued = toBalanceDelta(0, 0);
 }
 
 /// @notice Derives max liquidity per tick from given tick spacing

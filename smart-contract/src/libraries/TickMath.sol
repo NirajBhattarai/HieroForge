@@ -33,7 +33,7 @@ library TickMath {
         return MAX_SQRT_PRICE;
     }
 
-    /// @notice Calculates sqrt(1.0001^tick) * 2^96
+    /// @notice Calculates sqrt(1.0001^tick) * 2^96 (public for tests and callers)
     /// @param tick The input tick
     /// @return sqrtPriceX96 Q64.96 sqrt price (currency1/currency0)
     function getSqrtPriceAtTick(int24 tick) internal pure returns (uint160 sqrtPriceX96) {
@@ -75,6 +75,11 @@ library TickMath {
                 sqrtPriceX96 := shr(32, add(price, sub(shl(32, 1), 1)))
             }
         }
+    }
+
+    /// @notice Public wrapper for getSqrtPriceAtTick (e.g. for tests and initializing pool at a given tick)
+    function getSqrtPriceAtTickPublic(int24 tick) public pure returns (uint160) {
+        return getSqrtPriceAtTick(tick);
     }
 
     /// @notice Calculates the greatest tick such that getSqrtPriceAtTick(tick) <= sqrtPriceX96
