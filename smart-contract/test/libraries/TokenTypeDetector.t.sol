@@ -102,43 +102,27 @@ contract TokenTypeDetectorTest is Test, Deployers {
     }
 
     function test_classifyToken_htsIsHTS() public {
-        assertEq(
-            uint256(Currency.unwrap(currency0).classifyToken()),
-            uint256(TokenTypeDetector.TokenType.HTS)
-        );
-        assertEq(
-            uint256(Currency.unwrap(currency1).classifyToken()),
-            uint256(TokenTypeDetector.TokenType.HTS)
-        );
+        assertEq(uint256(Currency.unwrap(currency0).classifyToken()), uint256(TokenTypeDetector.TokenType.HTS));
+        assertEq(uint256(Currency.unwrap(currency1).classifyToken()), uint256(TokenTypeDetector.TokenType.HTS));
     }
 
     function test_classifyToken_mockErc20IsERC20() public {
-        assertEq(
-            uint256(address(mockErc20).classifyToken()),
-            uint256(TokenTypeDetector.TokenType.ERC20)
-        );
+        assertEq(uint256(address(mockErc20).classifyToken()), uint256(TokenTypeDetector.TokenType.ERC20));
     }
 
     function test_classifyToken_eoaIsUnknown() public {
-        assertEq(
-            uint256(address(0x1).classifyToken()),
-            uint256(TokenTypeDetector.TokenType.Unknown)
-        );
+        assertEq(uint256(address(0x1).classifyToken()), uint256(TokenTypeDetector.TokenType.Unknown));
     }
 
     function test_classifyToken_nonTokenContractIsUnknown() public {
         // Deploy a contract that is not a token (e.g. this test contract)
-        assertEq(
-            uint256(address(this).classifyToken()),
-            uint256(TokenTypeDetector.TokenType.Unknown)
-        );
+        assertEq(uint256(address(this).classifyToken()), uint256(TokenTypeDetector.TokenType.Unknown));
     }
 
     // ========== classifyCurrencies ==========
 
     function test_classifyCurrencies_htsHts() public {
-        (TokenTypeDetector.TokenType type0, TokenTypeDetector.TokenType type1) =
-            currency0.classifyCurrencies(currency1);
+        (TokenTypeDetector.TokenType type0, TokenTypeDetector.TokenType type1) = currency0.classifyCurrencies(currency1);
         assertEq(uint256(type0), uint256(TokenTypeDetector.TokenType.HTS));
         assertEq(uint256(type1), uint256(TokenTypeDetector.TokenType.HTS));
     }
@@ -148,24 +132,21 @@ contract TokenTypeDetectorTest is Test, Deployers {
         MockERC20 mock2 = new MockERC20();
         mock2.mint(address(this), 1000e18);
         Currency c1 = Currency.wrap(address(mock2));
-        (TokenTypeDetector.TokenType type0, TokenTypeDetector.TokenType type1) =
-            c0.classifyCurrencies(c1);
+        (TokenTypeDetector.TokenType type0, TokenTypeDetector.TokenType type1) = c0.classifyCurrencies(c1);
         assertEq(uint256(type0), uint256(TokenTypeDetector.TokenType.ERC20));
         assertEq(uint256(type1), uint256(TokenTypeDetector.TokenType.ERC20));
     }
 
     function test_classifyCurrencies_erc20Hts() public {
         Currency cErc20 = Currency.wrap(address(mockErc20));
-        (TokenTypeDetector.TokenType type0, TokenTypeDetector.TokenType type1) =
-            cErc20.classifyCurrencies(currency0);
+        (TokenTypeDetector.TokenType type0, TokenTypeDetector.TokenType type1) = cErc20.classifyCurrencies(currency0);
         assertEq(uint256(type0), uint256(TokenTypeDetector.TokenType.ERC20));
         assertEq(uint256(type1), uint256(TokenTypeDetector.TokenType.HTS));
     }
 
     function test_classifyCurrencies_zeroAndHts() public {
         Currency zero = Currency.wrap(address(0));
-        (TokenTypeDetector.TokenType type0, TokenTypeDetector.TokenType type1) =
-            zero.classifyCurrencies(currency0);
+        (TokenTypeDetector.TokenType type0, TokenTypeDetector.TokenType type1) = zero.classifyCurrencies(currency0);
         assertEq(uint256(type0), uint256(TokenTypeDetector.TokenType.None));
         assertEq(uint256(type1), uint256(TokenTypeDetector.TokenType.HTS));
     }

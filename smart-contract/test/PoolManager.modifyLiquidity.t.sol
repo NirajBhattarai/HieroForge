@@ -54,11 +54,7 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
     /// @notice modifyLiquidity reverts when key has unsorted currencies (key.validate() at line 67)
     function test_modifyLiquidity_revertsWhenKey_unsortedCurrencies() public {
         PoolKey memory badKey = PoolKey({
-            currency0: currency1,
-            currency1: currency0,
-            fee: key.fee,
-            tickSpacing: key.tickSpacing,
-            hooks: key.hooks
+            currency0: currency1, currency1: currency0, fee: key.fee, tickSpacing: key.tickSpacing, hooks: key.hooks
         });
         vm.expectRevert(TokensMustBeSorted.selector);
         modifyLiquidityRouter.modifyLiquidity(badKey, LIQUIDITY_PARAMS, ZERO_BYTES);
@@ -99,8 +95,7 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         uint256 managerBalance0Before = IERC20(Currency.unwrap(currency0)).balanceOf(address(manager));
         uint256 managerBalance1Before = IERC20(Currency.unwrap(currency1)).balanceOf(address(manager));
 
-        (BalanceDelta delta,) =
-            modifyLiquidityRouter.modifyLiquidity(key, params, ZERO_BYTES);
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(key, params, ZERO_BYTES);
 
         // Adding liquidity: we pay both tokens (negative deltas)
         assertLt(int256(delta.amount0()), 0, "delta0 should be negative (paid token0)");
@@ -137,17 +132,12 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         mock1.mint(address(this), 1e18);
         address a0 = address(mock0);
         address a1 = address(mock1);
-        (Currency c0, Currency c1) = a0 < a1 ? (Currency.wrap(a0), Currency.wrap(a1)) : (Currency.wrap(a1), Currency.wrap(a0));
+        (Currency c0, Currency c1) =
+            a0 < a1 ? (Currency.wrap(a0), Currency.wrap(a1)) : (Currency.wrap(a1), Currency.wrap(a0));
         mock0.approve(address(modifyLiquidityRouter), type(uint256).max);
         mock1.approve(address(modifyLiquidityRouter), type(uint256).max);
 
-        PoolKey memory poolKey = PoolKey({
-            currency0: c0,
-            currency1: c1,
-            fee: 3000,
-            tickSpacing: 60,
-            hooks: address(0)
-        });
+        PoolKey memory poolKey = PoolKey({currency0: c0, currency1: c1, fee: 3000, tickSpacing: 60, hooks: address(0)});
         initPool(c0, c1, 3000, 60, SQRT_PRICE_1_1);
 
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
@@ -189,18 +179,11 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         mockErc20.mint(address(this), 1e18);
         address erc20Addr = address(mockErc20);
         address htsAddr = Currency.unwrap(currency0);
-        (Currency c0, Currency c1) = erc20Addr < htsAddr
-            ? (Currency.wrap(erc20Addr), currency0)
-            : (currency0, Currency.wrap(erc20Addr));
+        (Currency c0, Currency c1) =
+            erc20Addr < htsAddr ? (Currency.wrap(erc20Addr), currency0) : (currency0, Currency.wrap(erc20Addr));
         mockErc20.approve(address(modifyLiquidityRouter), type(uint256).max);
 
-        PoolKey memory poolKey = PoolKey({
-            currency0: c0,
-            currency1: c1,
-            fee: 3000,
-            tickSpacing: 60,
-            hooks: address(0)
-        });
+        PoolKey memory poolKey = PoolKey({currency0: c0, currency1: c1, fee: 3000, tickSpacing: 60, hooks: address(0)});
         initPool(c0, c1, 3000, 60, SQRT_PRICE_1_1);
 
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
@@ -214,11 +197,13 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         uint256 fundErc20 = 1e17;
         uint256 fundHts = 5e9;
         require(
-            IERC20(Currency.unwrap(c0)).transfer(address(modifyLiquidityRouter), erc20Addr < htsAddr ? fundErc20 : fundHts),
+            IERC20(Currency.unwrap(c0))
+                .transfer(address(modifyLiquidityRouter), erc20Addr < htsAddr ? fundErc20 : fundHts),
             "t0"
         );
         require(
-            IERC20(Currency.unwrap(c1)).transfer(address(modifyLiquidityRouter), erc20Addr < htsAddr ? fundHts : fundErc20),
+            IERC20(Currency.unwrap(c1))
+                .transfer(address(modifyLiquidityRouter), erc20Addr < htsAddr ? fundHts : fundErc20),
             "t1"
         );
 
@@ -247,18 +232,11 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         mockErc20.mint(address(this), 1e18);
         address erc20Addr = address(mockErc20);
         address htsAddr = Currency.unwrap(currency1);
-        (Currency c0, Currency c1) = htsAddr < erc20Addr
-            ? (currency1, Currency.wrap(erc20Addr))
-            : (Currency.wrap(erc20Addr), currency1);
+        (Currency c0, Currency c1) =
+            htsAddr < erc20Addr ? (currency1, Currency.wrap(erc20Addr)) : (Currency.wrap(erc20Addr), currency1);
         mockErc20.approve(address(modifyLiquidityRouter), type(uint256).max);
 
-        PoolKey memory poolKey = PoolKey({
-            currency0: c0,
-            currency1: c1,
-            fee: 3000,
-            tickSpacing: 60,
-            hooks: address(0)
-        });
+        PoolKey memory poolKey = PoolKey({currency0: c0, currency1: c1, fee: 3000, tickSpacing: 60, hooks: address(0)});
         initPool(c0, c1, 3000, 60, SQRT_PRICE_1_1);
 
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
@@ -302,13 +280,8 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         mock.approve(address(modifyLiquidityRouter), type(uint256).max);
         Currency native = Currency.wrap(address(0));
         Currency c1 = Currency.wrap(address(mock));
-        PoolKey memory poolKey = PoolKey({
-            currency0: native,
-            currency1: c1,
-            fee: 3000,
-            tickSpacing: 60,
-            hooks: address(0)
-        });
+        PoolKey memory poolKey =
+            PoolKey({currency0: native, currency1: c1, fee: 3000, tickSpacing: 60, hooks: address(0)});
         initPool(native, c1, 3000, 60, SQRT_PRICE_1_1);
 
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
@@ -331,9 +304,7 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         assertLt(int256(delta.amount0()), 0);
         assertLt(int256(delta.amount1()), 0);
         assertEq(
-            address(manager).balance,
-            managerEthBefore + uint256(uint128(-delta.amount0())),
-            "manager received native"
+            address(manager).balance, managerEthBefore + uint256(uint128(-delta.amount0())), "manager received native"
         );
         assertEq(
             IERC20(Currency.unwrap(c1)).balanceOf(address(manager)),
@@ -346,13 +317,8 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
     function test_addLiquidity_nativeHts_succeedsWithTransfer() public {
         Currency native = Currency.wrap(address(0));
         Currency c1 = currency0; // one HTS
-        PoolKey memory poolKey = PoolKey({
-            currency0: native,
-            currency1: c1,
-            fee: 3000,
-            tickSpacing: 60,
-            hooks: address(0)
-        });
+        PoolKey memory poolKey =
+            PoolKey({currency0: native, currency1: c1, fee: 3000, tickSpacing: 60, hooks: address(0)});
         initPool(native, c1, 3000, 60, SQRT_PRICE_1_1);
 
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
@@ -375,9 +341,7 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         assertLt(int256(delta.amount0()), 0);
         assertLt(int256(delta.amount1()), 0);
         assertEq(
-            address(manager).balance,
-            managerEthBefore + uint256(uint128(-delta.amount0())),
-            "manager received native"
+            address(manager).balance, managerEthBefore + uint256(uint128(-delta.amount0())), "manager received native"
         );
         assertEq(
             IERC20(Currency.unwrap(c1)).balanceOf(address(manager)),

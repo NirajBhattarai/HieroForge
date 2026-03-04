@@ -402,7 +402,7 @@ function modifyLiquidity(PoolState storage self, ModifyLiquidityParams memory pa
     }
 
     callerDelta = principalDelta;
-    feesAccrued = toBalanceDelta(0, 0);
+    // feesAccrued = toBalanceDelta(0, 0);
 }
 
 /// @notice Derives max liquidity per tick from given tick spacing

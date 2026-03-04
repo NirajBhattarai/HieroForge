@@ -39,12 +39,7 @@ contract Deployers is Test {
         salt: bytes32(0)
     });
     ModifyLiquidityParams public REMOVE_LIQUIDITY_PARAMS = ModifyLiquidityParams({
-        owner: address(0),
-        tickLower: -120,
-        tickUpper: 120,
-        liquidityDelta: -1e18,
-        tickSpacing: 60,
-        salt: bytes32(0)
+        owner: address(0), tickLower: -120, tickUpper: 120, liquidityDelta: -1e18, tickSpacing: 60, salt: bytes32(0)
     });
 
     // Global state
@@ -75,13 +70,17 @@ contract Deployers is Test {
         IHederaTokenService.HederaToken memory tokenA_ = _minimalHederaToken("TokenA", "TKA", address(this));
         (int64 codeA, address tokenA) =
             IHederaTokenService(hts).createFungibleToken{value: 1000}(tokenA_, 10_000_000_000, 18);
-        require(codeA == int64(int32(HederaResponseCodes.SUCCESS)) && tokenA != address(0), "HTS: token A creation failed");
+        require(
+            codeA == int64(int32(HederaResponseCodes.SUCCESS)) && tokenA != address(0), "HTS: token A creation failed"
+        );
 
         // Create second HTS token
         IHederaTokenService.HederaToken memory tokenB_ = _minimalHederaToken("TokenB", "TKB", address(this));
         (int64 codeB, address tokenB) =
             IHederaTokenService(hts).createFungibleToken{value: 1000}(tokenB_, 10_000_000_000, 18);
-        require(codeB == int64(int32(HederaResponseCodes.SUCCESS)) && tokenB != address(0), "HTS: token B creation failed");
+        require(
+            codeB == int64(int32(HederaResponseCodes.SUCCESS)) && tokenB != address(0), "HTS: token B creation failed"
+        );
 
         if (tokenA < tokenB) {
             currency0 = Currency.wrap(tokenA);
@@ -124,11 +123,7 @@ contract Deployers is Test {
         returns (PoolKey memory _key, PoolId id)
     {
         _key = PoolKey({
-            currency0: _currency0,
-            currency1: _currency1,
-            fee: fee,
-            tickSpacing: tickSpacing,
-            hooks: address(0)
+            currency0: _currency0, currency1: _currency1, fee: fee, tickSpacing: tickSpacing, hooks: address(0)
         });
         id = _key.toId();
         manager.initialize(_key, sqrtPriceX96);
@@ -143,12 +138,7 @@ contract Deployers is Test {
 
     function _finishInitPools() internal {
         (key,) = initPool(currency0, currency1, 3000, 60, SQRT_PRICE_1_1);
-        uninitializedKey = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
-            fee: 100,
-            tickSpacing: 60,
-            hooks: address(0)
-        });
+        uninitializedKey =
+            PoolKey({currency0: currency0, currency1: currency1, fee: 100, tickSpacing: 60, hooks: address(0)});
     }
 }

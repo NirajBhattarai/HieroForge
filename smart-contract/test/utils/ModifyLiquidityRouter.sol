@@ -31,7 +31,9 @@ contract ModifyLiquidityRouter is IUnlockCallback {
         returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
     {
         return abi.decode(
-            manager.unlock(abi.encode(CallbackData({sender: msg.sender, key: key, params: params, hookData: hookData}))),
+            manager.unlock(
+                abi.encode(CallbackData({sender: msg.sender, key: key, params: params, hookData: hookData}))
+            ),
             (BalanceDelta, BalanceDelta)
         );
     }

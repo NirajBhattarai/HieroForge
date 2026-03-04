@@ -2,13 +2,18 @@
 cache/
 out/
 
-# Ignores development broadcast logs
-!/broadcast
-/broadcast/*/31337/
-/broadcast/**/dry-run/
+# Broadcast logs (all chains)
+broadcast/
+
+# Deployed addresses (local)
+deployedaddress.txt
 
 # Docs
 docs/
 
 # Dotenv file
 .env
+
+
+# Ignore helper file
+helper.txt

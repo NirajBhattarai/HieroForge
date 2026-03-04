@@ -337,18 +337,13 @@ contract PoolManagerModifyLiquidityCombinationsTest is Test, Deployers {
         mock1.mint(address(this), 1e18);
         address a0 = address(mock0);
         address a1 = address(mock1);
-        (Currency c0, Currency c1) = a0 < a1 ? (Currency.wrap(a0), Currency.wrap(a1)) : (Currency.wrap(a1), Currency.wrap(a0));
+        (Currency c0, Currency c1) =
+            a0 < a1 ? (Currency.wrap(a0), Currency.wrap(a1)) : (Currency.wrap(a1), Currency.wrap(a0));
 
         mock0.approve(address(modifyLiquidityRouter), type(uint256).max);
         mock1.approve(address(modifyLiquidityRouter), type(uint256).max);
 
-        PoolKey memory poolKey = PoolKey({
-            currency0: c0,
-            currency1: c1,
-            fee: 3000,
-            tickSpacing: 60,
-            hooks: address(0)
-        });
+        PoolKey memory poolKey = PoolKey({currency0: c0, currency1: c1, fee: 3000, tickSpacing: 60, hooks: address(0)});
         initPool(c0, c1, 3000, 60, SQRT_PRICE_1_1);
         key = poolKey;
 
@@ -392,19 +387,12 @@ contract PoolManagerModifyLiquidityCombinationsTest is Test, Deployers {
         address erc20Addr = address(mockErc20);
         address htsAddr = Currency.unwrap(currency0);
 
-        (Currency c0, Currency c1) = erc20Addr < htsAddr
-            ? (Currency.wrap(erc20Addr), currency0)
-            : (currency0, Currency.wrap(erc20Addr));
+        (Currency c0, Currency c1) =
+            erc20Addr < htsAddr ? (Currency.wrap(erc20Addr), currency0) : (currency0, Currency.wrap(erc20Addr));
         mockErc20.approve(address(modifyLiquidityRouter), type(uint256).max);
         // currency0 already approved in deployMintAndApprove2CurrenciesHTS
 
-        PoolKey memory poolKey = PoolKey({
-            currency0: c0,
-            currency1: c1,
-            fee: 3000,
-            tickSpacing: 60,
-            hooks: address(0)
-        });
+        PoolKey memory poolKey = PoolKey({currency0: c0, currency1: c1, fee: 3000, tickSpacing: 60, hooks: address(0)});
         initPool(c0, c1, 3000, 60, SQRT_PRICE_1_1);
         key = poolKey;
 
@@ -421,11 +409,13 @@ contract PoolManagerModifyLiquidityCombinationsTest is Test, Deployers {
         uint256 fundHts = 5e9;
         // c0 is ERC20 when erc20Addr < htsAddr, so fund c0 with ERC20 amount and c1 with HTS amount
         require(
-            IERC20(Currency.unwrap(c0)).transfer(address(modifyLiquidityRouter), erc20Addr < htsAddr ? fundErc20 : fundHts),
+            IERC20(Currency.unwrap(c0))
+                .transfer(address(modifyLiquidityRouter), erc20Addr < htsAddr ? fundErc20 : fundHts),
             "t0"
         );
         require(
-            IERC20(Currency.unwrap(c1)).transfer(address(modifyLiquidityRouter), erc20Addr < htsAddr ? fundHts : fundErc20),
+            IERC20(Currency.unwrap(c1))
+                .transfer(address(modifyLiquidityRouter), erc20Addr < htsAddr ? fundHts : fundErc20),
             "t1"
         );
 
@@ -456,18 +446,11 @@ contract PoolManagerModifyLiquidityCombinationsTest is Test, Deployers {
         address erc20Addr = address(mockErc20);
         address htsAddr = Currency.unwrap(currency1);
 
-        (Currency c0, Currency c1) = htsAddr < erc20Addr
-            ? (currency1, Currency.wrap(erc20Addr))
-            : (Currency.wrap(erc20Addr), currency1);
+        (Currency c0, Currency c1) =
+            htsAddr < erc20Addr ? (currency1, Currency.wrap(erc20Addr)) : (Currency.wrap(erc20Addr), currency1);
         mockErc20.approve(address(modifyLiquidityRouter), type(uint256).max);
 
-        PoolKey memory poolKey = PoolKey({
-            currency0: c0,
-            currency1: c1,
-            fee: 3000,
-            tickSpacing: 60,
-            hooks: address(0)
-        });
+        PoolKey memory poolKey = PoolKey({currency0: c0, currency1: c1, fee: 3000, tickSpacing: 60, hooks: address(0)});
         initPool(c0, c1, 3000, 60, SQRT_PRICE_1_1);
         key = poolKey;
 

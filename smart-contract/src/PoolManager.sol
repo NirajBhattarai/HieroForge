@@ -74,8 +74,7 @@ contract PoolManager is IPoolManager {
 
         // Fee delta and principal delta are both accrued to the caller
         callerDelta = toBalanceDelta(
-            principalDelta.amount0() + feesAccrued.amount0(),
-            principalDelta.amount1() + feesAccrued.amount1()
+            principalDelta.amount0() + feesAccrued.amount0(), principalDelta.amount1() + feesAccrued.amount1()
         );
         emit ModifyLiquidity(
             id,
