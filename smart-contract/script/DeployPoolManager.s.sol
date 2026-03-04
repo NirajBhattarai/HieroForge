@@ -5,9 +5,9 @@ import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {PoolManager} from "../src/PoolManager.sol";
 import {IPoolManager} from "../src/interfaces/IPoolManager.sol";
-import {ModifyLiquidityRouter} from "../src/ModifyLiquidityRouter.sol";
+import {Router} from "../src/Router.sol";
 
-/// @notice Deploys PoolManager and ModifyLiquidityRouter to the configured network.
+/// @notice Deploys PoolManager and Router to the configured network.
 /// Usage:
 ///   forge script script/DeployPoolManager.s.sol:DeployPoolManagerScript --rpc-url $HEDERA_RPC_URL --broadcast --private-key $PRIVATE_KEY
 ///   # Or use testnet RPC from foundry.toml:
@@ -19,12 +19,12 @@ contract DeployPoolManagerScript is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         PoolManager manager = new PoolManager();
-        ModifyLiquidityRouter router = new ModifyLiquidityRouter(IPoolManager(address(manager)));
+        Router router = new Router(IPoolManager(address(manager)));
 
         vm.stopBroadcast();
 
         // Log for CI / scripts
         console.log("PoolManager:", address(manager));
-        console.log("ModifyLiquidityRouter:", address(router));
+        console.log("Router:", address(router));
     }
 }

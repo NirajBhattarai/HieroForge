@@ -11,7 +11,7 @@
 #   POOL_MANAGER_ADDRESS=0x... ROUTER_ADDRESS=0x... ./scripts/verify-contracts.sh
 # With separate deploys (chain 296):
 #   POOL_MANAGER_ADDRESS=$(jq -r '.transactions[0].contractAddress' broadcast/DeployPoolManagerOnly.s.sol/296/run-latest.json)
-#   ROUTER_ADDRESS=$(jq -r '.transactions[0].contractAddress' broadcast/DeployModifyLiquidityRouterOnly.s.sol/296/run-latest.json)
+#   ROUTER_ADDRESS=$(jq -r '.transactions[0].contractAddress' broadcast/DeployModifyLiquidityRouterOnly.s.sol/296/run-latest.json)  # Router
 #   ./scripts/verify-contracts.sh
 
 set -e
@@ -43,11 +43,11 @@ echo "  - Metadata: $REPO_ROOT/out/PoolManager.sol/PoolManager.json"
 echo "  - Source:   $REPO_ROOT/src/PoolManager.sol (and any imports under src/)"
 echo ""
 
-echo "--- 2. ModifyLiquidityRouter ($ROUTER_ADDRESS) ---"
+echo "--- 2. Router ($ROUTER_ADDRESS) ---"
 echo "Contract page: https://hashscan.io/testnet/contract/$ROUTER_ADDRESS"
 echo "Files to upload:"
-echo "  - Metadata: $REPO_ROOT/out/ModifyLiquidityRouter.sol/ModifyLiquidityRouter.json"
-echo "  - Source:   $REPO_ROOT/src/ModifyLiquidityRouter.sol (and any imports under src/)"
+echo "  - Metadata: $REPO_ROOT/out/Router.sol/Router.json"
+echo "  - Source:   $REPO_ROOT/src/Router.sol (and any imports under src/)"
 echo ""
 
 echo "Steps:"

@@ -10,7 +10,7 @@ import {Currency} from "../../src/types/Currency.sol";
 import {ModifyLiquidityParams} from "../../src/types/ModifyLiquidityParams.sol";
 import {TickMath} from "../../src/libraries/TickMath.sol";
 import {Constants} from "./Constants.sol";
-import {ModifyLiquidityRouter} from "./ModifyLiquidityRouter.sol";
+import {Router} from "../../src/Router.sol";
 import {htsSetup} from "hedera-forking/htsSetup.sol";
 import {IHederaTokenService} from "hedera-forking/IHederaTokenService.sol";
 import {HederaResponseCodes} from "hedera-forking/HederaResponseCodes.sol";
@@ -44,7 +44,7 @@ contract Deployers is Test {
 
     // Global state
     IPoolManager public manager;
-    ModifyLiquidityRouter public modifyLiquidityRouter;
+    Router public modifyLiquidityRouter;
     Currency internal currency0;
     Currency internal currency1;
     PoolKey public key;
@@ -56,7 +56,7 @@ contract Deployers is Test {
 
     function deployFreshManagerAndRouters() internal {
         deployFreshManager();
-        modifyLiquidityRouter = new ModifyLiquidityRouter(manager);
+        modifyLiquidityRouter = new Router(manager);
     }
 
     /// @notice Deploy two HTS fungible tokens via HTS precompile at 0x167; use this as treasury. Sort by address (currency0 < currency1).

@@ -5,20 +5,20 @@ import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {htsSetup} from "hedera-forking/htsSetup.sol";
 import {IPoolManager} from "../src/interfaces/IPoolManager.sol";
-import {ModifyLiquidityRouter} from "../src/ModifyLiquidityRouter.sol";
+import {Router} from "../src/Router.sol";
 import {PoolKey} from "../src/types/PoolKey.sol";
 import {ModifyLiquidityParams} from "../src/types/ModifyLiquidityParams.sol";
 import {Currency} from "../src/types/Currency.sol";
 import {BalanceDelta} from "../src/types/BalanceDelta.sol";
 import {IERC20Minimal} from "../src/interfaces/IERC20Minimal.sol";
 
-/// @notice Initialize pool (if not already) and add or remove liquidity on testnet via ModifyLiquidityRouter.
+/// @notice Initialize pool (if not already) and add or remove liquidity on testnet via Router.
 /// If the pool is not initialized, initializes it at 1:1 price before adding liquidity.
 ///
 /// Required env:
 ///   PRIVATE_KEY          - deployer key
 ///   POOL_MANAGER_ADDRESS - PoolManager contract
-///   ROUTER_ADDRESS       - ModifyLiquidityRouter contract
+///   ROUTER_ADDRESS       - Router contract
 ///   CURRENCY0_ADDRESS    - token0 address (lower address)
 ///   CURRENCY1_ADDRESS    - token1 address (higher address)
 ///
@@ -60,7 +60,7 @@ contract ModifyLiquidityTestnetScript is Script {
         uint256 amount1 = vm.envOr("AMOUNT1", uint256(0));
 
         IPoolManager manager = IPoolManager(managerAddr);
-        ModifyLiquidityRouter router = ModifyLiquidityRouter(payable(routerAddr));
+        Router router = Router(payable(routerAddr));
 
         PoolKey memory key = PoolKey({
             currency0: currency0, currency1: currency1, fee: fee, tickSpacing: tickSpacing, hooks: address(0)

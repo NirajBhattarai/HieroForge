@@ -16,6 +16,7 @@ import {Lock} from "./libraries/Lock.sol";
 import {NonzeroDeltaCount} from "./libraries/NonzeroDeltaCount.sol";
 import {CustomRevert} from "./libraries/CustomRevert.sol";
 import {IUnlockCallback} from "./callback/IUnlockCallback.sol";
+import {NoDelegateCall} from "../lib/hedera-smart-contracts/contracts/base/NoDelegateCall.sol";
 
 using CustomRevert for bytes4;
 using CurrencyDelta for Currency;
@@ -27,7 +28,7 @@ error NonzeroNativeValue();
 
 /// @title PoolManager
 /// @notice Holds pool state and implements initialize and swap (Uniswap v4-style)
-contract PoolManager is IPoolManager {
+contract PoolManager is IPoolManager, NoDelegateCall {
     mapping(PoolId id => PoolState) internal _pools;
 
     bytes32 private constant SYNCED_CURRENCY_SLOT = keccak256("PoolManager.syncedCurrency");
@@ -39,9 +40,16 @@ contract PoolManager is IPoolManager {
         _;
     }
 
+    constructor() {}
+
     /// @inheritdoc IPoolManager
     /// @dev Pools accept any currency combination: ERC20-ERC20, ERC20-HTS, or HTS-HTS. Use TokenClassifier to identify token types.
-    function initialize(PoolKey memory key, uint160 sqrtPriceX96) external override returns (int24 tick) {
+    function initialize(PoolKey memory key, uint160 sqrtPriceX96)
+        external
+        override
+        noDelegateCall
+        returns (int24 tick)
+    {
         // Validate that the currencies are sorted in ascending order, ensuring that currency0 is less than currency1.
         // This maintains consistency for all pool identifiers, preventing duplicates with reversed keys.
         // Also, check that the provided tickSpacing in the PoolKey is within the allowed range,
@@ -60,6 +68,7 @@ contract PoolManager is IPoolManager {
         external
         override
         onlyWhenUnlocked
+        noDelegateCall
         returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
     {
         // Validate:
@@ -134,6 +143,8 @@ contract PoolManager is IPoolManager {
     function swap(PoolKey memory key, SwapParams memory params, bytes calldata hookData)
         external
         override
+        onlyWhenUnlocked
+        noDelegateCall
         returns (BalanceDelta swapDelta)
     {
         if (params.amountSpecified == 0) revert IPoolManager.SwapAmountCannotBeZero();
@@ -143,6 +154,7 @@ contract PoolManager is IPoolManager {
 
         Currency inputCurrency = params.zeroForOne ? key.currency0 : key.currency1;
         swapDelta = _swap(state, id, params, inputCurrency);
+        _accountPoolBalanceDelta(key, swapDelta, msg.sender);
     }
 
     /// @inheritdoc IPoolManager

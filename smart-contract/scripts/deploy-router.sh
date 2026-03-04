@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy only ModifyLiquidityRouter to Hedera testnet (requires PoolManager already deployed).
+# Deploy only Router to Hedera testnet (requires PoolManager already deployed).
 # Usage:
 #   export PRIVATE_KEY=0x...
 #   export POOL_MANAGER_ADDRESS=0x...
@@ -28,13 +28,13 @@ fi
 
 forge build
 
-echo "Deploying ModifyLiquidityRouter (manager: $POOL_MANAGER_ADDRESS)..."
+echo "Deploying Router (manager: $POOL_MANAGER_ADDRESS)..."
 forge script script/DeployModifyLiquidityRouterOnly.s.sol:DeployModifyLiquidityRouterOnlyScript \
   --rpc-url "$RPC_URL" \
   --broadcast \
   --private-key "$PRIVATE_KEY"
 
 echo ""
-echo "ModifyLiquidityRouter deployed. To verify both contracts:"
+echo "Router deployed. To verify both contracts:"
 echo "  export ROUTER_ADDRESS=<address from log above>"
 echo "  ./scripts/verify-contracts.sh"

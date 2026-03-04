@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {IPoolManager} from "../src/interfaces/IPoolManager.sol";
-import {ModifyLiquidityRouter} from "../src/ModifyLiquidityRouter.sol";
+import {Router} from "../src/Router.sol";
 import {PoolKey} from "../src/types/PoolKey.sol";
 import {ModifyLiquidityParams} from "../src/types/ModifyLiquidityParams.sol";
 import {Currency} from "../src/types/Currency.sol";
@@ -14,7 +14,7 @@ import {IERC20Minimal} from "../src/interfaces/IERC20Minimal.sol";
 /// @notice Create a pool at 1:1 price and add liquidity on testnet.
 /// 1. Initializes the pool on PoolManager with sqrtPriceX96 = 1:1.
 /// 2. Transfers AMOUNT0/AMOUNT1 to the router (if set).
-/// 3. Adds liquidity via ModifyLiquidityRouter.
+/// 3. Adds liquidity via Router.
 ///
 /// Required env:
 ///   PRIVATE_KEY, POOL_MANAGER_ADDRESS, ROUTER_ADDRESS, CURRENCY0_ADDRESS, CURRENCY1_ADDRESS
@@ -51,7 +51,7 @@ contract CreatePoolAndAddLiquidityTestnetScript is Script {
         uint256 amount1 = vm.envOr("AMOUNT1", uint256(0));
 
         IPoolManager manager = IPoolManager(managerAddr);
-        ModifyLiquidityRouter router = ModifyLiquidityRouter(payable(routerAddr));
+        Router router = Router(payable(routerAddr));
 
         PoolKey memory key = PoolKey({
             currency0: currency0, currency1: currency1, fee: fee, tickSpacing: tickSpacing, hooks: address(0)

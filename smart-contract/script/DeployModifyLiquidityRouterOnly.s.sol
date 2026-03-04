@@ -4,9 +4,9 @@ pragma solidity ^0.8.13;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {IPoolManager} from "../src/interfaces/IPoolManager.sol";
-import {ModifyLiquidityRouter} from "../src/ModifyLiquidityRouter.sol";
+import {Router} from "../src/Router.sol";
 
-/// @notice Deploys only the ModifyLiquidityRouter (requires an existing PoolManager).
+/// @notice Deploys only the Router (requires an existing PoolManager).
 /// Usage:
 ///   export POOL_MANAGER_ADDRESS=0x...
 ///   forge script script/DeployModifyLiquidityRouterOnly.s.sol:DeployModifyLiquidityRouterOnlyScript --rpc-url testnet --broadcast --private-key $PRIVATE_KEY
@@ -17,10 +17,10 @@ contract DeployModifyLiquidityRouterOnlyScript is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        ModifyLiquidityRouter router = new ModifyLiquidityRouter(IPoolManager(managerAddress));
+        Router router = new Router(IPoolManager(managerAddress));
 
         vm.stopBroadcast();
 
-        console.log("ModifyLiquidityRouter:", address(router));
+        console.log("Router:", address(router));
     }
 }
