@@ -2,7 +2,7 @@
 
 Frontend for **HieroForge** (concentrated liquidity AMM on Hedera). Built with React + Vite.
 
-- **Contracts / ABIs:** `../smart-contract/out/`
+- **Contracts / ABIs:** `../hieroforge-core/out/`
 - **Run dev:** `npm run dev`
 - **Build:** `npm run build`
 

@@ -1,8 +1,8 @@
 # Compiler files
 cache/
 out/
-smart-contract/cache/
-smart-contract/out/
+hieroforge-core/cache/
+hieroforge-core/out/
 
 # Forge script broadcast output (deployment artifacts)
 broadcast/

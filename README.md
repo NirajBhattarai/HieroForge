@@ -6,7 +6,7 @@
 
 ```
 HieroForge/
-├── smart-contract/    # Foundry project (Solidity)
+├── hieroforge-core/    # Foundry project (Solidity)
 │   ├── src/
 │   ├── test/
 │   ├── script/
@@ -30,7 +30,7 @@ HieroForge/
 ### Smart contract
 
 ```bash
-cd smart-contract
+cd hieroforge-core
 git submodule update --init --recursive   # if using submodules
 forge build
 forge test
@@ -59,10 +59,10 @@ Then install the [HashPack](https://www.hashpack.app/) browser extension and cli
 
 | What        | Command |
 |------------|--------|
-| Build contracts | `cd smart-contract && forge build` |
-| Test contracts (HTS token creation) | `cd smart-contract && forge test` |
-| HTS tests on forked testnet | `cd smart-contract && forge test --match-contract CreateHtsTokenTest --fork-url https://testnet.hashio.io/api` |
-| **Create HTS token** (testnet or local) | `cd smart-contract && source ../.env 2>/dev/null; forge script script/CreateHtsToken.s.sol:CreateHtsTokenScript --rpc-url ${HEDERA_RPC_URL:-https://testnet.hashio.io/api} --broadcast --private-key $PRIVATE_KEY` |
+| Build contracts | `cd hieroforge-core && forge build` |
+| Test contracts (HTS token creation) | `cd hieroforge-core && forge test` |
+| HTS tests on forked testnet | `cd hieroforge-core && forge test --match-contract CreateHtsTokenTest --fork-url https://testnet.hashio.io/api` |
+| **Create HTS token** (testnet or local) | `cd hieroforge-core && source ../.env 2>/dev/null; forge script script/CreateHtsToken.s.sol:CreateHtsTokenScript --rpc-url ${HEDERA_RPC_URL:-https://testnet.hashio.io/api} --broadcast --private-key $PRIVATE_KEY` |
 | Run UI dev server | `cd ui && npm run dev` |
 | Build UI for production | `cd ui && npm run build` |
 
@@ -73,7 +73,7 @@ The project uses [Hedera Token Service](https://docs.hedera.com/hedera/sdks-and-
 1. Set `PRIVATE_KEY` in `.env` (account must have HBAR for fees).
 2. Optional: set `TREASURY` (EVM address) or it defaults to the signer.
 3. Optional: set `HEDERA_RPC_URL` (default: testnet hashio).
-4. From repo root: `cd smart-contract && forge script script/CreateHtsToken.s.sol:CreateHtsTokenScript --rpc-url $HEDERA_RPC_URL --broadcast --private-key $PRIVATE_KEY`
+4. From repo root: `cd hieroforge-core && forge script script/CreateHtsToken.s.sol:CreateHtsTokenScript --rpc-url $HEDERA_RPC_URL --broadcast --private-key $PRIVATE_KEY`
 
 For a **local Hedera node**, run the same command with `HEDERA_RPC_URL` pointing at your node’s EVM RPC (e.g. `http://127.0.0.1:7546`). The created token’s address is emitted in the `CreatedToken` event.
 
