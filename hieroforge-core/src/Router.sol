@@ -29,9 +29,7 @@ contract Router is IUnlockCallback {
         returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
     {
         return abi.decode(
-            manager.unlock(
-                abi.encode(ACTION_MODIFY_LIQUIDITY, msg.sender, key, abi.encode(params, hookData))
-            ),
+            manager.unlock(abi.encode(ACTION_MODIFY_LIQUIDITY, msg.sender, key, abi.encode(params, hookData))),
             (BalanceDelta, BalanceDelta)
         );
     }
@@ -43,8 +41,7 @@ contract Router is IUnlockCallback {
         returns (BalanceDelta swapDelta)
     {
         swapDelta = abi.decode(
-            manager.unlock(abi.encode(ACTION_SWAP, msg.sender, key, abi.encode(params, hookData))),
-            (BalanceDelta)
+            manager.unlock(abi.encode(ACTION_SWAP, msg.sender, key, abi.encode(params, hookData))), (BalanceDelta)
         );
     }
 
@@ -56,8 +53,7 @@ contract Router is IUnlockCallback {
         if (action == ACTION_MODIFY_LIQUIDITY) {
             (ModifyLiquidityParams memory params, bytes memory hookData) =
                 abi.decode(payload, (ModifyLiquidityParams, bytes));
-            (BalanceDelta callerDelta, BalanceDelta feesAccrued) =
-                manager.modifyLiquidity(key, params, hookData);
+            (BalanceDelta callerDelta, BalanceDelta feesAccrued) = manager.modifyLiquidity(key, params, hookData);
             _settleAndTake(key, sender, callerDelta.amount0(), callerDelta.amount1());
             return abi.encode(callerDelta, feesAccrued);
         } else {
@@ -82,10 +78,7 @@ contract Router is IUnlockCallback {
             return;
         }
         manager.sync(currency);
-        require(
-            IERC20Minimal(Currency.unwrap(currency)).transfer(address(manager), amount),
-            "Router: transfer failed"
-        );
+        require(IERC20Minimal(Currency.unwrap(currency)).transfer(address(manager), amount), "Router: transfer failed");
         manager.settle();
     }
 }

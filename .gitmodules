@@ -4,3 +4,12 @@
 [submodule "hieroforge-core/lib/hedera-forking"]
 	path = hieroforge-core/lib/hedera-forking
 	url = https://github.com/hashgraph/hedera-forking
+[submodule "hieroforge-periphery/lib/hedera-smart-contracts"]
+	path = hieroforge-periphery/lib/hedera-smart-contracts
+	url = https://github.com/hashgraph/hedera-smart-contracts
+[submodule "hieroforge-periphery/lib/hedera-forking"]
+	path = hieroforge-periphery/lib/hedera-forking
+	url = https://github.com/hashgraph/hedera-forking
+[submodule "hieroforge-periphery/lib/forge-std"]
+	path = hieroforge-periphery/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std

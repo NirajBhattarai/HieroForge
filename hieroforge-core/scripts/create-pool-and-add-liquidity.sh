@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Create a pool at 1:1 price and add liquidity on testnet.
 # Requires: PRIVATE_KEY, POOL_MANAGER_ADDRESS, ROUTER_ADDRESS, CURRENCY0_ADDRESS, CURRENCY1_ADDRESS
-# Optional: FEE=3000, TICK_SPACING=60, AMOUNT0, AMOUNT1 (set both to fund router), LIQUIDITY_DELTA=1e18
-# Example: AMOUNT0=1000000 AMOUNT1=1000000 ./scripts/create-pool-and-add-liquidity.sh
+# Optional: FEE=3000, TICK_SPACING=60. Default LIQUIDITY_DELTA=1e8 works with AMOUNT0/AMOUNT1=1e6.
+# For larger liquidity set LIQUIDITY_DELTA=1e18 and AMOUNT0=AMOUNT1=6000000000000000 (~6e15 each).
 
 set -e
 
@@ -23,12 +23,16 @@ for key in PRIVATE_KEY POOL_MANAGER_ADDRESS ROUTER_ADDRESS CURRENCY0_ADDRESS CUR
     echo "  export ROUTER_ADDRESS=0x..."
     echo "  export CURRENCY0_ADDRESS=0x..."
     echo "  export CURRENCY1_ADDRESS=0x..."
-    echo "  export AMOUNT0=1000000 AMOUNT1=1000000   # to fund router for liquidity"
+    echo "  export AMOUNT0=6000000000000000 AMOUNT1=6000000000000000   # ~6e15 each for LIQUIDITY_DELTA=1e18"
     exit 1
   fi
 done
 
+# --ffi: required for htsSetup() when CURRENCY0/CURRENCY1 are HTS tokens (transfers go through 0x167)
+# --skip-simulation: replay on Hedera RPC fails for HTS (0x167 returns 0xfe)
 forge script script/CreatePoolAndAddLiquidityTestnet.s.sol:CreatePoolAndAddLiquidityTestnetScript \
   --rpc-url "$RPC_URL" \
   --broadcast \
-  --private-key "$PRIVATE_KEY"
+  --private-key "$PRIVATE_KEY" \
+  --ffi \
+  --skip-simulation

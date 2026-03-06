@@ -3,6 +3,8 @@ cache/
 out/
 hieroforge-core/cache/
 hieroforge-core/out/
+hieroforge-periphery/cache/
+hieroforge-periphery/out/
 
 # Forge script broadcast output (deployment artifacts)
 broadcast/

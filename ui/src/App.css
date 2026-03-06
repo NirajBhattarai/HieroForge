@@ -1,124 +1,228 @@
-/* Layout */
+/* ========== Layout ========== */
 .app {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
-/* Header */
+/* ========== Header ========== */
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px;
-  background: var(--bg-elevated);
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 16px 24px;
+  background: rgba(26, 35, 50, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
 }
 
 .logo {
-  font-size: 1.25rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: #fff;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.04em;
 }
 
 .nav {
   display: flex;
   gap: 4px;
+  padding: 4px;
+  background: var(--bg-input);
+  border-radius: var(--radius);
 }
 
 .nav-btn {
-  padding: 8px 16px;
+  padding: 10px 20px;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   color: var(--muted);
   font-size: 0.9375rem;
+  font-weight: 500;
+  transition: color 0.2s, background 0.2s;
 }
+
 .nav-btn:hover {
   color: #fff;
-  background: rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.06);
 }
+
 .nav-btn.active {
   color: #fff;
-  background: rgba(88, 166, 255, 0.15);
+  background: var(--accent-muted);
 }
 
 .connect-btn {
-  padding: 8px 16px;
-  border-radius: 8px;
+  padding: 12px 22px;
+  border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--bg-input);
   color: #fff;
   font-size: 0.875rem;
+  font-weight: 600;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
 }
-.connect-btn:hover {
+
+.connect-btn:hover:not(:disabled) {
   border-color: var(--accent);
-  background: rgba(88, 166, 255, 0.1);
+  background: var(--accent-muted);
+  color: var(--accent);
 }
+
 .connect-btn.connected {
   border-color: var(--success);
   color: var(--success);
+  background: var(--success-muted);
 }
+
 .connect-btn:disabled {
   opacity: 0.7;
   cursor: wait;
 }
 
-.header-error {
-  font-size: 0.75rem;
-  color: #f85149;
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* ========== Error / Warning message ========== */
+.error-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border-left: 4px solid var(--error);
+  background: var(--error-muted);
+  color: #fca5a5;
+  font-size: 0.8125rem;
+  line-height: 1.45;
 }
 
-/* Main content */
+.error-message--warning {
+  border-left-color: var(--warning);
+  background: var(--warning-muted);
+  color: #fcd34d;
+}
+
+.error-message-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--error);
+}
+
+.error-message--warning .error-message-icon {
+  color: var(--warning);
+}
+
+.error-message-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.error-message-dismiss {
+  flex-shrink: 0;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s;
+}
+
+.error-message-dismiss:hover {
+  opacity: 1;
+}
+
+.header-error-inline.error-message {
+  max-width: 240px;
+  padding: 10px 14px;
+  font-size: 0.75rem;
+}
+
+.quote-error.error-message {
+  margin-top: 14px;
+  margin-bottom: 0;
+}
+
+.create-pool-err.error-message,
+.liquidity-error.error-message {
+  margin: 14px 0;
+}
+
+/* ========== Main ========== */
 .main {
   flex: 1;
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding: 32px 16px;
+  padding: 40px 20px;
 }
 
-/* Card (Swap / Pool / Add Liquidity) */
+/* ========== Card ========== */
 .card {
   width: 100%;
-  max-width: 420px;
-  background: var(--bg-elevated);
+  max-width: 460px;
+  background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 24px;
+  border-radius: var(--radius-xl);
+  padding: 32px;
+  box-shadow: var(--shadow-lg);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.card--error {
+  border-color: rgba(248, 113, 113, 0.4);
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.15), var(--shadow-lg);
 }
 
 .card-title {
-  font-size: 1.125rem;
-  font-weight: 600;
+  font-size: 1.375rem;
+  font-weight: 700;
   color: #fff;
-  margin: 0 0 20px 0;
+  margin: 0 0 28px 0;
+  letter-spacing: -0.03em;
 }
 
-/* Token row (amount input + token select) */
+/* ========== Token row (Swap) ========== */
 .token-row {
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px 16px;
-  margin-bottom: 8px;
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.token-row:focus-within {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 1px var(--border-focus);
+}
+
+.token-row.token-row--error {
+  border-color: var(--error);
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.2);
 }
 
 .token-row-label {
   font-size: 0.75rem;
   color: var(--muted);
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .token-row-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
 }
 
 .token-input {
@@ -127,142 +231,174 @@
   background: transparent;
   border: none;
   color: #fff;
-  font-size: 1.25rem;
+  font-size: 1.5rem;
+  font-weight: 600;
   outline: none;
 }
+
 .token-input::placeholder {
   color: var(--muted);
 }
 
 .token-select {
-  padding: 6px 12px;
-  border-radius: 8px;
+  padding: 10px 16px;
+  border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: #fff;
   font-size: 0.875rem;
+  font-weight: 600;
   cursor: pointer;
+  transition: border-color 0.15s;
 }
 
-/* Swap direction flip */
+.token-select:hover {
+  border-color: var(--border-focus);
+}
+
+/* ========== Flip button ========== */
 .flip-row {
   display: flex;
   justify-content: center;
-  margin: -4px 0;
+  margin: 2px 0;
 }
+
 .flip-btn {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
+  border: 2px solid var(--border);
+  background: var(--bg-card);
   color: var(--muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
+  font-size: 1.1rem;
+  transition: border-color 0.2s, color 0.2s, background 0.2s, transform 0.15s;
 }
+
 .flip-btn:hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: var(--accent-muted);
+  transform: scale(1.05);
 }
 
-/* Primary action button */
+/* ========== Primary button ========== */
 .primary-btn {
   width: 100%;
-  margin-top: 16px;
-  padding: 14px 24px;
-  border-radius: 12px;
+  margin-top: 24px;
+  padding: 18px 24px;
+  border-radius: var(--radius);
   border: none;
   background: var(--accent);
-  color: #fff;
+  color: #0f1419;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 700;
+  transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
 }
+
 .primary-btn:hover:not(:disabled) {
   background: var(--accent-hover);
+  box-shadow: 0 4px 20px rgba(56, 189, 248, 0.35);
 }
+
+.primary-btn:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
 .primary-btn:disabled {
   background: var(--bg-input);
   color: var(--muted);
 }
 
-/* Form group for Add Liquidity */
+/* ========== Form ========== */
 .form-group {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
+
 .form-group label {
   display: block;
   font-size: 0.8125rem;
   color: var(--muted);
-  margin-bottom: 6px;
+  margin-bottom: 10px;
+  font-weight: 600;
 }
+
 .form-group input {
   width: 100%;
-  padding: 12px 16px;
-  border-radius: 10px;
+  padding: 16px 18px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--bg-input);
   color: #fff;
   font-size: 1rem;
+  transition: border-color 0.2s;
 }
+
+.form-group input:hover {
+  border-color: var(--border-focus);
+}
+
 .form-group input:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-muted);
 }
 
-/* Pool list */
+/* ========== Pool list ========== */
 .pool-list {
   list-style: none;
   padding: 0;
   margin: 0;
 }
+
 .pool-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
+  padding: 18px 20px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  margin-bottom: 8px;
+  border-radius: var(--radius);
+  margin-bottom: 12px;
   background: var(--bg-input);
+  transition: border-color 0.2s;
 }
+
 .pool-item:hover {
-  border-color: var(--accent);
+  border-color: var(--border-focus);
 }
+
 .pool-pair {
-  font-weight: 600;
+  font-weight: 700;
   color: #fff;
 }
+
 .pool-meta {
   font-size: 0.8125rem;
   color: var(--muted);
 }
 
-/* Small helper text */
+/* ========== Helper text ========== */
 .helper {
   font-size: 0.75rem;
   color: var(--muted);
-  margin-top: 8px;
+  margin-top: 12px;
+  line-height: 1.5;
 }
 
-/* Create pool section */
+/* ========== Create pool ========== */
 .create-pool-title {
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 1.125rem;
+  font-weight: 700;
   color: #fff;
-  margin: 24px 0 8px 0;
-  padding-top: 16px;
+  margin: 32px 0 12px 0;
+  padding-top: 24px;
   border-top: 1px solid var(--border);
 }
 
 .create-pool-warn {
-  color: var(--accent);
-}
-
-.create-pool-err {
-  margin: 8px 0;
-  max-width: 100%;
+  color: var(--warning);
 }
 
 .create-pool-success {
@@ -271,4 +407,14 @@
 
 .create-pool-success a {
   color: var(--accent);
+}
+
+/* ========== Liquidity hint ========== */
+.liquidity-hint {
+  margin-bottom: 20px;
+  padding: 14px 18px;
+  background: var(--accent-muted);
+  border-radius: var(--radius);
+  color: var(--accent);
+  border-left: 4px solid var(--accent);
 }

@@ -1,9 +1,21 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { HashConnect } from 'hashconnect'
 import { LedgerId } from '@hashgraph/sdk'
 import { ModalCtrl } from '@walletconnect/modal-core'
 
-const HashPackContext = createContext(null)
+export interface HashPackContextValue {
+  accountId: string | null
+  formattedAccountId: string
+  isConnected: boolean
+  isInitialized: boolean
+  isConnecting: boolean
+  error: string | null
+  connect: () => Promise<void>
+  disconnect: () => Promise<void>
+  hashConnectRef: React.MutableRefObject<HashConnect | null>
+}
+
+const HashPackContext = createContext<HashPackContextValue | null>(null)
 
 const APP_METADATA = {
   name: 'HieroForge',
@@ -12,19 +24,23 @@ const APP_METADATA = {
   url: typeof window !== 'undefined' ? window.location.origin : '',
 }
 
-function formatAccountId(accountId) {
+function formatAccountId(accountId: string | null): string {
   if (!accountId) return ''
   const s = String(accountId)
   if (s.length <= 12) return s
   return `${s.slice(0, 8)}...${s.slice(-4)}`
 }
 
-export function HashPackProvider({ children }) {
-  const [accountId, setAccountId] = useState(null)
+interface PairingData {
+  accountIds?: string[]
+}
+
+export function HashPackProvider({ children }: { children: ReactNode }) {
+  const [accountId, setAccountId] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
-  const [error, setError] = useState(null)
-  const hashConnectRef = useRef(null)
+  const [error, setError] = useState<string | null>(null)
+  const hashConnectRef = useRef<HashConnect | null>(null)
 
   const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID
   const network = import.meta.env.VITE_HEDERA_NETWORK || 'testnet'
@@ -35,7 +51,7 @@ export function HashPackProvider({ children }) {
       return
     }
 
-    let hashconnect = null
+    let hashconnect: HashConnect | null = null
 
     const ledgerId =
       network === 'mainnet'
@@ -46,14 +62,14 @@ export function HashPackProvider({ children }) {
 
     hashconnect = new HashConnect(ledgerId, projectId, APP_METADATA, false)
 
-    hashconnect.pairingEvent.on((pairingData) => {
+    hashconnect.pairingEvent.on((pairingData: PairingData) => {
       const id = pairingData?.accountIds?.[0] ?? null
       setAccountId(id)
       setIsConnecting(false)
       setError(null)
       try {
         ModalCtrl.close()
-      } catch (_) {
+      } catch {
         // ignore if modal state not available
       }
     })
@@ -68,12 +84,12 @@ export function HashPackProvider({ children }) {
         hashConnectRef.current = hashconnect
         setIsInitialized(true)
         setError(null)
-        if (hashconnect.connectedAccountIds?.length > 0) {
-          setAccountId(hashconnect.connectedAccountIds[0].toString())
+        if ((hashconnect?.connectedAccountIds?.length ?? 0) > 0) {
+          setAccountId(hashconnect.connectedAccountIds?.[0]?.toString() ?? null)
         }
       })
-      .catch((err) => {
-        setError(err?.message ?? 'Failed to initialize HashPack')
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : 'Failed to initialize HashPack')
         setIsInitialized(false)
       })
 
@@ -96,8 +112,8 @@ export function HashPackProvider({ children }) {
     setIsConnecting(true)
     try {
       await hc.openPairingModal()
-    } catch (err) {
-      setError(err?.message ?? 'Failed to open HashPack')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to open HashPack')
       setIsConnecting(false)
     }
   }, [isInitialized])
@@ -107,7 +123,7 @@ export function HashPackProvider({ children }) {
     if (hc) {
       try {
         await hc.disconnect()
-      } catch (_) {
+      } catch {
         setAccountId(null)
       }
     } else {
@@ -116,7 +132,7 @@ export function HashPackProvider({ children }) {
     setIsConnecting(false)
   }, [])
 
-  const value = {
+  const value: HashPackContextValue = {
     accountId,
     formattedAccountId: formatAccountId(accountId),
     isConnected: !!accountId,
@@ -135,7 +151,7 @@ export function HashPackProvider({ children }) {
   )
 }
 
-export function useHashPack() {
+export function useHashPack(): HashPackContextValue {
   const ctx = useContext(HashPackContext)
   if (!ctx) throw new Error('useHashPack must be used within HashPackProvider')
   return ctx

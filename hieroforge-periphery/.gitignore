@@ -1,0 +1,18 @@
+# Compiler files
+cache/
+out/
+
+# Broadcast logs (all chains)
+broadcast/
+
+# Deployed addresses (local)
+deployedaddress.txt
+
+# Docs
+docs/
+
+# Dotenv file
+.env
+
+# Ignore helper file
+helper.txt

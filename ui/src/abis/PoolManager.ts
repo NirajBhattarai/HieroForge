@@ -1,3 +1,5 @@
+import type { Abi } from 'viem'
+
 // Minimal ABI for PoolManager: initialize pool and read state
 export const PoolManagerAbi = [
   {
@@ -32,11 +34,11 @@ export const PoolManagerAbi = [
     ],
     stateMutability: 'view',
   },
-]
+] as Abi
 
 // sqrtPriceX96 presets (Q64.96): token1 per token0
 // From Constants.sol: 1:1, 1:2, 1:4, 2:1, 4:1
-export const SQRT_PRICE_PRESETS = {
+export const SQRT_PRICE_PRESETS: Record<string, string> = {
   '0.25': '39614081257132168796771975168',   // 1:4
   '0.5': '56022770974786139918731938227',    // 1:2
   '1': '79228162514264337593543950336',      // 1:1

@@ -32,23 +32,28 @@ contract CreateHtsTokenScript is Script {
         keyValue.inheritAccountKey = true;
 
         IHederaTokenService.HederaToken memory token;
-        token.name = "Token2";
-        token.symbol = "Token2";
+        token.name = "FORGE";
+        token.symbol = "FORGE";
         token.treasury = signer;
         token.memo = "This HTS Token was created using forge script together with HTS emulation";
         token.tokenSupplyType = true;
-        token.maxSupply = 20_000_000_000;
+        token.maxSupply = 2000000000000000000;
         token.freezeDefault = false;
         token.tokenKeys = new IHederaTokenService.TokenKey[](2);
         token.tokenKeys[0] = IHederaTokenService.TokenKey(0x1, keyValue); // Admin Key
-        token.tokenKeys[1] = IHederaTokenService.TokenKey(0x10, keyValue); // Supply Key (enables minting)
+        token.tokenKeys[1] = IHederaTokenService.TokenKey(0x10, keyValue); // Supply Key (enables minting; use script/MintHtsToken.s.sol to mint more)
         token.expiry = IHederaTokenService.Expiry(0, signer, 8000000);
+
+        // Initial supply: 1 million tokens (4 decimals) = 1_000_000 * 10^4 raw units
+        int32 decimals = 4;
+        uint256 supplyTokens = vm.envOr("INITIAL_SUPPLY", uint256(1_000_000));
+        int64 initialSupplyRaw = int64(uint64(supplyTokens * 10 ** 4));
 
         vm.startBroadcast(PRIVATE_KEY);
         (responseCode, tokenAddress) = IHederaTokenService(HTS_ADDRESS)
         .createFungibleToken{value: value, gas: gasLimit}(
-            token, 1_000_000 * 10 ** 4, 4
-        ); // 1M tokens (4 decimals)
+            token, initialSupplyRaw, decimals
+        );
         vm.stopBroadcast();
 
         console.log("Signer (treasury):", signer);

@@ -143,7 +143,8 @@ contract PoolManagerSwapTest is Test, Deployers {
         t0.mint(address(this), 1e18);
         t1.mint(address(this), 1e18);
         (Currency c0, Currency c1) = _sortCurrencies(address(t0), address(t1));
-        PoolKey memory key = PoolKey({currency0: c0, currency1: c1, fee: 3000, tickSpacing: TICK_SPACING, hooks: address(0)});
+        PoolKey memory key =
+            PoolKey({currency0: c0, currency1: c1, fee: 3000, tickSpacing: TICK_SPACING, hooks: address(0)});
         // Do not initialize
         SwapParams memory params = SwapParams({
             amountSpecified: -int256(1000),

@@ -6,19 +6,27 @@
 
 ```
 HieroForge/
-├── hieroforge-core/    # Foundry project (Solidity)
+├── hieroforge-core/       # Core AMM (PoolManager, pools, swap logic)
 │   ├── src/
 │   ├── test/
 │   ├── script/
-│   └── lib/forge-std/
-├── ui/                # Vite + React frontend
+│   └── lib/
+├── hieroforge-periphery/  # Periphery contracts to swap tokens via hieroforge-core
 │   ├── src/
-│   │   ├── context/   # HashPackContext (wallet connect)
+│   ├── test/
+│   ├── script/
+│   └── lib/               # Same as core: forge-std, hedera-smart-contracts, hedera-forking
+├── ui/                    # Vite + React frontend
+│   ├── src/
+│   │   ├── context/       # HashPackContext (wallet connect)
 │   │   └── App.jsx
 │   └── package.json
-├── .env.example       # Root env (e.g. deploy keys)
+├── .env.example           # Root env (e.g. deploy keys)
 └── README.md
 ```
+
+- **hieroforge-core** — Holds pool state and implements initialize, swap, and modify liquidity. Deploy this first.
+- **hieroforge-periphery** — User-facing contracts (e.g. swap router) that call the core `PoolManager` to execute token swaps. Use periphery in the UI or scripts to perform swaps against pools created by the core.
 
 ## Prerequisites
 
@@ -27,11 +35,26 @@ HieroForge/
 
 ## Quick start
 
-### Smart contract
+### Smart contracts
+
+From repo root, init submodules once (for both core and periphery):
+
+```bash
+git submodule update --init --recursive
+```
+
+**Core (AMM):**
 
 ```bash
 cd hieroforge-core
-git submodule update --init --recursive   # if using submodules
+forge build
+forge test
+```
+
+**Periphery (swap helpers):** Build after core is deployed. Periphery contracts talk to the core `PoolManager` to execute swaps.
+
+```bash
+cd hieroforge-periphery
 forge build
 forge test
 ```
@@ -59,8 +82,10 @@ Then install the [HashPack](https://www.hashpack.app/) browser extension and cli
 
 | What        | Command |
 |------------|--------|
-| Build contracts | `cd hieroforge-core && forge build` |
-| Test contracts (HTS token creation) | `cd hieroforge-core && forge test` |
+| Build core | `cd hieroforge-core && forge build` |
+| Build periphery (swap helpers) | `cd hieroforge-periphery && forge build` |
+| Test core (HTS token creation) | `cd hieroforge-core && forge test` |
+| Test periphery | `cd hieroforge-periphery && forge test` |
 | HTS tests on forked testnet | `cd hieroforge-core && forge test --match-contract CreateHtsTokenTest --fork-url https://testnet.hashio.io/api` |
 | **Create HTS token** (testnet or local) | `cd hieroforge-core && source ../.env 2>/dev/null; forge script script/CreateHtsToken.s.sol:CreateHtsTokenScript --rpc-url ${HEDERA_RPC_URL:-https://testnet.hashio.io/api} --broadcast --private-key $PRIVATE_KEY` |
 | Run UI dev server | `cd ui && npm run dev` |
