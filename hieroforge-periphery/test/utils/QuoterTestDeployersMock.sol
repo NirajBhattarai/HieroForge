@@ -25,12 +25,7 @@ abstract contract QuoterTestDeployersMock is Test {
     PoolKey public key;
 
     ModifyLiquidityParams public liquidityParams = ModifyLiquidityParams({
-        owner: address(0),
-        tickLower: -180,
-        tickUpper: 180,
-        liquidityDelta: int128(LIQUIDITY_PER_RANGE),
-        tickSpacing: TICK_SPACING,
-        salt: bytes32(0)
+        tickLower: -180, tickUpper: 180, liquidityDelta: int256(uint256(LIQUIDITY_PER_RANGE)), salt: bytes32(0)
     });
 
     function deployFreshManagerAndRouters() internal {
@@ -55,7 +50,6 @@ abstract contract QuoterTestDeployersMock is Test {
         (_key, id) = initPool(currency0, currency1, 3000, TICK_SPACING, SQRT_PRICE_1_1);
         key = _key;
 
-        liquidityParams.owner = address(router);
         IERC20Minimal(Currency.unwrap(currency0)).transfer(address(router), 1e18);
         IERC20Minimal(Currency.unwrap(currency1)).transfer(address(router), 1e18);
         router.modifyLiquidity(_key, liquidityParams, "");

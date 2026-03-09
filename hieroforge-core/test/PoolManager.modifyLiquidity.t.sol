@@ -23,9 +23,6 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
     function setUp() public {
         // HTS tokens via hedera-forking at 0x167. On Hedera, native (HBAR) is HTS-native. Run with --ffi
         initializeManagerRoutersAndPools();
-        // Set owner on default liquidity params to the router so position is attributed correctly
-        LIQUIDITY_PARAMS.owner = address(modifyLiquidityRouter);
-        REMOVE_LIQUIDITY_PARAMS.owner = address(modifyLiquidityRouter);
     }
 
     /// @notice First test: modifyLiquidity reverts when called directly (manager is locked)
@@ -39,11 +36,9 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
     /// @dev Covers PoolState.sol:330 — state.modifyLiquidity() calls checkPoolInitialized(self); uninitializedKey's pool has sqrtPriceX96 == 0 so it reverts with PoolNotInitialized
     function test_modifyLiquidity_revertsWhenPoolNotInitialized() public {
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(modifyLiquidityRouter),
             tickLower: -120,
             tickUpper: 120,
-            liquidityDelta: 1e18,
-            tickSpacing: 60,
+            liquidityDelta: int256(uint256(1e18)),
             salt: bytes32(0)
         });
 
@@ -79,11 +74,9 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
     function test_addLiquidity_htsHts_succeedsWithTransfer() public {
         // HTS tokens (initialTotalSupply 10e9 raw units). On Hedera, native is HTS so HTS-HTS includes native-like pairs.
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(modifyLiquidityRouter),
             tickLower: -120,
             tickUpper: 120,
             liquidityDelta: 1000, // small L so token amounts are small
-            tickSpacing: 60,
             salt: bytes32(0)
         });
 
@@ -141,11 +134,9 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         initPool(c0, c1, 3000, 60, SQRT_PRICE_1_1);
 
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(modifyLiquidityRouter),
             tickLower: -120,
             tickUpper: 120,
             liquidityDelta: 1000,
-            tickSpacing: 60,
             salt: bytes32(0)
         });
         uint256 fundAmount = 1e17;
@@ -187,11 +178,9 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         initPool(c0, c1, 3000, 60, SQRT_PRICE_1_1);
 
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(modifyLiquidityRouter),
             tickLower: -120,
             tickUpper: 120,
             liquidityDelta: 1000,
-            tickSpacing: 60,
             salt: bytes32(0)
         });
         uint256 fundErc20 = 1e17;
@@ -240,11 +229,9 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         initPool(c0, c1, 3000, 60, SQRT_PRICE_1_1);
 
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(modifyLiquidityRouter),
             tickLower: -120,
             tickUpper: 120,
             liquidityDelta: 1000,
-            tickSpacing: 60,
             salt: bytes32(0)
         });
         uint256 fundHts = 5e9;
@@ -285,11 +272,9 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         initPool(native, c1, 3000, 60, SQRT_PRICE_1_1);
 
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(modifyLiquidityRouter),
             tickLower: -120,
             tickUpper: 120,
             liquidityDelta: 1000,
-            tickSpacing: 60,
             salt: bytes32(0)
         });
         uint256 fundErc20 = 1e17;
@@ -322,11 +307,9 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         initPool(native, c1, 3000, 60, SQRT_PRICE_1_1);
 
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(modifyLiquidityRouter),
             tickLower: -120,
             tickUpper: 120,
             liquidityDelta: 1000,
-            tickSpacing: 60,
             salt: bytes32(0)
         });
         uint256 fundHts = 5e9;

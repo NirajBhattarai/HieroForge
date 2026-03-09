@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Verify Quoter (and optionally other contracts) on Hedera using the HashScan Verification API.
+# Verify Quoter, PositionManager (and optionally other contracts) on Hedera using the HashScan Verification API.
 # https://docs.hedera.com/hedera/sdks-and-apis/smart-contract-verification-api
 #
 # Usage:
-#   export QUOTER_ADDRESS=0x...
-#   ./scripts/verify-contracts.sh [Quoter|all]
+#   export QUOTER_ADDRESS=0x...   # for Quoter
+#   export POSITION_MANAGER_ADDRESS=0x... POOL_MANAGER_ADDRESS=0x...  # for PositionManager
+#   ./scripts/verify-contracts.sh [Quoter|PositionManager|Multicall|all]
 #
 # Prerequisites: forge build (extra_output_files = ["metadata"]). jq, curl for API verification.
 
@@ -43,16 +44,30 @@ case "$CONTRACT_ARG" in
       exit 1
     fi
     ;;
+  PositionManager|Multicall)
+    if [[ -z "$POSITION_MANAGER_ADDRESS" ]]; then
+      echo "Error: POSITION_MANAGER_ADDRESS not set."
+      exit 1
+    fi
+    if [[ -z "$POOL_MANAGER_ADDRESS" ]]; then
+      echo "Error: POOL_MANAGER_ADDRESS required for PositionManager constructor args."
+      exit 1
+    fi
+    ;;
   all)
-    if [[ -z "$QUOTER_ADDRESS" ]]; then
-      echo "Error: QUOTER_ADDRESS not set."
+    if [[ -z "$QUOTER_ADDRESS" ]]; then echo "Error: QUOTER_ADDRESS not set."; exit 1; fi
+    if [[ -z "$POSITION_MANAGER_ADDRESS" ]]; then echo "Error: POSITION_MANAGER_ADDRESS not set."; exit 1; fi
+    if [[ -z "$POOL_MANAGER_ADDRESS" ]]; then
+      echo "Error: POOL_MANAGER_ADDRESS required for PositionManager."
       exit 1
     fi
     ;;
   *)
-    echo "Usage: $0 [Quoter|all]"
-    echo "  Quoter  - verify Quoter (set QUOTER_ADDRESS)"
-    echo "  all     - verify all (currently Quoter only)"
+    echo "Usage: $0 [Quoter|PositionManager|Multicall|all]"
+    echo "  Quoter          - verify Quoter (set QUOTER_ADDRESS)"
+    echo "  PositionManager - verify PositionManager (set POSITION_MANAGER_ADDRESS, POOL_MANAGER_ADDRESS)"
+    echo "  Multicall       - same as PositionManager (multicall is part of PositionManager)"
+    echo "  all             - verify Quoter + PositionManager"
     exit 1
     ;;
 esac
@@ -88,7 +103,6 @@ verify_quoter() {
     set +e
     hashscan_api_verify "$REPO_ROOT" "Quoter" "$QUOTER_ADDRESS" "$CHAIN_ID" && r=0 || r=1
     if [[ $r -ne 0 ]]; then
-      # Quoter constructor takes IPoolManager (address); encode if you have POOL_MANAGER_ADDRESS
       if [[ -n "$POOL_MANAGER_ADDRESS" ]]; then
         CONSTRUCTOR_ARGS=$(cast abi-encode "constructor(address)" "$POOL_MANAGER_ADDRESS")
         forge verify-contract \
@@ -124,22 +138,61 @@ verify_quoter() {
   echo ""
 }
 
+verify_position_manager() {
+  echo "--- Verifying PositionManager at $POSITION_MANAGER_ADDRESS ---"
+  NEED_MANUAL=""
+  if [[ -z "$VERIFY_MANUAL" ]]; then
+    set +e
+    hashscan_api_verify "$REPO_ROOT" "PositionManager" "$POSITION_MANAGER_ADDRESS" "$CHAIN_ID" && r=0 || r=1
+    if [[ $r -ne 0 ]]; then
+      CONSTRUCTOR_ARGS=$(cast abi-encode "constructor(address)" "$POOL_MANAGER_ADDRESS")
+      forge verify-contract \
+        "$POSITION_MANAGER_ADDRESS" \
+        src/PositionManager.sol:PositionManager \
+        --chain-id "$CHAIN_ID" \
+        --verifier sourcify \
+        --verifier-url "$HEDERA_VERIFIER_URL" \
+        --constructor-args "$CONSTRUCTOR_ARGS" \
+        $WATCH_FLAG
+      r=$?
+    fi
+    set -e
+    if [[ $r -ne 0 ]]; then
+      echo "PositionManager programmatic verification failed; use manual verification below."
+      NEED_MANUAL=1
+    fi
+  else
+    NEED_MANUAL=1
+  fi
+  if [[ -n "$NEED_MANUAL" ]] || [[ -n "$VERIFY_MANUAL" ]]; then
+    prepare_manual_bundle "PositionManager" "src/PositionManager.sol" || true
+  fi
+  echo ""
+}
+
 NEED_MANUAL=""
 case "$CONTRACT_ARG" in
   Quoter)
     verify_quoter
     ;;
+  PositionManager|Multicall)
+    verify_position_manager
+    ;;
   all)
     verify_quoter
+    verify_position_manager
     ;;
 esac
 
 if [[ -n "$NEED_MANUAL" ]] || [[ -n "$VERIFY_MANUAL" ]]; then
   echo "--- Manual verification ---"
   echo "  1. Open https://verify.hashscan.io"
-  echo "  2. Address: $QUOTER_ADDRESS, Chain: $CHAIN_ID"
-  echo "  3. Upload files from verify-bundles/Quoter/"
-  echo "  Contract: https://hashscan.io/testnet/contract/$QUOTER_ADDRESS"
+  echo "  2. Address and Chain: $CHAIN_ID"
+  echo "  3. Upload files from verify-bundles/<Contract>/"
+  [[ -n "$QUOTER_ADDRESS" ]] && echo "  Quoter:         https://hashscan.io/testnet/contract/$QUOTER_ADDRESS"
+  [[ -n "$POSITION_MANAGER_ADDRESS" ]] && echo "  PositionManager: https://hashscan.io/testnet/contract/$POSITION_MANAGER_ADDRESS"
 else
-  echo "Done. Quoter: https://hashscan.io/testnet/contract/$QUOTER_ADDRESS"
+  echo "Done."
+  [[ -n "$QUOTER_ADDRESS" ]] && echo "  Quoter: https://hashscan.io/testnet/contract/$QUOTER_ADDRESS"
+  [[ -n "$POSITION_MANAGER_ADDRESS" ]] && echo "  PositionManager: https://hashscan.io/testnet/contract/$POSITION_MANAGER_ADDRESS"
 fi

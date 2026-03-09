@@ -31,11 +31,9 @@ abstract contract QuoterTestDeployers is Test {
     PoolKey public key;
 
     ModifyLiquidityParams public LIQUIDITY_PARAMS = ModifyLiquidityParams({
-        owner: address(0),
         tickLower: -180,
         tickUpper: 180,
-        liquidityDelta: 1e9, // small L so token amounts fit in HTS supply (10e9) and router funding (3e9)
-        tickSpacing: TICK_SPACING,
+        liquidityDelta: int256(uint256(1e9)), // small L so token amounts fit in HTS supply (10e9) and router funding (3e9)
         salt: bytes32(0)
     });
 
@@ -128,7 +126,6 @@ abstract contract QuoterTestDeployers is Test {
         (_key, id) = initPool(currency0, currency1, 3000, TICK_SPACING, SQRT_PRICE_1_1);
         key = _key;
 
-        LIQUIDITY_PARAMS.owner = address(router);
         require(IERC20(Currency.unwrap(currency0)).transfer(address(router), HTS_FUND_AMOUNT), "fund0");
         require(IERC20(Currency.unwrap(currency1)).transfer(address(router), HTS_FUND_AMOUNT), "fund1");
         router.modifyLiquidity(_key, LIQUIDITY_PARAMS, "");

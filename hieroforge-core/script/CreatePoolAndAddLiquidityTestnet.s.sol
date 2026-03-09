@@ -85,11 +85,9 @@ contract CreatePoolAndAddLiquidityTestnetScript is Script {
 
         // // 3. Add liquidity
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: routerAddr,
             tickLower: tickLower,
             tickUpper: tickUpper,
-            liquidityDelta: liquidityDelta,
-            tickSpacing: tickSpacing,
+            liquidityDelta: int256(liquidityDelta),
             salt: salt
         });
 

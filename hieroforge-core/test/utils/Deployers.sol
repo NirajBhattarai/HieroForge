@@ -29,17 +29,18 @@ contract Deployers is Test {
     uint160 public minPriceLimit = TickMath.minSqrtPrice() + 1;
     uint160 public maxPriceLimit = TickMath.maxSqrtPrice() - 1;
 
-    // Default liquidity params for add / remove
+    // Default liquidity params for add / remove (4-field; owner = msg.sender, tickSpacing from PoolKey)
     ModifyLiquidityParams public LIQUIDITY_PARAMS = ModifyLiquidityParams({
-        owner: address(0), // set in test or in init
         tickLower: -120,
         tickUpper: 120,
-        liquidityDelta: 1e18,
-        tickSpacing: 60,
+        liquidityDelta: int256(uint256(1e18)),
         salt: bytes32(0)
     });
     ModifyLiquidityParams public REMOVE_LIQUIDITY_PARAMS = ModifyLiquidityParams({
-        owner: address(0), tickLower: -120, tickUpper: 120, liquidityDelta: -1e18, tickSpacing: 60, salt: bytes32(0)
+        tickLower: -120,
+        tickUpper: 120,
+        liquidityDelta: -int256(uint256(1e18)),
+        salt: bytes32(0)
     });
 
     // Global state

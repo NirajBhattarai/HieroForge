@@ -45,8 +45,8 @@ contract UniversalRouter is IUniversalRouter, V4Router {
         _executor = prevExecutor;
     }
 
-    /// @inheritdoc V4Router
-    /// @dev During execute(), returns the caller of execute(); otherwise msg.sender
+    /// @notice Returns the executor (caller of execute()); during unlock callback this is the swap initiator.
+    /// @dev Overrides base to return _executor when set.
     function msgSender() public view override returns (address) {
         if (_executor != address(0)) return _executor;
         return msg.sender;

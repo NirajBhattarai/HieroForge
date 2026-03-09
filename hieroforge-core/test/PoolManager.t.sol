@@ -158,9 +158,8 @@ contract PoolManagerTest is Test {
 
     function test_ModifyLiquidity_RevertWhen_PoolNotInitialized() public {
         PoolKey memory key = _makeKey(address(0x1), address(0x2), 3000, 60);
-        ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(this), tickLower: -60, tickUpper: 60, liquidityDelta: 1000, tickSpacing: 60, salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: bytes32(0)});
         vm.expectRevert(IPoolManager.PoolNotInitialized.selector);
         poolManager.modifyLiquidity(key, params, "");
     }
@@ -168,9 +167,8 @@ contract PoolManagerTest is Test {
     function test_ModifyLiquidity_ReturnsZeroDeltas_WhenPoolInitialized() public {
         PoolKey memory key = _makeKey(address(0x1), address(0x2), 3000, 60);
         poolManager.initialize(key, 79228162514264337593543950336);
-        ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(this), tickLower: -60, tickUpper: 60, liquidityDelta: 1000, tickSpacing: 60, salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: bytes32(0)});
         (BalanceDelta callerDelta, BalanceDelta feesAccrued) = poolManager.modifyLiquidity(key, params, "");
         assertEq(callerDelta.amount0(), 0);
         assertEq(callerDelta.amount1(), 0);
@@ -267,11 +265,9 @@ contract PoolManagerTest is Test {
 
     function _addLiquidityRange(PoolKey memory key, int24 tickLower, int24 tickUpper) internal {
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(this),
             tickLower: tickLower,
             tickUpper: tickUpper,
-            liquidityDelta: int128(LIQUIDITY_PER_RANGE),
-            tickSpacing: TICK_SPACING,
+            liquidityDelta: int256(uint256(LIQUIDITY_PER_RANGE)),
             salt: bytes32(0)
         });
         poolManager.modifyLiquidity(key, params, "");
@@ -302,7 +298,6 @@ contract PoolManagerModifyLiquidityCombinationsTest is Test, Deployers {
     function test_modifyLiquidity_addLiquidity_htsHts() public {
         deployMintAndApprove2CurrenciesHTS();
         (key,) = initPool(currency0, currency1, 3000, 60, SQRT_PRICE_1_1);
-        LIQUIDITY_PARAMS.owner = address(modifyLiquidityRouter);
         LIQUIDITY_PARAMS.liquidityDelta = 1000;
 
         uint256 fundAmount = 5e9;
@@ -347,11 +342,9 @@ contract PoolManagerModifyLiquidityCombinationsTest is Test, Deployers {
         key = poolKey;
 
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(modifyLiquidityRouter),
             tickLower: -120,
             tickUpper: 120,
             liquidityDelta: 1000,
-            tickSpacing: 60,
             salt: bytes32(0)
         });
 
@@ -396,11 +389,9 @@ contract PoolManagerModifyLiquidityCombinationsTest is Test, Deployers {
         key = poolKey;
 
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(modifyLiquidityRouter),
             tickLower: -120,
             tickUpper: 120,
             liquidityDelta: 1000,
-            tickSpacing: 60,
             salt: bytes32(0)
         });
 
@@ -454,11 +445,9 @@ contract PoolManagerModifyLiquidityCombinationsTest is Test, Deployers {
         key = poolKey;
 
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(modifyLiquidityRouter),
             tickLower: -120,
             tickUpper: 120,
             liquidityDelta: 1000,
-            tickSpacing: 60,
             salt: bytes32(0)
         });
 

@@ -30,6 +30,13 @@ export const DEFAULT_TOKENS: TokenOption[] = [
   { id: 'token9', symbol: 'EMBER' },
 ]
 
+/** Optional token logo URLs (symbol -> url). Add your own in constants or .env. */
+export const TOKEN_IMAGES: Record<string, string> = {
+  HBAR: 'https://assets.coingecko.com/coins/images/3688/small/hbar.png',
+  USDC: 'https://assets.coingecko.com/coins/images/6319/small/usdc.png',
+  // Add more: FORGE, SWIRL, etc. or leave blank for letter fallback
+}
+
 /**
  * Token symbol -> contract address. All are HTS (Hedera Token Service) long-form: 0x0000...<id>.
  * Pool key and Quoter use these same addresses. Edit with your deployed HTS token ids.
@@ -83,6 +90,11 @@ export function getPoolManagerAddress(): string {
 /** Quoter contract address loaded from .env (VITE_QUOTER_ADDRESS). */
 export function getQuoterAddress(): string {
   return (import.meta.env?.VITE_QUOTER_ADDRESS ?? '').trim()
+}
+
+/** PositionManager contract address (VITE_POSITION_MANAGER_ADDRESS). Required for Add Liquidity. */
+export function getPositionManagerAddress(): string {
+  return (import.meta.env?.VITE_POSITION_MANAGER_ADDRESS ?? '').trim()
 }
 
 export function getChainId(): number {

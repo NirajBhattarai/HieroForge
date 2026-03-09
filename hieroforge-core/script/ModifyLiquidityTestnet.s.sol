@@ -95,11 +95,9 @@ contract ModifyLiquidityTestnetScript is Script {
         // 2. Add liquidity at each tick range (different places); liquidity split so tokens suffice
         for (uint256 i = 0; i < numRanges; i++) {
             ModifyLiquidityParams memory params = ModifyLiquidityParams({
-                owner: routerAddr,
                 tickLower: lowers[i],
                 tickUpper: uppers[i],
-                liquidityDelta: liquidityPerPosition,
-                tickSpacing: tickSpacing,
+                liquidityDelta: int256(liquidityPerPosition),
                 salt: bytes32(i) // unique salt per position
             });
 

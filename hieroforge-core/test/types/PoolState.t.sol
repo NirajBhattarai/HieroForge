@@ -6,6 +6,7 @@ import {PoolState, checkPoolInitialized, modifyLiquidity, getLiquidity} from "..
 import {initialSlot0} from "../../src/types/Slot0.sol";
 import {IPoolManager} from "../../src/interfaces/IPoolManager.sol";
 import {ModifyLiquidityParams} from "../../src/types/ModifyLiquidityParams.sol";
+import {ModifyLiquidityOperation} from "../../src/types/PoolOperation.sol";
 import {BalanceDelta} from "../../src/types/BalanceDelta.sol";
 
 // TickMath bounds (same as TickMath.sol) for boundary tests
@@ -32,11 +33,21 @@ contract PoolStateCheckHelper {
         return getLiquidity(state);
     }
 
-    function modifyLiquidityExternal(ModifyLiquidityParams memory params, bytes calldata hookData)
-        external
-        returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
-    {
-        return modifyLiquidity(state, params, hookData);
+    function modifyLiquidityExternal(
+        ModifyLiquidityParams memory params,
+        address owner,
+        int24 tickSpacing,
+        bytes calldata hookData
+    ) external returns (BalanceDelta callerDelta, BalanceDelta feesAccrued) {
+        ModifyLiquidityOperation memory op = ModifyLiquidityOperation({
+            owner: owner,
+            tickLower: params.tickLower,
+            tickUpper: params.tickUpper,
+            liquidityDelta: int128(params.liquidityDelta),
+            tickSpacing: tickSpacing,
+            salt: params.salt
+        });
+        return modifyLiquidity(state, op, hookData);
     }
 }
 
@@ -103,19 +114,18 @@ contract PoolStateTest is Test {
     // ========== modifyLiquidity (uses checkPoolInitialized) ==========
 
     function test_ModifyLiquidity_RevertsWhen_NotInitialized() public {
-        ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(this), tickLower: -60, tickUpper: 60, liquidityDelta: 1000, tickSpacing: 60, salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1000, salt: bytes32(0)});
         vm.expectRevert(IPoolManager.PoolNotInitialized.selector);
-        helper.modifyLiquidityExternal(params, "");
+        helper.modifyLiquidityExternal(params, address(this), 60, "");
     }
 
     function test_ModifyLiquidity_DoesNotRevert_WhenInitialized() public {
         helper.setSlot0Initialized(79228162514264337593543950336);
-        ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(this), tickLower: -60, tickUpper: 60, liquidityDelta: 1000, tickSpacing: 60, salt: bytes32(0)
-        });
-        (BalanceDelta callerDelta, BalanceDelta feesAccrued) = helper.modifyLiquidityExternal(params, "");
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 0, salt: bytes32(0)});
+        (BalanceDelta callerDelta, BalanceDelta feesAccrued) =
+            helper.modifyLiquidityExternal(params, address(this), 60, "");
         assertEq(callerDelta.amount0(), 0);
         assertEq(callerDelta.amount1(), 0);
         assertEq(feesAccrued.amount0(), 0);
@@ -125,22 +135,19 @@ contract PoolStateTest is Test {
     function test_ModifyLiquidity_WithNonEmptyHookData_DoesNotRevert() public {
         helper.setSlot0Initialized(79228162514264337593543950336);
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(0x1),
             tickLower: -120,
             tickUpper: 120,
-            liquidityDelta: -500,
-            tickSpacing: 60,
+            liquidityDelta: 0,
             salt: keccak256("salt")
         });
-        helper.modifyLiquidityExternal(params, "hook data");
+        helper.modifyLiquidityExternal(params, address(0x1), 60, "hook data");
     }
 
     function test_ModifyLiquidity_WithZeroLiquidityDelta_DoesNotRevert() public {
         helper.setSlot0Initialized(79228162514264337593543950336);
-        ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            owner: address(this), tickLower: -60, tickUpper: 60, liquidityDelta: 0, tickSpacing: 60, salt: bytes32(0)
-        });
-        helper.modifyLiquidityExternal(params, "");
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 0, salt: bytes32(0)});
+        helper.modifyLiquidityExternal(params, address(this), 60, "");
     }
 
     // ========== getLiquidity ==========

@@ -2,7 +2,7 @@
 
 Frontend for **HieroForge** (concentrated liquidity AMM on Hedera). Built with React + Vite.
 
-- **Contracts / ABIs:** `../hieroforge-core/out/`
+- **Contracts / ABIs:** `src/abis/` (Quoter, PositionManager, PoolManager, ERC20). Rebuild `hieroforge-core` and `hieroforge-periphery` if you need to refresh from `out/`.
 - **Run dev:** `npm run dev`
 - **Build:** `npm run build`
 

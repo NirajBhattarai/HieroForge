@@ -8,7 +8,7 @@ import {TickInfo} from "./TickInfo.sol";
 import {PositionState} from "./PositionState.sol";
 import {IPoolManager} from "../interfaces/IPoolManager.sol";
 import {BalanceDelta, toBalanceDelta} from "./BalanceDelta.sol";
-import {ModifyLiquidityParams} from "./ModifyLiquidityParams.sol";
+import {ModifyLiquidityOperation} from "./PoolOperation.sol";
 import {SwapParams} from "./SwapParams.sol";
 import {SwapResult} from "./SwapResult.sol";
 import {LiquidityMath} from "../libraries/LiquidityMath.sol";
@@ -320,17 +320,20 @@ function swap(PoolState storage self, SwapParams memory params)
 
 /// @notice Modify liquidity in the pool (Uniswap v4-style). Define only here; implementation is a stub.
 /// @param self The pool state storage
-/// @param params tickLower, tickUpper, liquidityDelta, salt
+/// @param params Full operation (owner, tickLower, tickUpper, liquidityDelta, tickSpacing, salt)
 /// @param hookData Data passed to hooks (if any)
 /// @return callerDelta Balance delta for the caller (principal + fees)
 /// @return feesAccrued Fee delta in the liquidity range (informational)
-function modifyLiquidity(PoolState storage self, ModifyLiquidityParams memory params, bytes calldata hookData)
-    returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
-{
+function modifyLiquidity(
+    PoolState storage self,
+    ModifyLiquidityOperation memory params,
+    bytes calldata hookData
+) returns (BalanceDelta callerDelta, BalanceDelta feesAccrued) {
     checkPoolInitialized(self);
     int128 liquidityDelta = params.liquidityDelta;
     int24 tickLower = params.tickLower;
     int24 tickUpper = params.tickUpper;
+    int24 tickSpacing = params.tickSpacing;
     BalanceDelta principalDelta;
     {
         ModifyLiquidityState memory state;
@@ -342,7 +345,7 @@ function modifyLiquidity(PoolState storage self, ModifyLiquidityParams memory pa
 
             // `>` and `>=` are logically equivalent here but `>=` is cheaper
             if (liquidityDelta >= 0) {
-                uint128 maxLiquidityPerTick = tickSpacingToMaxLiquidityPerTick(params.tickSpacing);
+                uint128 maxLiquidityPerTick = tickSpacingToMaxLiquidityPerTick(tickSpacing);
                 if (state.liquidityGrossAfterLower > maxLiquidityPerTick) {
                     TickLiquidityOverflow.selector.revertWith(tickLower);
                 }
@@ -352,10 +355,10 @@ function modifyLiquidity(PoolState storage self, ModifyLiquidityParams memory pa
             }
 
             if (state.flippedLower) {
-                flipTick(self.tickBitmap, tickLower, params.tickSpacing);
+                flipTick(self.tickBitmap, tickLower, tickSpacing);
             }
             if (state.flippedUpper) {
-                flipTick(self.tickBitmap, tickUpper, params.tickSpacing);
+                flipTick(self.tickBitmap, tickUpper, tickSpacing);
             }
         }
 

@@ -9,6 +9,7 @@ import {PoolState} from "./types/PoolState.sol";
 import {SafeCast} from "./libraries/SafeCast.sol";
 import {initialPoolState} from "./types/Slot0.sol";
 import {ModifyLiquidityParams} from "./types/ModifyLiquidityParams.sol";
+import {ModifyLiquidityOperation} from "./types/PoolOperation.sol";
 import {SwapParams} from "./types/SwapParams.sol";
 import {SwapResult} from "./types/SwapResult.sol";
 import {BalanceDelta, toBalanceDelta} from "./types/BalanceDelta.sol";
@@ -16,7 +17,7 @@ import {Lock} from "./libraries/Lock.sol";
 import {NonzeroDeltaCount} from "./libraries/NonzeroDeltaCount.sol";
 import {CustomRevert} from "./libraries/CustomRevert.sol";
 import {IUnlockCallback} from "./callback/IUnlockCallback.sol";
-import {NoDelegateCall} from "../lib/hedera-smart-contracts/contracts/base/NoDelegateCall.sol";
+import {NoDelegateCall} from "./NoDelegateCall.sol";
 
 using CustomRevert for bytes4;
 using CurrencyDelta for Currency;
@@ -78,8 +79,16 @@ contract PoolManager is IPoolManager, NoDelegateCall {
         PoolId id = key.toId();
         PoolState storage state = _getPool(id);
 
+        ModifyLiquidityOperation memory op = ModifyLiquidityOperation({
+            owner: msg.sender,
+            tickLower: params.tickLower,
+            tickUpper: params.tickUpper,
+            liquidityDelta: int128(params.liquidityDelta),
+            tickSpacing: key.tickSpacing,
+            salt: params.salt
+        });
         BalanceDelta principalDelta;
-        (principalDelta, feesAccrued) = state.modifyLiquidity(params, hookData);
+        (principalDelta, feesAccrued) = state.modifyLiquidity(op, hookData);
 
         // Fee delta and principal delta are both accrued to the caller
         callerDelta = toBalanceDelta(
@@ -88,10 +97,10 @@ contract PoolManager is IPoolManager, NoDelegateCall {
         emit ModifyLiquidity(
             id,
             msg.sender,
-            params.owner,
-            params.tickLower,
-            params.tickUpper,
-            params.liquidityDelta,
+            op.owner,
+            op.tickLower,
+            op.tickUpper,
+            op.liquidityDelta,
             callerDelta.amount0(),
             callerDelta.amount1()
         );
@@ -246,5 +255,10 @@ contract PoolManager is IPoolManager, NoDelegateCall {
     /// @notice Returns the pool state storage for a given pool id (for internal use / protocol fees pattern)
     function _getPool(PoolId id) internal view returns (PoolState storage) {
         return _pools[id];
+    }
+
+    /// @inheritdoc IPoolManager
+    function currencyDelta(address target, Currency currency) external view override returns (int256) {
+        return CurrencyDelta.getDelta(currency, target);
     }
 }

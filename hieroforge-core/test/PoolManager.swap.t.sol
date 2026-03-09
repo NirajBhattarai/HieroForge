@@ -168,11 +168,9 @@ contract PoolManagerSwapTest is Test, Deployers {
         key = PoolKey({currency0: c0, currency1: c1, fee: 3000, tickSpacing: TICK_SPACING, hooks: address(0)});
         (key, id) = initPool(c0, c1, 3000, TICK_SPACING, SQRT_PRICE_1_1);
 
-        LIQUIDITY_PARAMS.owner = address(modifyLiquidityRouter);
-        LIQUIDITY_PARAMS.liquidityDelta = int128(LIQUIDITY_PER_RANGE);
+        LIQUIDITY_PARAMS.liquidityDelta = int256(uint256(LIQUIDITY_PER_RANGE));
         LIQUIDITY_PARAMS.tickLower = -180;
         LIQUIDITY_PARAMS.tickUpper = 180;
-        LIQUIDITY_PARAMS.tickSpacing = TICK_SPACING;
         mock0.approve(address(modifyLiquidityRouter), type(uint256).max);
         mock1.approve(address(modifyLiquidityRouter), type(uint256).max);
         IERC20(Currency.unwrap(c0)).transfer(address(modifyLiquidityRouter), 1e17);

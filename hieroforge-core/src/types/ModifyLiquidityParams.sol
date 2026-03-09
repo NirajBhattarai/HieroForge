@@ -1,17 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.13;
 
-/// @notice Parameters for modifyLiquidity (Uniswap v4-style)
+/// @notice Parameters for modifyLiquidity (taken as argument by modifyLiquidity)
 struct ModifyLiquidityParams {
-    // the address that owns the position
-    address owner;
     // the lower and upper tick of the position
     int24 tickLower;
     int24 tickUpper;
-    // any change in liquidity
-    int128 liquidityDelta;
-    // the spacing between ticks
-    int24 tickSpacing;
-    // used to distinguish positions of the same owner, at the same tick range
+    // how to modify the liquidity
+    int256 liquidityDelta;
+    // a value to set if you want unique liquidity positions at the same range
     bytes32 salt;
 }

@@ -122,4 +122,7 @@ interface IPoolManager {
 
     /// @notice Debit sender's delta and transfer tokens from manager to recipient
     function take(Currency currency, address to, uint256 amount) external;
+
+    /// @notice Returns the balance delta for a target address and currency (for periphery settle/take)
+    function currencyDelta(address target, Currency currency) external view returns (int256);
 }

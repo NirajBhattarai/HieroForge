@@ -13,3 +13,9 @@
 [submodule "hieroforge-periphery/lib/forge-std"]
 	path = hieroforge-periphery/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
+[submodule "hieroforge-periphery/lib/solmate"]
+	path = hieroforge-periphery/lib/solmate
+	url = https://github.com/transmissions11/solmate
+[submodule "hieroforge-periphery/lib/permit2"]
+	path = hieroforge-periphery/lib/permit2
+	url = https://github.com/Uniswap/permit2

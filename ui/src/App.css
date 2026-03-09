@@ -225,6 +225,43 @@
   gap: 14px;
 }
 
+.token-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.token-select-wrap .token-select {
+  border: none;
+  background: transparent;
+  padding: 4px 0;
+  min-width: 80px;
+}
+
+.token-symbol-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.token-row--with-icon {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .token-input {
   flex: 1;
   min-width: 0;
@@ -346,37 +383,308 @@
   box-shadow: 0 0 0 2px var(--accent-muted);
 }
 
-/* ========== Pool list ========== */
+/* ========== Pool tab ========== */
+.card--pool,
+.card--pool-list,
+.card--pool-create {
+  max-width: 520px;
+}
+
+.card--pool-create {
+  max-width: 560px;
+}
+
+.pool-list-subtitle {
+  margin-bottom: 20px;
+}
+
+.pool-list--grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.pool-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, transform 0.1s;
+}
+
+.pool-card:hover {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+  transform: translateY(-1px);
+}
+
+.pool-card-icons {
+  display: flex;
+  align-items: center;
+}
+
+.pool-card-icons .token-icon:last-child {
+  margin-left: -12px;
+}
+
+.pool-card-pair {
+  font-weight: 700;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.pool-card-fee {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.primary-btn--create-pool {
+  width: 100%;
+}
+
+.back-btn {
+  margin-bottom: 16px;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.back-btn:hover {
+  color: var(--accent-hover);
+}
+
+.create-section {
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.create-section:last-of-type {
+  border-bottom: none;
+}
+
+.create-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 12px 0;
+}
+
+.input-paste {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8125rem;
+}
+
+.strategy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.strategy-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 16px;
+  text-align: left;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.strategy-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.strategy-label {
+  font-weight: 700;
+  color: #fff;
+  font-size: 0.9375rem;
+}
+
+.strategy-value {
+  font-size: 0.8125rem;
+  color: var(--accent);
+}
+
+.strategy-desc {
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.price-range-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.price-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.price-input-group label {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.price-input-wrap {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  overflow: hidden;
+}
+
+.price-adj-btn {
+  width: 40px;
+  height: 44px;
+  border: none;
+  background: var(--bg-elevated);
+  color: var(--muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.price-adj-btn:hover {
+  background: var(--border);
+  color: #fff;
+}
+
+.price-input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 1rem;
+  text-align: center;
+}
+
+.price-input:focus {
+  outline: none;
+}
+
+.price-pct {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.create-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.primary-btn--secondary {
+  background: var(--bg-elevated);
+  color: #fff;
+  border: 1px solid var(--border);
+}
+
+.primary-btn--secondary:hover:not(:disabled) {
+  background: var(--border);
+  border-color: var(--border-focus);
+}
+
+.pool-section {
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pool-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.pool-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 8px 0;
+}
+
 .pool-list {
   list-style: none;
   padding: 0;
-  margin: 0;
+  margin: 12px 0 0 0;
 }
 
 .pool-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 18px 20px;
+  gap: 14px;
+  padding: 14px 18px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   background: var(--bg-input);
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background 0.2s;
 }
 
 .pool-item:hover {
   border-color: var(--border-focus);
 }
 
+.pool-item--clickable {
+  cursor: pointer;
+}
+
+.pool-item--clickable:hover {
+  background: var(--bg-elevated);
+  border-color: var(--accent);
+}
+
+.pool-item-icons {
+  display: flex;
+  align-items: center;
+  gap: -8px;
+}
+
+.pool-item-icons .token-icon:last-child {
+  margin-left: -10px;
+}
+
+.pool-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .pool-pair {
   font-weight: 700;
   color: #fff;
+  display: block;
 }
 
 .pool-meta {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   color: var(--muted);
+  margin-top: 2px;
 }
 
 /* ========== Helper text ========== */
@@ -407,6 +715,68 @@
 
 .create-pool-success a {
   color: var(--accent);
+}
+
+/* ========== Add Liquidity (Uniswap v4 style) ========== */
+.card--liquidity .card-title {
+  margin-bottom: 8px;
+}
+
+.liquidity-subtitle {
+  margin-bottom: 20px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.liquidity-token-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.liquidity-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.liquidity-pair-sep {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.liquidity-range-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.liquidity-range-input {
+  flex: 1;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: #fff;
+  font-size: 1rem;
+}
+
+.liquidity-range-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.token-symbol {
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
 /* ========== Liquidity hint ========== */

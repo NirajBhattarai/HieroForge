@@ -19,7 +19,7 @@ HieroForge/
 ├── ui/                    # Vite + React frontend
 │   ├── src/
 │   │   ├── context/       # HashPackContext (wallet connect)
-│   │   └── App.jsx
+│   │   └── App.tsx
 │   └── package.json
 ├── .env.example           # Root env (e.g. deploy keys)
 └── README.md
@@ -86,6 +86,7 @@ Then install the [HashPack](https://www.hashpack.app/) browser extension and cli
 | Build periphery (swap helpers) | `cd hieroforge-periphery && forge build` |
 | Test core (HTS token creation) | `cd hieroforge-core && forge test` |
 | Test periphery | `cd hieroforge-periphery && forge test` |
+| Test periphery V4Router swaps (HTS) | `cd hieroforge-periphery && forge test --match-contract V4RouterSwapTest --ffi` |
 | HTS tests on forked testnet | `cd hieroforge-core && forge test --match-contract CreateHtsTokenTest --fork-url https://testnet.hashio.io/api` |
 | **Create HTS token** (testnet or local) | `cd hieroforge-core && source ../.env 2>/dev/null; forge script script/CreateHtsToken.s.sol:CreateHtsTokenScript --rpc-url ${HEDERA_RPC_URL:-https://testnet.hashio.io/api} --broadcast --private-key $PRIVATE_KEY` |
 | Run UI dev server | `cd ui && npm run dev` |
