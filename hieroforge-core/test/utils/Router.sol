@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.13;
 
-import {IPoolManager} from "./interfaces/IPoolManager.sol";
-import {IUnlockCallback} from "./callback/IUnlockCallback.sol";
-import {PoolKey} from "./types/PoolKey.sol";
-import {ModifyLiquidityParams} from "./types/ModifyLiquidityParams.sol";
-import {SwapParams} from "./types/SwapParams.sol";
-import {BalanceDelta} from "./types/BalanceDelta.sol";
-import {Currency} from "./types/Currency.sol";
-import {IERC20Minimal} from "./interfaces/IERC20Minimal.sol";
+import {IPoolManager} from "../../src/interfaces/IPoolManager.sol";
+import {IUnlockCallback} from "../../src/callback/IUnlockCallback.sol";
+import {PoolKey} from "../../src/types/PoolKey.sol";
+import {ModifyLiquidityParams} from "../../src/types/ModifyLiquidityParams.sol";
+import {SwapParams} from "../../src/types/SwapParams.sol";
+import {BalanceDelta} from "../../src/types/BalanceDelta.sol";
+import {Currency} from "../../src/types/Currency.sol";
+import {IERC20Minimal} from "../../src/interfaces/IERC20Minimal.sol";
 
 /// @notice Router that calls modifyLiquidity or swap from within the unlock callback (Uniswap v4-style).
 /// Implements settlement and transfer: settle negative deltas, take positive deltas.
+/// Used only for tests and testnet scripts.
 contract Router is IUnlockCallback {
     IPoolManager public immutable manager;
 

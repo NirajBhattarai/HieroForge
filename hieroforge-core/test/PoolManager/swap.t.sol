@@ -2,19 +2,19 @@
 pragma solidity ^0.8.13;
 
 import {Test} from "forge-std/Test.sol";
-import {PoolManager} from "../src/PoolManager.sol";
-import {IPoolManager} from "../src/interfaces/IPoolManager.sol";
-import {PoolKey} from "../src/types/PoolKey.sol";
-import {PoolId} from "../src/types/PoolId.sol";
-import {Currency} from "../src/types/Currency.sol";
-import {BalanceDelta} from "../src/types/BalanceDelta.sol";
-import {ModifyLiquidityParams} from "../src/types/ModifyLiquidityParams.sol";
-import {SwapParams} from "../src/types/SwapParams.sol";
-import {TickMath} from "../src/libraries/TickMath.sol";
-import {Deployers} from "./utils/Deployers.sol";
-import {MockERC20} from "./utils/MockERC20.sol";
+import {PoolManager} from "../../src/PoolManager.sol";
+import {IPoolManager} from "../../src/interfaces/IPoolManager.sol";
+import {PoolKey} from "../../src/types/PoolKey.sol";
+import {PoolId} from "../../src/types/PoolId.sol";
+import {Currency} from "../../src/types/Currency.sol";
+import {BalanceDelta} from "../../src/types/BalanceDelta.sol";
+import {ModifyLiquidityParams} from "../../src/types/ModifyLiquidityParams.sol";
+import {SwapParams} from "../../src/types/SwapParams.sol";
+import {TickMath} from "../../src/libraries/TickMath.sol";
+import {Deployers} from "../utils/Deployers.sol";
+import {MockERC20} from "../utils/MockERC20.sol";
 import {IERC20} from "hedera-forking/IERC20.sol";
-import {IUnlockCallback} from "../src/callback/IUnlockCallback.sol";
+import {IUnlockCallback} from "../../src/callback/IUnlockCallback.sol";
 
 /// @notice Tests for PoolManager.swap with delta accounting (Uniswap v4-style).
 /// Swap delta is accounted to msg.sender; caller must settle/take inside unlock or subsequent unlock.

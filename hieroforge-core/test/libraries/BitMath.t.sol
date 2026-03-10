@@ -19,7 +19,8 @@ contract BitMathTest is Test {
 
     // --- Zero (revert) ---
     function test_MostSignificantBit_RevertWhen_Zero() public {
-        vm.expectRevert("BitMath: zero has no MSB");
+        // BitMath uses require(x > 0) which reverts with no data
+        vm.expectRevert();
         harness.mostSignificantBit(0);
     }
 

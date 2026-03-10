@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {IPoolManager} from "../src/interfaces/IPoolManager.sol";
-import {Router} from "../src/Router.sol";
+import {Router} from "../test/utils/Router.sol";
 
 /// @notice Deploys only the Router (requires an existing PoolManager).
 /// Usage:

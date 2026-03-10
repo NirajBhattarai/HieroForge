@@ -7,7 +7,6 @@ import {PoolId} from "./types/PoolId.sol";
 import {Currency, CurrencyDelta, CurrencyLibrary} from "./types/Currency.sol";
 import {PoolState} from "./types/PoolState.sol";
 import {SafeCast} from "./libraries/SafeCast.sol";
-import {initialPoolState} from "./types/Slot0.sol";
 import {ModifyLiquidityParams} from "./types/ModifyLiquidityParams.sol";
 import {ModifyLiquidityOperation} from "./types/PoolOperation.sol";
 import {SwapParams} from "./types/SwapParams.sol";
@@ -41,8 +40,6 @@ contract PoolManager is IPoolManager, NoDelegateCall {
         _;
     }
 
-    constructor() {}
-
     /// @inheritdoc IPoolManager
     /// @dev Pools accept any currency combination: ERC20-ERC20, ERC20-HTS, or HTS-HTS. Use TokenClassifier to identify token types.
     function initialize(PoolKey memory key, uint160 sqrtPriceX96)
@@ -58,9 +55,7 @@ contract PoolManager is IPoolManager, NoDelegateCall {
         key.validate();
         PoolId id = key.toId();
         PoolState storage state = _getPool(id);
-        if (state.slot0.sqrtPriceX96() != 0) revert PoolAlreadyInitialized();
-        (state.slot0, tick, state.feeGrowthGlobal0X128, state.feeGrowthGlobal1X128, state.liquidity) =
-            initialPoolState(sqrtPriceX96, key.fee);
+        tick = state.initialize(sqrtPriceX96, key.fee);
         emit Initialize(id, key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks, sqrtPriceX96, tick);
     }
 

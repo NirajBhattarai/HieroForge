@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {htsSetup} from "hedera-forking/htsSetup.sol";
-import {Router} from "../src/Router.sol";
+import {Router} from "../test/utils/Router.sol";
 import {PoolKey} from "../src/types/PoolKey.sol";
 import {ModifyLiquidityParams} from "../src/types/ModifyLiquidityParams.sol";
 import {Currency} from "../src/types/Currency.sol";

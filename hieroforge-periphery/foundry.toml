@@ -4,10 +4,11 @@ out = "out"
 libs = ["lib"]
 remappings = [
     "hieroforge-core/=../hieroforge-core/src/",
+    "hieroforge-core-test/=../hieroforge-core/test/",
     "hedera-forking/=../hieroforge-core/lib/hedera-forking/contracts/",
     "solmate/=lib/solmate/src/"
 ]
-allow_paths = ["../hieroforge-core/src", "../hieroforge-core/lib", "src", "lib", "lib/solmate"]
+allow_paths = ["../hieroforge-core/src", "../hieroforge-core/test", "../hieroforge-core/lib", "src", "lib", "lib/solmate"]
 
 evm_version = "cancun"
 via_ir = true

@@ -2,12 +2,22 @@
 pragma solidity ^0.8.13;
 
 import {Test} from "forge-std/Test.sol";
-import {PoolState, checkPoolInitialized, modifyLiquidity, getLiquidity} from "../../src/types/PoolState.sol";
+import {
+    PoolState,
+    checkPoolInitialized,
+    modifyLiquidity,
+    getLiquidity,
+    TickMisaligned,
+    TicksMisordered,
+    TickLowerOutOfBounds,
+    TickUpperOutOfBounds
+} from "../../src/types/PoolState.sol";
 import {initialSlot0} from "../../src/types/Slot0.sol";
 import {IPoolManager} from "../../src/interfaces/IPoolManager.sol";
 import {ModifyLiquidityParams} from "../../src/types/ModifyLiquidityParams.sol";
 import {ModifyLiquidityOperation} from "../../src/types/PoolOperation.sol";
 import {BalanceDelta} from "../../src/types/BalanceDelta.sol";
+import {MIN_TICK, MAX_TICK} from "../../src/constants.sol";
 
 // TickMath bounds (same as TickMath.sol) for boundary tests
 uint160 constant MIN_SQRT_PRICE = 4295128739;
@@ -134,12 +144,8 @@ contract PoolStateTest is Test {
 
     function test_ModifyLiquidity_WithNonEmptyHookData_DoesNotRevert() public {
         helper.setSlot0Initialized(79228162514264337593543950336);
-        ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: 0,
-            salt: keccak256("salt")
-        });
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 0, salt: keccak256("salt")});
         helper.modifyLiquidityExternal(params, address(0x1), 60, "hook data");
     }
 
@@ -148,6 +154,62 @@ contract PoolStateTest is Test {
         ModifyLiquidityParams memory params =
             ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 0, salt: bytes32(0)});
         helper.modifyLiquidityExternal(params, address(this), 60, "");
+    }
+
+    // ========== modifyLiquidity + checkTicks: tick order, bounds, alignment ==========
+
+    function test_ModifyLiquidity_RevertsWhen_TicksMisordered() public {
+        helper.setSlot0Initialized(79228162514264337593543950336);
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: 60, tickUpper: 0, liquidityDelta: 0, salt: bytes32(0)});
+        vm.expectRevert(abi.encodeWithSelector(TicksMisordered.selector, int24(60), int24(0)));
+        helper.modifyLiquidityExternal(params, address(this), 60, "");
+    }
+
+    function test_ModifyLiquidity_RevertsWhen_TickLowerOutOfBounds() public {
+        helper.setSlot0Initialized(79228162514264337593543950336);
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: MIN_TICK - 1, tickUpper: 120, liquidityDelta: 0, salt: bytes32(0)});
+        vm.expectRevert(abi.encodeWithSelector(TickLowerOutOfBounds.selector, MIN_TICK - 1));
+        helper.modifyLiquidityExternal(params, address(this), 60, "");
+    }
+
+    function test_ModifyLiquidity_RevertsWhen_TickUpperOutOfBounds() public {
+        helper.setSlot0Initialized(79228162514264337593543950336);
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: MAX_TICK + 1, liquidityDelta: 0, salt: bytes32(0)});
+        vm.expectRevert(abi.encodeWithSelector(TickUpperOutOfBounds.selector, MAX_TICK + 1));
+        helper.modifyLiquidityExternal(params, address(this), 60, "");
+    }
+
+    function test_ModifyLiquidity_RevertsWhen_TickMisaligned_lower() public {
+        helper.setSlot0Initialized(79228162514264337593543950336);
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -119, tickUpper: 120, liquidityDelta: 0, salt: bytes32(0)});
+        vm.expectRevert(abi.encodeWithSelector(TickMisaligned.selector, int24(-119), int24(60)));
+        helper.modifyLiquidityExternal(params, address(this), 60, "");
+    }
+
+    function test_ModifyLiquidity_RevertsWhen_TickMisaligned_upper() public {
+        helper.setSlot0Initialized(79228162514264337593543950336);
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 121, liquidityDelta: 0, salt: bytes32(0)});
+        vm.expectRevert(abi.encodeWithSelector(TickMisaligned.selector, int24(121), int24(60)));
+        helper.modifyLiquidityExternal(params, address(this), 60, "");
+    }
+
+    /// @notice Add liquidity with positive L: pool active liquidity and principal delta are updated (tick 0 inside [-120,120])
+    function test_ModifyLiquidity_WithPositiveL_UpdatesPoolLiquidityAndReturnsNonZeroDelta() public {
+        helper.setSlot0Initialized(79228162514264337593543950336); // tick 0
+        assertEq(helper.getLiquidityExternal(), 0);
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1000, salt: bytes32(0)});
+        (BalanceDelta callerDelta, BalanceDelta feesAccrued) =
+            helper.modifyLiquidityExternal(params, address(this), 60, "");
+        assertEq(helper.getLiquidityExternal(), 1000, "active liquidity should be 1000");
+        assertTrue(callerDelta.amount0() != 0 || callerDelta.amount1() != 0, "principal delta non-zero");
+        assertEq(feesAccrued.amount0(), 0);
+        assertEq(feesAccrued.amount1(), 0);
     }
 
     // ========== getLiquidity ==========

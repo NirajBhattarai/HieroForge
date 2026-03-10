@@ -79,13 +79,13 @@ forge test --gas-report
 **Run only PoolManager tests:**
 
 ```bash
-forge test --match-path test/PoolManager.t.sol
+forge test --match-path test/PoolManager/
 ```
 
 **Run HTS / modify-liquidity tests** (use hedera-forking emulation at `0x167`; requires FFI):
 
 ```bash
-forge test --match-path test/PoolManager.modifyLiquidity.t.sol --ffi
+forge test --match-path test/PoolManager/modifyLiquidity.t.sol --ffi
 ```
 
 **Format code:**

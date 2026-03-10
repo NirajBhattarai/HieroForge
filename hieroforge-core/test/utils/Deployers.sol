@@ -10,7 +10,7 @@ import {Currency} from "../../src/types/Currency.sol";
 import {ModifyLiquidityParams} from "../../src/types/ModifyLiquidityParams.sol";
 import {TickMath} from "../../src/libraries/TickMath.sol";
 import {Constants} from "./Constants.sol";
-import {Router} from "../../src/Router.sol";
+import {Router} from "./Router.sol";
 import {htsSetup} from "hedera-forking/htsSetup.sol";
 import {IHederaTokenService} from "hedera-forking/IHederaTokenService.sol";
 import {HederaResponseCodes} from "hedera-forking/HederaResponseCodes.sol";
@@ -31,16 +31,10 @@ contract Deployers is Test {
 
     // Default liquidity params for add / remove (4-field; owner = msg.sender, tickSpacing from PoolKey)
     ModifyLiquidityParams public LIQUIDITY_PARAMS = ModifyLiquidityParams({
-        tickLower: -120,
-        tickUpper: 120,
-        liquidityDelta: int256(uint256(1e18)),
-        salt: bytes32(0)
+        tickLower: -120, tickUpper: 120, liquidityDelta: int256(uint256(1e18)), salt: bytes32(0)
     });
     ModifyLiquidityParams public REMOVE_LIQUIDITY_PARAMS = ModifyLiquidityParams({
-        tickLower: -120,
-        tickUpper: 120,
-        liquidityDelta: -int256(uint256(1e18)),
-        salt: bytes32(0)
+        tickLower: -120, tickUpper: 120, liquidityDelta: -int256(uint256(1e18)), salt: bytes32(0)
     });
 
     // Global state
@@ -61,7 +55,7 @@ contract Deployers is Test {
     }
 
     /// @notice Deploy two HTS fungible tokens via HTS precompile at 0x167; use this as treasury. Sort by address (currency0 < currency1).
-    /// @dev Requires htsSetup() and ffi. Run: forge test --match-path test/PoolManager.modifyLiquidity.t.sol --ffi
+    /// @dev Requires htsSetup() and ffi. Run: forge test --match-path test/PoolManager/modifyLiquidity.t.sol --ffi
     function deployMintAndApprove2CurrenciesHTS() internal returns (Currency, Currency) {
         htsSetup();
         vm.deal(address(this), 1 ether);

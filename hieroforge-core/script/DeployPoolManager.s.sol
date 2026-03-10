@@ -5,7 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {PoolManager} from "../src/PoolManager.sol";
 import {IPoolManager} from "../src/interfaces/IPoolManager.sol";
-import {Router} from "../src/Router.sol";
+import {Router} from "../test/utils/Router.sol";
 
 /// @notice Deploys PoolManager and Router to the configured network.
 /// Usage:

@@ -150,7 +150,7 @@ verify_router() {
     if [[ $r -ne 0 ]]; then
       forge verify-contract \
         "$ROUTER_ADDRESS" \
-        src/Router.sol:Router \
+        test/utils/Router.sol:Router \
         --chain-id "$CHAIN_ID" \
         --verifier sourcify \
         --verifier-url "$HEDERA_VERIFIER_URL" \
@@ -167,7 +167,7 @@ verify_router() {
     NEED_MANUAL=1
   fi
   if [[ -n "$NEED_MANUAL" ]] || [[ -n "$VERIFY_MANUAL" ]]; then
-    prepare_manual_bundle "Router" "src/Router.sol" || true
+    prepare_manual_bundle "Router" "test/utils/Router.sol" || true
   fi
   echo ""
 }

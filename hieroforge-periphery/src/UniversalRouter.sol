@@ -53,15 +53,20 @@ contract UniversalRouter is IUniversalRouter, V4Router {
     }
 
     /// @notice Dispatches a single command with its input
+    /// @dev Uses low-level call to get revert data; bubbles revert via _revertWithBytes (same pattern as Multicall)
     function dispatch(bytes1 command, bytes calldata input) internal returns (bool success, bytes memory output) {
         uint256 commandType = uint8(command & Commands.COMMAND_TYPE_MASK);
         success = true;
 
         if (commandType == Commands.V4_SWAP) {
-            try this.executeV4Swap(input) {}
-            catch (bytes memory reason) {
+            (bool ok, bytes memory data) =
+                address(this).call(abi.encodeWithSelector(this.executeV4Swap.selector, input));
+            if (!ok) {
+                if (successRequired(command)) {
+                    _revertWithBytes(data);
+                }
                 success = false;
-                output = reason;
+                output = data;
             }
             return (success, output);
         }
@@ -69,9 +74,19 @@ contract UniversalRouter is IUniversalRouter, V4Router {
         revert InvalidCommandType(commandType);
     }
 
-    /// @dev External call used so we can try/catch from dispatch (same contract)
+    /// @dev Bubbles revert data from a failed subcall (same pattern as Multicall_v4)
+    function _revertWithBytes(bytes memory result) private pure {
+        if (result.length > 0) {
+            assembly {
+                revert(add(result, 0x20), mload(result))
+            }
+        }
+        revert("UniversalRouter: command failed");
+    }
+
+    /// @dev External so dispatch can self-call and get revert data; must only be called by this contract
     function executeV4Swap(bytes calldata input) external {
-        require(msg.sender == address(this), "UniversalRouter: internal only");
+        if (msg.sender != address(this)) revert("UniversalRouter: internal only");
         _executeV4Swap(input);
     }
 

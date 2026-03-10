@@ -48,10 +48,11 @@ contract TickBitmapTest is Test {
 
         // // --- lte=false: next initialized tick > starting tick (search "right" / higher tick) ---
 
-        // // From tick 0: next initialized above 0 is 120.
+        // From tick 1 with lte=false: next initialized tick to the right. Compressed 1 is in word 0;
+        // initialized ticks in that word include 60 (bit 1) and 120 (bit 2). Next to the right of 1 is 60.
         (int24 next, bool initialized) = tickBitmap.nextInitializedTickWithinOneWord(1, tickSpacing, false);
         assertTrue(initialized);
-        assertEq(next, 120);
+        assertEq(next, 60);
 
         // // From tick 60: next above is 120.
         // (next, initialized) = tickBitmap.nextInitializedTickWithinOneWord(60, tickSpacing, false);

@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {Test} from "forge-std/Test.sol";
 import {PoolManager} from "hieroforge-core/PoolManager.sol";
 import {IPoolManager} from "hieroforge-core/interfaces/IPoolManager.sol";
-import {Router} from "hieroforge-core/Router.sol";
+import {Router} from "hieroforge-core-test/utils/Router.sol";
 import {PoolKey} from "hieroforge-core/types/PoolKey.sol";
 import {PoolId} from "hieroforge-core/types/PoolId.sol";
 import {Currency} from "hieroforge-core/types/Currency.sol";
