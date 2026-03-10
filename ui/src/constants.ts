@@ -15,6 +15,9 @@ export const HEDERA_TESTNET = {
 export interface TokenOption {
   id: string
   symbol: string
+  address?: string
+  decimals?: number
+  name?: string
 }
 
 export const DEFAULT_TOKENS: TokenOption[] = [

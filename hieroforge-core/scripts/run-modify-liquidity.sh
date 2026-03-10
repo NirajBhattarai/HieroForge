@@ -30,3 +30,17 @@ forge script script/ModifyLiquidityTestnet.s.sol:ModifyLiquidityTestnetScript \
   --private-key "$PRIVATE_KEY" \
   --ffi \
   --skip-simulation
+
+# ── Auto-register pool in DynamoDB (idempotent upsert) ──
+UI_DIR="$(cd "$REPO_ROOT/../ui" 2>/dev/null && pwd)" || UI_DIR=""
+if [[ -n "$UI_DIR" && -f "$UI_DIR/scripts/register-pool.cjs" ]]; then
+  POOL_FEE="${FEE:-3000}"
+  POOL_TICK_SPACING="${TICK_SPACING:-60}"
+  node "$UI_DIR/scripts/register-pool.cjs" \
+    --currency0 "$CURRENCY0_ADDRESS" \
+    --currency1 "$CURRENCY1_ADDRESS" \
+    --fee "$POOL_FEE" \
+    --tickSpacing "$POOL_TICK_SPACING" \
+    --symbol0 "${SYMBOL0:-}" \
+    --symbol1 "${SYMBOL1:-}" 2>/dev/null || true
+fi

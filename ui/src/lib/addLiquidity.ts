@@ -1,4 +1,4 @@
-import { encodeAbiParameters, keccak256, type Address } from 'viem'
+import { encodeAbiParameters, keccak256, getAddress, type Address } from 'viem'
 import { MINT_POSITION_ACTION, SQRT_PRICE_1_1 } from '../abis/PositionManager'
 
 const HOOKS_ZERO = '0x0000000000000000000000000000000000000000' as const
@@ -18,8 +18,11 @@ export function buildPoolKey(
   fee: number,
   tickSpacing: number
 ): PoolKey {
-  const currency0 = token0.toLowerCase() < token1.toLowerCase() ? token0 : token1
-  const currency1 = token0.toLowerCase() < token1.toLowerCase() ? token1 : token0
+  // Checksummed addresses required by viem's encodeAbiParameters
+  const a = getAddress(token0)
+  const b = getAddress(token1)
+  const currency0 = a.toLowerCase() < b.toLowerCase() ? a : b
+  const currency1 = a.toLowerCase() < b.toLowerCase() ? b : a
   return {
     currency0: currency0 as Address,
     currency1: currency1 as Address,

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { HashPackProvider } from '@/context/HashPackContext'
+import Providers from './Providers'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -15,9 +15,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <HashPackProvider>
+        <Providers>
           {children}
-        </HashPackProvider>
+        </Providers>
       </body>
     </html>
   )

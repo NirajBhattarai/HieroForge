@@ -3,6 +3,27 @@ import type { Abi } from 'viem'
 export const ERC20Abi = [
   {
     type: 'function',
+    name: 'name',
+    inputs: [],
+    outputs: [{ name: '', type: 'string', internalType: 'string' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'symbol',
+    inputs: [],
+    outputs: [{ name: '', type: 'string', internalType: 'string' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'decimals',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint8', internalType: 'uint8' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'approve',
     inputs: [
       { name: 'spender', type: 'address', internalType: 'address' },

@@ -19,12 +19,17 @@ export interface PoolRecord {
 
 const TABLE_NAME = process.env.DYNAMODB_TABLE_POOLS ?? 'hieroforge-pools'
 
+function isDynamoConfigured(): boolean {
+  return !!(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY)
+}
+
 function getClient(): DynamoDBClient {
   const region = process.env.AWS_REGION ?? 'us-east-1'
   return new DynamoDBClient({ region })
 }
 
 export async function listPools(): Promise<PoolRecord[]> {
+  if (!isDynamoConfigured()) return []
   const client = getClient()
   const result = await client.send(
     new ScanCommand({
@@ -39,6 +44,7 @@ export async function listPools(): Promise<PoolRecord[]> {
 }
 
 export async function getPoolById(poolId: string): Promise<PoolRecord | null> {
+  if (!isDynamoConfigured()) return null
   const client = getClient()
   const result = await client.send(
     new GetItemCommand({
@@ -51,6 +57,10 @@ export async function getPoolById(poolId: string): Promise<PoolRecord | null> {
 }
 
 export async function savePool(pool: PoolRecord): Promise<void> {
+  if (!isDynamoConfigured()) {
+    console.warn('DynamoDB not configured – pool not persisted. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.')
+    return
+  }
   const client = getClient()
   const record: PoolRecord = {
     ...pool,

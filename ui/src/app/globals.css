@@ -74,6 +74,16 @@ a:hover {
   color: var(--accent-hover);
 }
 
+/* WalletConnect modal: prevent invisible overlay from blocking page interactions */
+wcm-modal:not([open]) {
+  display: none !important;
+  pointer-events: none !important;
+}
+w3m-modal:not([open]) {
+  display: none !important;
+  pointer-events: none !important;
+}
+
 /* Layout */
 .app {
   min-height: 100vh;
