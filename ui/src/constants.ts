@@ -82,21 +82,21 @@ export function getTokenDecimals(symbol: string): number {
 export const DEFAULT_FEE = 3000
 export const DEFAULT_TICK_SPACING = 60
 
-// Contract addresses (from env)
+// Contract addresses (from env) – Next.js NEXT_PUBLIC_* available on client and server
 export function getPoolManagerAddress(): string {
-  return (import.meta.env?.VITE_POOL_MANAGER_ADDRESS ?? '').trim()
+  return (process.env.NEXT_PUBLIC_POOL_MANAGER_ADDRESS ?? '').trim()
 }
 
-/** Quoter contract address loaded from .env (VITE_QUOTER_ADDRESS). */
+/** Quoter contract address (NEXT_PUBLIC_QUOTER_ADDRESS). */
 export function getQuoterAddress(): string {
-  return (import.meta.env?.VITE_QUOTER_ADDRESS ?? '').trim()
+  return (process.env.NEXT_PUBLIC_QUOTER_ADDRESS ?? '').trim()
 }
 
-/** PositionManager contract address (VITE_POSITION_MANAGER_ADDRESS). Required for Add Liquidity. */
+/** PositionManager (NEXT_PUBLIC_POSITION_MANAGER_ADDRESS). Required for Add Liquidity. */
 export function getPositionManagerAddress(): string {
-  return (import.meta.env?.VITE_POSITION_MANAGER_ADDRESS ?? '').trim()
+  return (process.env.NEXT_PUBLIC_POSITION_MANAGER_ADDRESS ?? '').trim()
 }
 
 export function getChainId(): number {
-  return Number(import.meta.env?.VITE_CHAIN_ID ?? '296')
+  return Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? '296')
 }

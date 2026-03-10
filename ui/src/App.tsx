@@ -1,20 +1,22 @@
+'use client'
+
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { createWalletClient, createPublicClient, custom, http, parseUnits, formatUnits, encodeFunctionData } from 'viem'
 import './App.css'
-import { useHashPack } from './context/HashPackContext'
-import { PoolManagerAbi, SQRT_PRICE_PRESETS } from './abis/PoolManager'
-import { PositionManagerAbi, SQRT_PRICE_1_1 } from './abis/PositionManager'
-import { ERC20Abi } from './abis/ERC20'
-import { quoteExactInputSingle, NotEnoughLiquidityError } from './lib/quote'
-import { getFriendlyErrorMessage } from './lib/errors'
-import { ErrorMessage } from './components/ErrorMessage'
-import { TokenIcon } from './components/TokenIcon'
+import { useHashPack } from '@/context/HashPackContext'
+import { PoolManagerAbi, SQRT_PRICE_PRESETS } from '@/abis/PoolManager'
+import { PositionManagerAbi, SQRT_PRICE_1_1 } from '@/abis/PositionManager'
+import { ERC20Abi } from '@/abis/ERC20'
+import { quoteExactInputSingle, NotEnoughLiquidityError } from '@/lib/quote'
+import { getFriendlyErrorMessage } from '@/lib/errors'
+import { ErrorMessage } from '@/components/ErrorMessage'
+import { TokenIcon } from '@/components/TokenIcon'
 import {
   buildPoolKey,
   getPoolId,
   encodeUnlockDataMint,
-} from './lib/addLiquidity'
-import { tickToPrice, priceToTick, roundToTickSpacing, PRICE_STRATEGIES } from './lib/priceUtils'
+} from '@/lib/addLiquidity'
+import { tickToPrice, priceToTick, roundToTickSpacing, PRICE_STRATEGIES } from '@/lib/priceUtils'
 import {
   TAB,
   HEDERA_TESTNET,
@@ -27,15 +29,18 @@ import {
   DEFAULT_FEE,
   DEFAULT_TICK_SPACING,
   type TokenOption,
-} from './constants'
+} from '@/constants'
 
 interface PoolInfo {
-  id: string
+  poolId: string
   pair: string
   tickSpacing: number
-  fee: string
+  fee: number
+  feeLabel: string
   symbol0: string
   symbol1: string
+  currency0: string
+  currency1: string
 }
 
 interface CreatePoolTx {
@@ -81,6 +86,25 @@ function App() {
   // Pool view: 'list' = pool list, 'create' = create pool / add liquidity page
   const [poolView, setPoolView] = useState<'list' | 'create'>('list')
 
+  // Pools from DynamoDB (no hardcoding)
+  const [availablePools, setAvailablePools] = useState<PoolInfo[]>([])
+  const [poolsLoading, setPoolsLoading] = useState(true)
+  const [poolsError, setPoolsError] = useState<string | null>(null)
+  const [loadPoolIdInput, setLoadPoolIdInput] = useState('')
+  const [loadPoolError, setLoadPoolError] = useState<string | null>(null)
+  const [savePoolPending, setSavePoolPending] = useState(false)
+  const [savePoolSuccess, setSavePoolSuccess] = useState(false)
+  // Selected pool for swap/liquidity (fee + tickSpacing + pair); set when loading by ID or clicking a pool
+  const [selectedPool, setSelectedPool] = useState<{
+    poolId: string
+    currency0: string
+    currency1: string
+    fee: number
+    tickSpacing: number
+    symbol0: string
+    symbol1: string
+  } | null>(null)
+
   // Create pool state (addresses; fee/tick from liquidityFeeTier/liquidityTickSpacing)
   const [token0Address, setToken0Address] = useState('')
   const [token1Address, setToken1Address] = useState('')
@@ -96,6 +120,86 @@ function App() {
   const poolManagerAddress = getPoolManagerAddress()
   const quoterAddress = getQuoterAddress()
   const positionManagerAddress = getPositionManagerAddress()
+
+  // Fetch pools from DynamoDB on mount
+  useEffect(() => {
+    let cancelled = false
+    setPoolsLoading(true)
+    setPoolsError(null)
+    fetch('/api/pools')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load pools')
+        return res.json()
+      })
+      .then((data: Array<{ poolId: string; currency0: string; currency1: string; fee: number; tickSpacing: number; symbol0?: string; symbol1?: string }>) => {
+        if (cancelled) return
+        const list: PoolInfo[] = data.map((p) => ({
+          poolId: p.poolId,
+          pair: [p.symbol0 ?? shortenAddr(p.currency0), p.symbol1 ?? shortenAddr(p.currency1)].join(' / '),
+          tickSpacing: p.tickSpacing,
+          fee: p.fee,
+          feeLabel: (p.fee / 10000).toFixed(2) + '%',
+          symbol0: p.symbol0 ?? '',
+          symbol1: p.symbol1 ?? '',
+          currency0: p.currency0,
+          currency1: p.currency1,
+        }))
+        setAvailablePools(list)
+      })
+      .catch((err) => {
+        if (!cancelled) setPoolsError(err instanceof Error ? err.message : 'Failed to load pools')
+      })
+      .finally(() => {
+        if (!cancelled) setPoolsLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  function shortenAddr(addr: string): string {
+    if (!addr || addr.length < 10) return addr
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+  }
+
+  const loadPoolById = useCallback(async () => {
+    const id = loadPoolIdInput.trim()
+    if (!id) {
+      setLoadPoolError('Enter a pool ID')
+      return
+    }
+    setLoadPoolError(null)
+    try {
+      const res = await fetch(`/api/pools/${encodeURIComponent(id)}`)
+      if (!res.ok) {
+        if (res.status === 404) throw new Error('Pool not found')
+        throw new Error('Failed to load pool')
+      }
+      const p = await res.json() as { poolId: string; currency0: string; currency1: string; fee: number; tickSpacing: number; symbol0?: string; symbol1?: string }
+      const sym0 = p.symbol0 ?? ''
+      const sym1 = p.symbol1 ?? ''
+      const t0 = DEFAULT_TOKENS.find((t) => t.symbol === sym0) ?? DEFAULT_TOKENS[0]!
+      const t1 = DEFAULT_TOKENS.find((t) => t.symbol === sym1) ?? DEFAULT_TOKENS[1]!
+      setSelectedPool({
+        poolId: p.poolId,
+        currency0: p.currency0,
+        currency1: p.currency1,
+        fee: p.fee,
+        tickSpacing: p.tickSpacing,
+        symbol0: sym0,
+        symbol1: sym1,
+      })
+      setLiquidityToken0(t0)
+      setLiquidityToken1(t1)
+      setLiquidityFeeTier(String(p.fee))
+      setLiquidityTickSpacing(p.tickSpacing)
+      setTokenIn(t0)
+      setTokenOut(t1)
+      setToken0Address(p.currency0)
+      setToken1Address(p.currency1)
+      setPoolView('create')
+    } catch (err) {
+      setLoadPoolError(err instanceof Error ? err.message : 'Failed to load pool')
+    }
+  }, [loadPoolIdInput])
 
   // Public client for read-only quote (eth_call)
   const publicClientRef = useRef<ReturnType<typeof createPublicClient> | null>(null)
@@ -126,7 +230,13 @@ function App() {
     const currency0 = addrIn < addrOut ? addrIn : addrOut
     const currency1 = addrIn < addrOut ? addrOut : addrIn
     const zeroForOne = addrIn < addrOut
-    const poolKey = { currency0, currency1, fee: DEFAULT_FEE, tickSpacing: DEFAULT_TICK_SPACING }
+    const useSelected =
+      selectedPool &&
+      selectedPool.currency0.toLowerCase() === currency0.toLowerCase() &&
+      selectedPool.currency1.toLowerCase() === currency1.toLowerCase()
+    const fee = useSelected ? selectedPool.fee : DEFAULT_FEE
+    const tickSpacing = useSelected ? selectedPool.tickSpacing : DEFAULT_TICK_SPACING
+    const poolKey = { currency0, currency1, fee, tickSpacing }
     const decimalsIn = getTokenDecimals(tokenIn.symbol)
     const decimalsOut = getTokenDecimals(tokenOut.symbol)
 
@@ -173,7 +283,7 @@ function App() {
       cancelled = true
       clearTimeout(id)
     }
-  }, [amountIn, tokenIn.symbol, tokenOut.symbol, quoterAddress])
+  }, [amountIn, tokenIn.symbol, tokenOut.symbol, quoterAddress, selectedPool])
 
   // Fetch pool initialized state for Add Liquidity (Uniswap v4: show "Create pool & add" vs "Add liquidity")
   useEffect(() => {
@@ -436,21 +546,78 @@ function App() {
     setAmountOut('') // re-quote will fill from Quoter
   }
 
-  // Available pools: common pairs from DEFAULT_TOKENS (user can click to pre-fill Add liquidity)
-  const availablePools: PoolInfo[] = [
-    { id: '1', pair: 'HBAR / USDC', tickSpacing: 60, fee: '0.3%', symbol0: 'HBAR', symbol1: 'USDC' },
-    { id: '2', pair: 'FORGE / USDC', tickSpacing: 60, fee: '0.3%', symbol0: 'FORGE', symbol1: 'USDC' },
-    { id: '3', pair: 'SWIRL / USDC', tickSpacing: 60, fee: '0.3%', symbol0: 'SWIRL', symbol1: 'USDC' },
-    { id: '4', pair: 'HBAR / FORGE', tickSpacing: 60, fee: '0.3%', symbol0: 'HBAR', symbol1: 'FORGE' },
-  ]
-
-  const selectPoolForLiquidity = (symbol0: string, symbol1: string) => {
-    const t0 = DEFAULT_TOKENS.find((t) => t.symbol === symbol0) ?? DEFAULT_TOKENS[0]!
-    const t1 = DEFAULT_TOKENS.find((t) => t.symbol === symbol1) ?? DEFAULT_TOKENS[1]!
+  const selectPoolForLiquidity = (pool: PoolInfo) => {
+    const t0 = pool.symbol0
+      ? DEFAULT_TOKENS.find((t) => t.symbol === pool.symbol0) ?? DEFAULT_TOKENS[0]!
+      : DEFAULT_TOKENS[0]!
+    const t1 = pool.symbol1
+      ? DEFAULT_TOKENS.find((t) => t.symbol === pool.symbol1) ?? DEFAULT_TOKENS[1]!
+      : DEFAULT_TOKENS[1]!
     setLiquidityToken0(t0)
     setLiquidityToken1(t1)
+    setLiquidityFeeTier(String(pool.fee))
+    setLiquidityTickSpacing(pool.tickSpacing)
+    setSelectedPool({
+      poolId: pool.poolId,
+      currency0: pool.currency0,
+      currency1: pool.currency1,
+      fee: pool.fee,
+      tickSpacing: pool.tickSpacing,
+      symbol0: pool.symbol0,
+      symbol1: pool.symbol1,
+    })
+    setToken0Address(pool.currency0)
+    setToken1Address(pool.currency1)
     setPoolView('create')
   }
+
+  const savePoolToList = useCallback(async () => {
+    const addr0 = getTokenAddress(liquidityToken0.symbol)
+    const addr1 = getTokenAddress(liquidityToken1.symbol)
+    if (!addr0 || !addr1 || addr0 === addr1) {
+      return
+    }
+    const feeNum = parseInt(liquidityFeeTier, 10) || 3000
+    const poolKey = buildPoolKey(addr0 as `0x${string}`, addr1 as `0x${string}`, feeNum, liquidityTickSpacing)
+    const poolId = getPoolId(poolKey)
+    setSavePoolPending(true)
+    setSavePoolSuccess(false)
+    try {
+      const res = await fetch('/api/pools', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          poolId,
+          currency0: poolKey.currency0,
+          currency1: poolKey.currency1,
+          fee: feeNum,
+          tickSpacing: liquidityTickSpacing,
+          symbol0: liquidityToken0.symbol,
+          symbol1: liquidityToken1.symbol,
+        }),
+      })
+      if (!res.ok) throw new Error('Failed to save pool')
+      setSavePoolSuccess(true)
+      setAvailablePools((prev: PoolInfo[]) => [
+        {
+          poolId,
+          pair: `${liquidityToken0.symbol} / ${liquidityToken1.symbol}`,
+          tickSpacing: liquidityTickSpacing,
+          fee: feeNum,
+          feeLabel: (feeNum / 10000).toFixed(2) + '%',
+          symbol0: liquidityToken0.symbol,
+          symbol1: liquidityToken1.symbol,
+          currency0: poolKey.currency0,
+          currency1: poolKey.currency1,
+        },
+        ...prev,
+      ])
+    } catch {
+      // ignore
+    } finally {
+      setSavePoolPending(false)
+    }
+  }, [liquidityToken0.symbol, liquidityToken1.symbol, liquidityFeeTier, liquidityTickSpacing])
 
   const applyPriceStrategy = (strategy: (typeof PRICE_STRATEGIES)[number]) => {
     const ref = currentPriceRef
@@ -624,23 +791,55 @@ function App() {
         {tab === TAB.POOL && poolView === 'list' && (
           <div className="card card--pool-list">
             <h2 className="card-title">Pools</h2>
-            <p className="helper pool-list-subtitle">Select a pool to add liquidity, or create a new pool with your tokens.</p>
-            <ul className="pool-list pool-list--grid">
-              {availablePools.map((pool) => (
-                <li
-                  key={pool.id}
-                  className="pool-card"
-                  onClick={() => selectPoolForLiquidity(pool.symbol0, pool.symbol1)}
-                >
-                  <div className="pool-card-icons">
-                    <TokenIcon symbol={pool.symbol0} size={36} />
-                    <TokenIcon symbol={pool.symbol1} size={36} />
-                  </div>
-                  <span className="pool-card-pair">{pool.pair}</span>
-                  <span className="pool-card-fee">{pool.fee}</span>
-                </li>
-              ))}
-            </ul>
+            <p className="helper pool-list-subtitle">Select a pool to add liquidity, or load by pool ID. Pools are stored in DynamoDB—no hardcoded list.</p>
+            <div className="pool-load-section">
+              <label htmlFor="load-pool-id">Load pool by ID</label>
+              <div className="pool-load-row">
+                <input
+                  id="load-pool-id"
+                  type="text"
+                  placeholder="0x... (pool ID from create)"
+                  value={loadPoolIdInput}
+                  onChange={(e) => { setLoadPoolIdInput(e.target.value); setLoadPoolError(null) }}
+                  onKeyDown={(e) => e.key === 'Enter' && loadPoolById()}
+                />
+                <button type="button" className="primary-btn" style={{ marginTop: 0, width: 'auto' }} onClick={loadPoolById}>
+                  Load
+                </button>
+              </div>
+              {loadPoolError && (
+                <p className="pools-error" role="alert">
+                  {loadPoolError}
+                  <button type="button" onClick={() => setLoadPoolError(null)} aria-label="Dismiss" style={{ marginLeft: 8, background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}>×</button>
+                </p>
+              )}
+            </div>
+            {poolsError && <p className="pools-error">{poolsError}</p>}
+            {poolsLoading ? (
+              <p className="pools-loading">Loading pools…</p>
+            ) : (
+              <>
+                <ul className="pool-list pool-list--grid">
+                  {availablePools.map((pool) => (
+                    <li
+                      key={pool.poolId}
+                      className="pool-card"
+                      onClick={() => selectPoolForLiquidity(pool)}
+                    >
+                      <div className="pool-card-icons">
+                        <TokenIcon symbol={pool.symbol0 || '?'} size={36} />
+                        <TokenIcon symbol={pool.symbol1 || '?'} size={36} />
+                      </div>
+                      <span className="pool-card-pair">{pool.pair}</span>
+                      <span className="pool-card-fee">{pool.feeLabel}</span>
+                    </li>
+                  ))}
+                </ul>
+                {availablePools.length === 0 && (
+                  <p className="helper">No pools yet. Create a pool and save it to the list, or add DYNAMODB_TABLE_POOLS and seed data.</p>
+                )}
+              </>
+            )}
             <button
               type="button"
               className="primary-btn primary-btn--create-pool"
@@ -853,6 +1052,18 @@ function App() {
                 <a href={`https://hashscan.io/testnet/transaction/${(createPoolTx || addLiquidityTx)?.hash}`} target="_blank" rel="noreferrer">View transaction</a>
               </p>
             )}
+            <div className="create-section">
+              <h3 className="create-section-title">Save to pool list</h3>
+              <p className="helper">Save this pool to DynamoDB so you can load it by ID later and swap without hardcoding.</p>
+              <button
+                type="button"
+                className="pool-save-btn"
+                disabled={savePoolPending || !getTokenAddress(liquidityToken0.symbol) || !getTokenAddress(liquidityToken1.symbol)}
+                onClick={savePoolToList}
+              >
+                {savePoolPending ? 'Saving…' : savePoolSuccess ? 'Saved' : 'Save pool to list'}
+              </button>
+            </div>
             <div className="create-actions">
               {poolManagerAddress && (
                 <button

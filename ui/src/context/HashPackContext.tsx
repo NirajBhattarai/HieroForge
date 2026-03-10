@@ -1,3 +1,5 @@
+'use client'
+
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { HashConnect } from 'hashconnect'
 import { LedgerId } from '@hashgraph/sdk'
@@ -42,12 +44,12 @@ export function HashPackProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const hashConnectRef = useRef<HashConnect | null>(null)
 
-  const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID
-  const network = import.meta.env.VITE_HEDERA_NETWORK || 'testnet'
+  const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
+  const network = process.env.NEXT_PUBLIC_HEDERA_NETWORK || 'testnet'
 
   useEffect(() => {
     if (!projectId || projectId === 'your_project_id_here') {
-      setError('Missing VITE_WALLETCONNECT_PROJECT_ID. Add it to .env (see .env.example).')
+      setError('Missing NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID. Add it to .env (see .env.example).')
       return
     }
 

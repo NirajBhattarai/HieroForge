@@ -1,27 +1,51 @@
 # HieroForge UI
 
-Frontend for **HieroForge** (concentrated liquidity AMM on Hedera). Built with React + Vite.
+Frontend for **HieroForge** (concentrated liquidity AMM on Hedera). Built with **Next.js 15** and React 19.
 
-- **Contracts / ABIs:** `src/abis/` (Quoter, PositionManager, PoolManager, ERC20). Rebuild `hieroforge-core` and `hieroforge-periphery` if you need to refresh from `out/`.
-- **Run dev:** `npm run dev`
-- **Build:** `npm run build`
+### Prerequisites (Node.js & npm)
+
+You need Node.js 18+ and npm. If you get `command not found: npm`:
+
+- **Using nvm:** Run `source ~/.nvm/nvm.sh` then `nvm install` (or `nvm use` if you already have Node). Then run `npm install` in `ui/`.
+- **Using Homebrew:** `brew install node`, then `npm install` in `ui/`.
+- **Otherwise:** Install from [nodejs.org](https://nodejs.org/) and open a new terminal.
+
+Then from the `ui` folder:
+
+```bash
+npm install
+npm run dev
+```
+
+- **Contracts / ABIs:** `src/abis/` (Quoter, PositionManager, PoolManager, ERC20).
+- **Run dev:** `npm run dev` (Next.js dev server)
+- **Build:** `npm run build` then `npm run start`
+
+### Environment
+
+1. Copy `ui/.env.example` to `ui/.env.local`.
+2. Set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (get from [cloud.walletconnect.com](https://cloud.walletconnect.com/)).
+3. Set contract addresses: `NEXT_PUBLIC_POOL_MANAGER_ADDRESS`, `NEXT_PUBLIC_QUOTER_ADDRESS`, `NEXT_PUBLIC_POSITION_MANAGER_ADDRESS`.
+4. Optionally set `NEXT_PUBLIC_HEDERA_NETWORK` (`testnet` | `mainnet` | `previewnet`).
+
+### Pools from DynamoDB (no hardcoded list)
+
+Pools are stored in **DynamoDB** so you can load any pool by ID and swap without hardcoding.
+
+1. **Create a DynamoDB table** (e.g. in AWS Console or CLI):
+   - Table name: `hieroforge-pools` (or set `DYNAMODB_TABLE_POOLS` in env).
+   - Partition key: `poolId` (String).
+   - No sort key.
+
+2. **Configure AWS** in `ui/.env.local`:
+   - `AWS_REGION` (e.g. `us-east-1`)
+   - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (or use IAM role if deployed to Lambda/ECS).
+   - `DYNAMODB_TABLE_POOLS=hieroforge-pools`
+
+3. **In the UI:**
+   - **Pool** tab: list is loaded from DynamoDB; use **Load pool by ID** to paste a pool ID (e.g. after creating a pool) and prefill swap/liquidity.
+   - When creating a pool or adding liquidity, click **Save pool to list** to store it in DynamoDB for easy loading later.
 
 ### HashPack wallet
 
-1. Copy `.env.example` to `.env`.
-2. Get a WalletConnect project ID from [cloud.walletconnect.com](https://cloud.walletconnect.com/) and set `VITE_WALLETCONNECT_PROJECT_ID`.
-3. Optionally set `VITE_HEDERA_NETWORK` to `testnet`, `mainnet`, or `previewnet` (default: testnet).
-4. Install [HashPack](https://www.hashpack.app/) browser extension, then click **Connect HashPack** in the app.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Install [HashPack](https://www.hashpack.app/) and click **Connect HashPack** in the app.
