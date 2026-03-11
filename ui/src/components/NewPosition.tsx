@@ -26,6 +26,7 @@ import { useTokenLookup } from '@/hooks/useTokenLookup'
 import type { PoolInfo } from './PoolPositions'
 
 type Step = 1 | 2
+type RangeMode = 'full' | 'custom'
 
 interface NewPositionProps {
   onBack: () => void
@@ -43,6 +44,11 @@ function feeTierToTickSpacing(fee: number): number {
   if (fee === 500) return 10
   if (fee === 10000) return 200
   return 60
+}
+
+/** Format fee number as display string */
+function formatFee(f: number): string {
+  return `${(f / 10000).toFixed(2)}%`
 }
 
 export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
@@ -74,10 +80,11 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
   const { token: resolved1, loading: lookup1Loading, error: lookup1Error } = useTokenLookup(token1Addr)
 
   // Step 2: price range + deposits
-  const [minPriceStr, setMinPriceStr] = useState('0.9')
-  const [maxPriceStr, setMaxPriceStr] = useState('1.1')
-  const [tickLower, setTickLower] = useState(-60)
-  const [tickUpper, setTickUpper] = useState(60)
+  const [rangeMode, setRangeMode] = useState<RangeMode>('full')
+  const [minPriceStr, setMinPriceStr] = useState('0')
+  const [maxPriceStr, setMaxPriceStr] = useState('∞')
+  const [tickLower, setTickLower] = useState(-887220)
+  const [tickUpper, setTickUpper] = useState(887220)
   const [amount0, setAmount0] = useState('')
   const [amount1, setAmount1] = useState('')
   const [liquidityAmount, setLiquidityAmount] = useState('100000000')
@@ -160,7 +167,9 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     if (!poolManagerAddress || !publicClientRef.current) { setPoolInitialized(null); return }
     const addr0 = token0Addr || resolveAddress(token0)
     const addr1 = token1Addr || resolveAddress(token1)
-    if (!addr0 || !addr1 || addr0 === addr1) { setPoolInitialized(null); return }
+    // Skip if addresses aren't valid EVM hex yet (e.g. user typing 0.0.XXXXX)
+    const isHex = (s: string) => /^0x[0-9a-f]{40}$/i.test(s)
+    if (!addr0 || !addr1 || addr0 === addr1 || !isHex(addr0) || !isHex(addr1)) { setPoolInitialized(null); return }
     const poolKey = buildPoolKey(addr0 as `0x${string}`, addr1 as `0x${string}`, fee, tickSpacing)
     const poolId = getPoolId(poolKey)
     let cancelled = false
@@ -181,14 +190,16 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
   }, [poolManagerAddress, token0Addr, token1Addr, token0.symbol, token1.symbol, fee, tickSpacing])
 
   const syncPriceToTicks = useCallback(() => {
+    if (rangeMode === 'full') return
     const minP = parseFloat(minPriceStr)
     const maxP = parseFloat(maxPriceStr)
     if (!Number.isFinite(minP) || !Number.isFinite(maxP)) return
     setTickLower(roundToTickSpacing(priceToTick(minP), tickSpacing))
     setTickUpper(roundToTickSpacing(priceToTick(maxP), tickSpacing))
-  }, [minPriceStr, maxPriceStr, tickSpacing])
+  }, [minPriceStr, maxPriceStr, tickSpacing, rangeMode])
 
   const applyStrategy = (strategy: (typeof PRICE_STRATEGIES)[number]) => {
+    if (rangeMode === 'full') setRangeMode('custom')
     const ref = currentPriceRef
     if ('tickDelta' in strategy && strategy.tickDelta !== undefined) {
       const centerTick = roundToTickSpacing(priceToTick(ref), tickSpacing)
@@ -207,23 +218,62 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     setTickUpper(roundToTickSpacing(priceToTick(ref * (1 + maxPct)), tickSpacing))
   }
 
+  const setFullRange = () => {
+    setRangeMode('full')
+    setMinPriceStr('0')
+    setMaxPriceStr('∞')
+    setTickLower(-887220)
+    setTickUpper(887220)
+  }
+
+  const setCustomRange = () => {
+    setRangeMode('custom')
+    const ref = currentPriceRef
+    const minP = ref * 0.95
+    const maxP = ref * 1.05
+    setMinPriceStr(minP.toFixed(4))
+    setMaxPriceStr(maxP.toFixed(4))
+    setTickLower(roundToTickSpacing(priceToTick(minP), tickSpacing))
+    setTickUpper(roundToTickSpacing(priceToTick(maxP), tickSpacing))
+  }
+
   const adjustMinPrice = (delta: number) => {
+    if (rangeMode === 'full') return
     const p = parseFloat(minPriceStr) || currentPriceRef
-    const newP = p * (1 + delta)
+    const newP = Math.max(0, p * (1 + delta))
     setMinPriceStr(newP.toFixed(4))
     setTickLower(roundToTickSpacing(priceToTick(newP), tickSpacing))
   }
   const adjustMaxPrice = (delta: number) => {
+    if (rangeMode === 'full') return
     const p = parseFloat(maxPriceStr) || currentPriceRef
     const newP = p * (1 + delta)
     setMaxPriceStr(newP.toFixed(4))
     setTickUpper(roundToTickSpacing(priceToTick(newP), tickSpacing))
   }
 
+  /** Percentage from current price */
+  const minPricePct = (): string => {
+    if (rangeMode === 'full') return ''
+    const p = parseFloat(minPriceStr)
+    if (!Number.isFinite(p)) return ''
+    const pct = ((p - currentPriceRef) / currentPriceRef) * 100
+    return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`
+  }
+  const maxPricePct = (): string => {
+    if (rangeMode === 'full') return ''
+    const p = parseFloat(maxPriceStr)
+    if (!Number.isFinite(p)) return ''
+    const pct = ((p - currentPriceRef) / currentPriceRef) * 100
+    return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`
+  }
+
+  const isValidHex = (s: string) => /^0x[0-9a-f]{40}$/i.test(s)
+
   const canContinue = () => {
     const a0 = token0Addr || resolveAddress(token0)
     const a1 = token1Addr || resolveAddress(token1)
-    return a0 && a1 && a0 !== a1
+    return a0 && a1 && a0 !== a1 && isValidHex(a0) && isValidHex(a1)
   }
 
   // Create pool only (PoolManager.initialize)
@@ -243,9 +293,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
       const [address] = await walletClient.requestAddresses()
       if (!address) { setError('Connect wallet first.'); setPending(false); return }
 
-      const currency0 = addr0.toLowerCase() < addr1.toLowerCase() ? addr0 : addr1
-      const currency1 = addr0.toLowerCase() < addr1.toLowerCase() ? addr1 : addr0
-      const poolKey = { currency0, currency1, fee, tickSpacing, hooks: '0x0000000000000000000000000000000000000000' as const }
+      const poolKey = buildPoolKey(addr0 as `0x${string}`, addr1 as `0x${string}`, fee, tickSpacing)
       const sqrtPriceX96 = BigInt(SQRT_PRICE_PRESETS['1'] ?? '79228162514264337593543950336')
 
       const hash = await walletClient.writeContract({
@@ -352,248 +400,342 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     finally { setSavePending(false) }
   }, [token0Addr, token1Addr, token0.symbol, token1.symbol, fee, tickSpacing])
 
+  const sym0 = resolved0?.symbol ?? token0.symbol
+  const sym1 = resolved1?.symbol ?? token1.symbol
+
   return (
-    <div className="new-position-page">
-      {/* Breadcrumb */}
-      <div className="np-breadcrumb">
-        <button type="button" className="np-breadcrumb-link" onClick={onBack}>Your positions</button>
-        <span className="np-breadcrumb-sep">›</span>
-        <span>New position</span>
-      </div>
-
-      <div className="np-header">
-        <h2 className="np-title">New position</h2>
-        <span className="np-version-badge">v4 position</span>
-      </div>
-
-      <div className="np-layout">
-        {/* Left: Steps indicator */}
-        <div className="np-steps">
-          <div className={`np-step ${step >= 1 ? 'np-step--active' : ''}`}>
-            <div className="np-step-number">1</div>
-            <div className="np-step-text">
-              <span className="np-step-label">Step 1</span>
-              <span className="np-step-desc">Select token pair and fees</span>
-            </div>
-          </div>
-          <div className={`np-step ${step >= 2 ? 'np-step--active' : ''}`}>
-            <div className="np-step-number">2</div>
-            <div className="np-step-text">
-              <span className="np-step-label">Step 2</span>
-              <span className="np-step-desc">Set price range and deposit amounts</span>
-            </div>
+    <div className="np-page">
+      {/* Left: Steps indicator */}
+      <aside className="np-sidebar">
+        <div className={`np-step ${step >= 1 ? 'np-step--active' : ''}`}>
+          <div className="np-step-dot" />
+          <div className="np-step-text">
+            <span className="np-step-label">Step 1</span>
+            <span className="np-step-desc">Select token pair and fees</span>
           </div>
         </div>
+        <div className="np-step-line" />
+        <div className={`np-step ${step >= 2 ? 'np-step--active' : ''}`}>
+          <div className="np-step-dot" />
+          <div className="np-step-text">
+            <span className="np-step-label">Step 2</span>
+            <span className="np-step-desc">Set price range and deposit amounts</span>
+          </div>
+        </div>
+      </aside>
 
-        {/* Right: Current step content */}
-        <div className="np-content">
-          {step === 1 && (
-            <div className="np-step1">
-              <h3 className="np-section-title">Select pair</h3>
-              <p className="np-section-desc">Choose the tokens you want to provide liquidity for.</p>
-
-              <div className="np-pair-row">
-                <div className="np-token-select">
-                  <TokenIcon symbol={resolved0?.symbol ?? token0.symbol} size={28} />
-                  <select
-                    value={token0.id}
-                    onChange={(e) => setToken0(tokenOptions.find((t) => t.id === e.target.value) ?? tokenOptions[0]!)}
-                    disabled={tokensLoading}
-                  >
-                    {tokenOptions.map((t) => <option key={t.id} value={t.id}>{t.symbol}</option>)}
-                  </select>
-                </div>
-                <div className="np-token-select">
-                  <TokenIcon symbol={resolved1?.symbol ?? token1.symbol} size={28} />
-                  <select
-                    value={token1.id}
-                    onChange={(e) => setToken1(tokenOptions.find((t) => t.id === e.target.value) ?? tokenOptions[1]!)}
-                    disabled={tokensLoading}
-                  >
-                    {tokenOptions.map((t) => <option key={t.id} value={t.id}>{t.symbol}</option>)}
-                  </select>
-                </div>
+      {/* Right: Content */}
+      <div className="np-main">
+        {/* Pair header bar */}
+        {step === 2 && (
+          <div className="np-pair-header">
+            <div className="np-pair-header-left">
+              <div className="np-pair-icons">
+                <TokenIcon symbol={sym0} size={28} />
+                <TokenIcon symbol={sym1} size={28} />
               </div>
+              <span className="np-pair-label">{sym0} / {sym1}</span>
+              <span className="np-pair-badge">v4</span>
+              <span className="np-pair-badge">{formatFee(fee)}</span>
+            </div>
+            <button type="button" className="np-edit-btn" onClick={() => setStep(1)}>
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Edit
+            </button>
+          </div>
+        )}
 
-              {/* Paste addresses — auto-detects token on-chain */}
-              <div className="np-addr-inputs">
-                <div className="np-addr-group">
-                  <label>Token 0 address</label>
-                  <input
-                    type="text"
-                    className="np-addr-input"
-                    placeholder="0x... paste any token address"
-                    value={token0Addr}
-                    onChange={(e) => setToken0Addr(e.target.value)}
-                  />
-                  <div className="np-addr-status">
-                    {lookup0Loading && <span className="np-addr-loading">Looking up token…</span>}
-                    {lookup0Error && <span className="np-addr-error">{lookup0Error}</span>}
-                    {resolved0 && !lookup0Loading && (
-                      <span className="np-addr-resolved">
-                        <TokenIcon symbol={resolved0.symbol} size={16} />
-                        ✓ {resolved0.symbol} — {resolved0.name} ({resolved0.decimals} decimals){resolved0.isHts ? ' · HTS' : ''}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="np-addr-group">
-                  <label>Token 1 address</label>
-                  <input
-                    type="text"
-                    className="np-addr-input"
-                    placeholder="0x... paste any token address"
-                    value={token1Addr}
-                    onChange={(e) => setToken1Addr(e.target.value)}
-                  />
-                  <div className="np-addr-status">
-                    {lookup1Loading && <span className="np-addr-loading">Looking up token…</span>}
-                    {lookup1Error && <span className="np-addr-error">{lookup1Error}</span>}
-                    {resolved1 && !lookup1Loading && (
-                      <span className="np-addr-resolved">
-                        <TokenIcon symbol={resolved1.symbol} size={16} />
-                        ✓ {resolved1.symbol} — {resolved1.name} ({resolved1.decimals} decimals){resolved1.isHts ? ' · HTS' : ''}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
+        {/* ========== STEP 1 ========== */}
+        {step === 1 && (
+          <div className="np-card">
+            <h3 className="np-section-title">Select pair</h3>
+            <p className="np-section-desc">Choose the tokens you want to provide liquidity for.</p>
 
-              {/* Fee tier */}
-              <h3 className="np-section-title np-section-title--mt">Fee tier</h3>
-              <p className="np-section-desc">The fee earned providing liquidity. Choose an amount that suits your risk tolerance.</p>
-
-              <div className="np-fee-main">
-                <div
-                  className={`np-fee-card ${fee === 3000 ? 'np-fee-card--selected' : ''}`}
-                  onClick={() => { setFee(3000); setTickSpacing(60) }}
+            <div className="np-pair-row">
+              <div className="np-token-select">
+                <TokenIcon symbol={sym0} size={28} />
+                <select
+                  value={token0.id}
+                  onChange={(e) => setToken0(tokenOptions.find((t) => t.id === e.target.value) ?? tokenOptions[0]!)}
+                  disabled={tokensLoading}
                 >
-                  <span className="np-fee-pct">0.3% fee tier</span>
-                  {fee === 3000 && <span className="np-fee-tag">Selected</span>}
-                  <span className="np-fee-desc">The % you will earn in fees</span>
-                </div>
-                <button type="button" className="np-fee-more-btn" onClick={() => setShowMoreFees(!showMoreFees)}>
-                  {showMoreFees ? 'Less' : 'More'} ▾
-                </button>
+                  {tokenOptions.map((t) => {
+                    const suffix = t.address ? ` (${t.address.slice(-6)})` : ''
+                    return <option key={t.id} value={t.id}>{t.symbol}{suffix}</option>
+                  })}
+                </select>
               </div>
-              {showMoreFees && (
-                <div className="np-fee-grid">
-                  {FEE_TIERS.map((tier) => (
-                    <div
-                      key={tier.fee}
-                      className={`np-fee-card np-fee-card--sm ${fee === tier.fee ? 'np-fee-card--selected' : ''}`}
-                      onClick={() => { setFee(tier.fee); setTickSpacing(feeTierToTickSpacing(tier.fee)) }}
-                    >
-                      <span className="np-fee-pct">{tier.label}</span>
-                      {'tag' in tier && tier.tag && <span className="np-fee-tag">{tier.tag}</span>}
-                      <span className="np-fee-desc">{tier.desc}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="np-token-select">
+                <TokenIcon symbol={sym1} size={28} />
+                <select
+                  value={token1.id}
+                  onChange={(e) => setToken1(tokenOptions.find((t) => t.id === e.target.value) ?? tokenOptions[1]!)}
+                  disabled={tokensLoading}
+                >
+                  {tokenOptions.map((t) => {
+                    const suffix = t.address ? ` (${t.address.slice(-6)})` : ''
+                    return <option key={t.id} value={t.id}>{t.symbol}{suffix}</option>
+                  })}
+                </select>
+              </div>
+            </div>
 
-              {poolInitialized !== null && (
-                <div className={`np-pool-status ${poolInitialized ? 'np-pool-status--active' : 'np-pool-status--new'}`}>
-                  {poolInitialized ? '✓ Pool exists — you will add liquidity' : '⚡ New pool — will be created at 1:1 price'}
+            {/* Paste addresses */}
+            <div className="np-addr-inputs">
+              <div className="np-addr-group">
+                <label>Token 0 address</label>
+                <input
+                  type="text"
+                  className="np-addr-input"
+                  placeholder="0x… or 0.0.XXXXX"
+                  value={token0Addr}
+                  onChange={(e) => setToken0Addr(e.target.value)}
+                />
+                <div className="np-addr-status">
+                  {lookup0Loading && <span className="np-addr-loading">Looking up token…</span>}
+                  {lookup0Error && <span className="np-addr-error">{lookup0Error}</span>}
+                  {resolved0 && !lookup0Loading && (
+                    <span className="np-addr-resolved">
+                      <TokenIcon symbol={resolved0.symbol} size={14} />
+                      ✓ {resolved0.symbol} — {resolved0.name} ({resolved0.decimals} dec){resolved0.hederaId ? ` · ${resolved0.hederaId}` : ''}{resolved0.isHts ? ' · HTS' : ''}
+                    </span>
+                  )}
                 </div>
-              )}
+              </div>
+              <div className="np-addr-group">
+                <label>Token 1 address</label>
+                <input
+                  type="text"
+                  className="np-addr-input"
+                  placeholder="0x… or 0.0.XXXXX"
+                  value={token1Addr}
+                  onChange={(e) => setToken1Addr(e.target.value)}
+                />
+                <div className="np-addr-status">
+                  {lookup1Loading && <span className="np-addr-loading">Looking up token…</span>}
+                  {lookup1Error && <span className="np-addr-error">{lookup1Error}</span>}
+                  {resolved1 && !lookup1Loading && (
+                    <span className="np-addr-resolved">
+                      <TokenIcon symbol={resolved1.symbol} size={14} />
+                      ✓ {resolved1.symbol} — {resolved1.name} ({resolved1.decimals} dec){resolved1.hederaId ? ` · ${resolved1.hederaId}` : ''}{resolved1.isHts ? ' · HTS' : ''}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
 
-              <button
-                type="button"
-                className="np-continue-btn"
-                disabled={!canContinue()}
-                onClick={() => { syncPriceToTicks(); setStep(2) }}
+            {/* Fee tier */}
+            <h3 className="np-section-title np-section-title--mt">Fee tier</h3>
+            <p className="np-section-desc">The fee earned providing liquidity.</p>
+
+            <div className="np-fee-main">
+              <div
+                className={`np-fee-card ${fee === 3000 ? 'np-fee-card--selected' : ''}`}
+                onClick={() => { setFee(3000); setTickSpacing(60) }}
               >
-                Continue
+                <span className="np-fee-pct">0.3% fee tier</span>
+                {fee === 3000 && <span className="np-fee-tag">Selected</span>}
+                <span className="np-fee-desc">The % you will earn in fees</span>
+              </div>
+              <button type="button" className="np-fee-more-btn" onClick={() => setShowMoreFees(!showMoreFees)}>
+                {showMoreFees ? 'Less' : 'More'} ▾
               </button>
             </div>
-          )}
+            {showMoreFees && (
+              <div className="np-fee-grid">
+                {FEE_TIERS.map((tier) => (
+                  <div
+                    key={tier.fee}
+                    className={`np-fee-card np-fee-card--sm ${fee === tier.fee ? 'np-fee-card--selected' : ''}`}
+                    onClick={() => { setFee(tier.fee); setTickSpacing(feeTierToTickSpacing(tier.fee)) }}
+                  >
+                    <span className="np-fee-pct">{tier.label}</span>
+                    {'tag' in tier && tier.tag && <span className="np-fee-tag">{tier.tag}</span>}
+                    <span className="np-fee-desc">{tier.desc}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
-          {step === 2 && (
-            <div className="np-step2">
-              <button type="button" className="np-back-step" onClick={() => setStep(1)}>
-                ← Back to Step 1
-              </button>
+            {poolInitialized !== null && (
+              <div className={`np-pool-status ${poolInitialized ? 'np-pool-status--active' : 'np-pool-status--new'}`}>
+                {poolInitialized ? '✓ Pool exists — you will add liquidity' : '⚡ New pool — will be created at 1:1 price'}
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="np-continue-btn"
+              disabled={!canContinue()}
+              onClick={() => { syncPriceToTicks(); setStep(2) }}
+            >
+              Continue
+            </button>
+          </div>
+        )}
+
+        {/* ========== STEP 2 ========== */}
+        {step === 2 && (
+          <div className="np-step2-wrap">
+            {/* ---- Set Price Range ---- */}
+            <div className="np-card">
+              <h3 className="np-section-title">Set price range</h3>
+
+              {/* Full range / Custom range toggle */}
+              <div className="np-range-toggle">
+                <button
+                  type="button"
+                  className={`np-range-btn ${rangeMode === 'full' ? 'np-range-btn--active' : ''}`}
+                  onClick={setFullRange}
+                >
+                  Full range
+                </button>
+                <button
+                  type="button"
+                  className={`np-range-btn ${rangeMode === 'custom' ? 'np-range-btn--active' : ''}`}
+                  onClick={setCustomRange}
+                >
+                  Custom range
+                </button>
+              </div>
+
+              <p className="np-section-desc">
+                {rangeMode === 'full'
+                  ? 'Providing full range liquidity ensures continuous market participation across all possible prices, offering simplicity but with potential for higher impermanent loss.'
+                  : 'Custom range allows you to concentrate your liquidity within specific price bounds, enhancing capital efficiency and fee earnings but requiring more active management.'}
+              </p>
+
+              {/* Price chart placeholder */}
+              <div className="np-chart">
+                <div className="np-chart-header">
+                  <div>
+                    <div className="np-chart-price-label">Current price</div>
+                    <div className="np-chart-price">{currentPriceRef.toFixed(4)} {sym1}/{sym0}</div>
+                  </div>
+                  <div className="np-chart-tokens">
+                    <TokenIcon symbol={sym0} size={20} />
+                    <TokenIcon symbol={sym1} size={20} />
+                    <span>{sym0}</span>
+                    <span className="np-chart-token-sep">·</span>
+                    <span>{sym1}</span>
+                  </div>
+                </div>
+                <div className="np-chart-area">
+                  <div className="np-chart-gradient" />
+                  {rangeMode === 'custom' && (
+                    <div className="np-chart-range-overlay">
+                      <div className="np-chart-range-label">
+                        Ticks: {tickLower} to {tickUpper}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {/* Price strategies */}
-              <h3 className="np-section-title">Price range</h3>
-              <p className="np-section-desc">Set your price range. Narrower ranges earn more fees but require more active management.</p>
-
-              <div className="np-strategy-row">
+              <h4 className="np-sub-title">Price strategies</h4>
+              <div className="np-strategy-grid">
                 {PRICE_STRATEGIES.map((s) => (
                   <button
                     key={s.id}
                     type="button"
-                    className="np-strategy-chip"
+                    className="np-strategy-card"
                     onClick={() => applyStrategy(s)}
                   >
-                    {s.label}
+                    <span className="np-strategy-name">{s.label}</span>
+                    <span className="np-strategy-value">{s.value}</span>
+                    <span className="np-strategy-desc">{s.desc}</span>
                   </button>
                 ))}
               </div>
 
+              {/* Min / Max price */}
               <div className="np-price-range">
                 <div className="np-price-box">
                   <label>Min price</label>
-                  <div className="np-price-input-wrap">
-                    <button type="button" className="np-price-adj" onClick={() => adjustMinPrice(-0.01)}>−</button>
-                    <input
-                      type="text"
-                      className="np-price-input"
-                      value={minPriceStr}
-                      onChange={(e) => { setMinPriceStr(e.target.value); setTimeout(syncPriceToTicks, 0) }}
-                      onBlur={syncPriceToTicks}
-                    />
-                    <button type="button" className="np-price-adj" onClick={() => adjustMinPrice(0.01)}>+</button>
+                  <div className="np-price-value-row">
+                    {rangeMode === 'full' ? (
+                      <span className="np-price-value np-price-value--full">0</span>
+                    ) : (
+                      <>
+                        <button type="button" className="np-price-adj" onClick={() => adjustMinPrice(0.005)}>+</button>
+                        <input
+                          type="text"
+                          className="np-price-input"
+                          value={minPriceStr}
+                          onChange={(e) => { setMinPriceStr(e.target.value); setTimeout(syncPriceToTicks, 0) }}
+                          onBlur={syncPriceToTicks}
+                        />
+                        <button type="button" className="np-price-adj" onClick={() => adjustMinPrice(-0.005)}>−</button>
+                      </>
+                    )}
                   </div>
-                  <span className="np-price-sub">{token1.symbol} per {token0.symbol}</span>
+                  <span className="np-price-sub">{sym1} = 1 {sym0}</span>
+                  {rangeMode === 'custom' && <span className="np-price-pct">{minPricePct()}</span>}
                 </div>
+
                 <div className="np-price-box">
                   <label>Max price</label>
-                  <div className="np-price-input-wrap">
-                    <button type="button" className="np-price-adj" onClick={() => adjustMaxPrice(-0.01)}>−</button>
-                    <input
-                      type="text"
-                      className="np-price-input"
-                      value={maxPriceStr}
-                      onChange={(e) => { setMaxPriceStr(e.target.value); setTimeout(syncPriceToTicks, 0) }}
-                      onBlur={syncPriceToTicks}
-                    />
-                    <button type="button" className="np-price-adj" onClick={() => adjustMaxPrice(0.01)}>+</button>
+                  <div className="np-price-value-row">
+                    {rangeMode === 'full' ? (
+                      <span className="np-price-value np-price-value--full">∞</span>
+                    ) : (
+                      <>
+                        <button type="button" className="np-price-adj" onClick={() => adjustMaxPrice(0.005)}>+</button>
+                        <input
+                          type="text"
+                          className="np-price-input"
+                          value={maxPriceStr}
+                          onChange={(e) => { setMaxPriceStr(e.target.value); setTimeout(syncPriceToTicks, 0) }}
+                          onBlur={syncPriceToTicks}
+                        />
+                        <button type="button" className="np-price-adj" onClick={() => adjustMaxPrice(-0.005)}>−</button>
+                      </>
+                    )}
                   </div>
-                  <span className="np-price-sub">{token1.symbol} per {token0.symbol}</span>
+                  <span className="np-price-sub">{sym1} = 1 {sym0}</span>
+                  {rangeMode === 'custom' && <span className="np-price-pct">{maxPricePct()}</span>}
                 </div>
               </div>
+            </div>
 
-              {/* Deposit amounts */}
-              <h3 className="np-section-title np-section-title--mt">Deposit amounts</h3>
-              <div className="np-deposit-row">
-                <div className="np-deposit-box">
-                  <div className="np-deposit-header">
-                    <TokenIcon symbol={token0.symbol} size={20} />
-                    <span>{token0.symbol}</span>
-                  </div>
+            {/* ---- Deposit tokens ---- */}
+            <div className="np-card">
+              <h3 className="np-section-title">Deposit tokens</h3>
+              <p className="np-section-desc">Specify the token amounts for your liquidity contribution.</p>
+
+              <div className="np-deposit-card">
+                <div className="np-deposit-input-row">
                   <input
                     type="text"
                     className="np-deposit-input"
-                    placeholder="0.0"
+                    placeholder="0"
                     value={amount0}
                     onChange={(e) => { setAmount0(e.target.value); setError(null) }}
                   />
-                </div>
-                <div className="np-deposit-box">
-                  <div className="np-deposit-header">
-                    <TokenIcon symbol={token1.symbol} size={20} />
-                    <span>{token1.symbol}</span>
+                  <div className="np-deposit-token-badge">
+                    <TokenIcon symbol={sym0} size={24} />
+                    <span>{sym0}</span>
                   </div>
+                </div>
+                <div className="np-deposit-balance">0 {sym0}</div>
+              </div>
+
+              <div className="np-deposit-card">
+                <div className="np-deposit-input-row">
                   <input
                     type="text"
                     className="np-deposit-input"
-                    placeholder="0.0"
+                    placeholder="0"
                     value={amount1}
                     onChange={(e) => { setAmount1(e.target.value); setError(null) }}
                   />
+                  <div className="np-deposit-token-badge">
+                    <TokenIcon symbol={sym1} size={24} />
+                    <span>{sym1}</span>
+                  </div>
                 </div>
+                <div className="np-deposit-balance">0 {sym1}</div>
               </div>
 
               <div className="np-liquidity-row">
@@ -659,8 +801,8 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                 <span className="np-save-hint">Save to DynamoDB so you can load it later</span>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )

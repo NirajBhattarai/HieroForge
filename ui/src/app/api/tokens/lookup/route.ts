@@ -4,6 +4,7 @@ import { ERC20Abi } from '@/abis/ERC20'
 import { saveToken } from '@/lib/dynamo-tokens'
 
 const HEDERA_RPC = 'https://testnet.hashio.io/api'
+const HEDERA_MIRROR = 'https://testnet.mirrornode.hedera.com'
 const HEDERA_CHAIN = {
   id: 296,
   name: 'Hedera Testnet',
@@ -11,11 +12,6 @@ const HEDERA_CHAIN = {
   rpcUrls: { default: { http: [HEDERA_RPC] } },
 } as const
 
-/**
- * GET /api/tokens/lookup?address=0x...
- * Reads token name, symbol, decimals from chain (ERC20 standard calls).
- * Also auto-saves discovered token to DynamoDB.
- */
 /** Convert Hedera native ID (0.0.XXXXX) to EVM address. */
 function hederaIdToEvmAddress(id: string): string | null {
   const match = id.match(/^(\d+)\.(\d+)\.(\d+)$/)
@@ -24,6 +20,42 @@ function hederaIdToEvmAddress(id: string): string | null {
   return '0x' + entityNum.toString(16).padStart(40, '0')
 }
 
+/** Convert EVM address to Hedera account format for mirror node queries. */
+function evmAddressToHederaId(addr: string): string | null {
+  const hex = addr.replace(/^0x/, '').replace(/^0+/, '')
+  if (!hex) return null
+  const num = parseInt(hex, 16)
+  if (!Number.isFinite(num) || num <= 0) return null
+  return `0.0.${num}`
+}
+
+/** Try the Hedera Mirror Node REST API for HTS token metadata. */
+async function lookupViaMirrorNode(address: string): Promise<{
+  symbol: string; name: string; decimals: number; tokenId: string
+} | null> {
+  const hederaId = evmAddressToHederaId(address)
+  if (!hederaId) return null
+  try {
+    const res = await fetch(`${HEDERA_MIRROR}/api/v1/tokens/${hederaId}`)
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data.symbol) return null
+    return {
+      symbol: String(data.symbol),
+      name: String(data.name ?? data.symbol),
+      decimals: Number(data.decimals ?? 0),
+      tokenId: String(data.token_id),
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * GET /api/tokens/lookup?address=0x...
+ * Reads token metadata from chain (ERC20 calls) + Hedera Mirror Node fallback.
+ * Auto-saves discovered token to DynamoDB.
+ */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   let rawAddress = (searchParams.get('address') ?? '').trim()
@@ -43,13 +75,32 @@ export async function GET(request: Request) {
     )
   }
 
+  const isHts = address.toLowerCase().startsWith('0x000000000000000000000000')
+
+  // For HTS tokens, prefer Mirror Node (it has the real token metadata)
+  if (isHts) {
+    const mirror = await lookupViaMirrorNode(address)
+    if (mirror) {
+      const tokenData = {
+        address: address.toLowerCase(),
+        symbol: mirror.symbol,
+        name: mirror.name,
+        decimals: mirror.decimals,
+        isHts: true,
+        hederaId: mirror.tokenId,
+      }
+      saveToken({ ...tokenData, createdAt: new Date().toISOString() }).catch(() => {})
+      return NextResponse.json(tokenData)
+    }
+  }
+
+  // Fallback: ERC-20 read calls via RPC
   const client = createPublicClient({
     chain: HEDERA_CHAIN,
     transport: http(HEDERA_RPC),
   })
 
   try {
-    // Read name, symbol, decimals in parallel
     const [name, symbol, decimals] = await Promise.all([
       client.readContract({
         address: address as `0x${string}`,
@@ -80,18 +131,12 @@ export async function GET(request: Request) {
       symbol: String(symbol),
       name: String(name ?? symbol),
       decimals: Number(decimals ?? 18),
-      isHts: address.toLowerCase().startsWith('0x000000000000000000000000'),
+      isHts,
     }
 
-    // Auto-save to DynamoDB (fire-and-forget, don't block response)
-    saveToken({
-      ...tokenData,
-      createdAt: new Date().toISOString(),
-    }).catch(() => {})
-
+    saveToken({ ...tokenData, createdAt: new Date().toISOString() }).catch(() => {})
     return NextResponse.json(tokenData)
-  } catch (err) {
-    console.error('Token lookup error:', err)
+  } catch {
     return NextResponse.json(
       { error: 'Could not read token data — make sure this is a Hedera testnet address' },
       { status: 500 }

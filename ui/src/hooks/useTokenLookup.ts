@@ -8,6 +8,7 @@ export interface ResolvedToken {
   name: string
   decimals: number
   isHts?: boolean
+  hederaId?: string
 }
 
 /**

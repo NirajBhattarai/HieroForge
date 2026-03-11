@@ -3,6 +3,13 @@ import { MINT_POSITION_ACTION, SQRT_PRICE_1_1 } from '../abis/PositionManager'
 
 const HOOKS_ZERO = '0x0000000000000000000000000000000000000000' as const
 
+/** Convert Hedera native ID (0.0.XXXXX) to EVM address if needed. */
+function normalizeAddress(addr: string): string {
+  const match = addr.match(/^(\d+)\.(\d+)\.(\d+)$/)
+  if (match) return '0x' + BigInt(match[3]!).toString(16).padStart(40, '0')
+  return addr
+}
+
 export interface PoolKey {
   currency0: Address
   currency1: Address
@@ -19,8 +26,8 @@ export function buildPoolKey(
   tickSpacing: number
 ): PoolKey {
   // Checksummed addresses required by viem's encodeAbiParameters
-  const a = getAddress(token0)
-  const b = getAddress(token1)
+  const a = getAddress(normalizeAddress(token0))
+  const b = getAddress(normalizeAddress(token1))
   const currency0 = a.toLowerCase() < b.toLowerCase() ? a : b
   const currency1 = a.toLowerCase() < b.toLowerCase() ? b : a
   return {
