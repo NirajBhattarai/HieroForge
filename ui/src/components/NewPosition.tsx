@@ -1,21 +1,34 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { createPublicClient, http, parseUnits, encodeFunctionData, type PublicClient } from 'viem'
+import { createPublicClient, http, parseUnits, type PublicClient } from 'viem'
 import { TokenIcon } from './TokenIcon'
 import { ErrorMessage } from './ErrorMessage'
+
+/** Detect if string looks like an address (0x... or 0.0.XXXXX) */
+function isAddressLike(s: string): boolean {
+  const t = s.trim()
+  return /^0x[0-9a-f]{40}$/i.test(t) || /^0\.0\.\d+$/i.test(t)
+}
 import { buildPoolKey, getPoolId, encodeUnlockDataMint } from '@/lib/addLiquidity'
-import { tickToPrice, priceToTick, roundToTickSpacing, PRICE_STRATEGIES } from '@/lib/priceUtils'
+import { hederaContractExecute, hederaTokenTransfer, hederaContractMulticall } from '@/lib/hederaContract'
+
+/** Gas limits for Hedera ContractExecuteTransaction */
+const HEDERA_GAS_ERC20 = 1_200_000
+const HEDERA_GAS_MODIFY_LIQ = 5_000_000
+const HEDERA_GAS_INITIALIZE = 3_000_000
+
+import { tickToPrice, priceToTick, roundToTickSpacing } from '@/lib/priceUtils'
 import { getFriendlyErrorMessage } from '@/lib/errors'
 import { PoolManagerAbi, SQRT_PRICE_PRESETS } from '@/abis/PoolManager'
 import { PositionManagerAbi, SQRT_PRICE_1_1 } from '@/abis/PositionManager'
-import { ERC20Abi } from '@/abis/ERC20'
 import {
   DEFAULT_TOKENS,
   getTokenAddress,
   getTokenDecimals,
   getPoolManagerAddress,
   getPositionManagerAddress,
+  getRpcUrl,
   HEDERA_TESTNET,
   DEFAULT_FEE,
   DEFAULT_TICK_SPACING,
@@ -23,7 +36,17 @@ import {
 } from '@/constants'
 import { useTokens, type DynamicToken } from '@/hooks/useTokens'
 import { useTokenLookup } from '@/hooks/useTokenLookup'
+import { useTokenBalance } from '@/hooks/useTokenBalance'
+import { useHashPack } from '@/context/HashPackContext'
 import type { PoolInfo } from './PoolPositions'
+
+/** Convert Hedera accountId (0.0.XXXXX) to EVM address for balance/contract calls. */
+function accountIdToEvmAddress(accountId: string | null): string | null {
+  if (!accountId) return null
+  const m = String(accountId).trim().match(/^(\d+)\.(\d+)\.(\d+)$/)
+  if (!m) return null
+  return '0x' + BigInt(m[3]!).toString(16).padStart(40, '0')
+}
 
 type Step = 1 | 2
 type RangeMode = 'full' | 'custom'
@@ -49,6 +72,138 @@ function feeTierToTickSpacing(fee: number): number {
 /** Format fee number as display string */
 function formatFee(f: number): string {
   return `${(f / 10000).toFixed(2)}%`
+}
+
+interface TokenSelectComboboxProps {
+  value: TokenOption
+  options: TokenOption[]
+  excludeId: string
+  onSelect: (t: TokenOption) => void
+  onAddressPaste: (addr: string) => void
+  displaySymbol: string
+  disabled?: boolean
+}
+
+function TokenSelectCombobox({
+  value,
+  options,
+  excludeId,
+  onSelect,
+  onAddressPaste,
+  displaySymbol,
+  disabled,
+}: TokenSelectComboboxProps) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const q = search.trim().toLowerCase()
+  const filtered = options.filter(
+    (t) =>
+      t.id !== excludeId &&
+      (q === '' ||
+        (t.symbol?.toLowerCase().includes(q) || t.name?.toLowerCase().includes(q) || t.address?.toLowerCase().includes(q)))
+  )
+
+  useEffect(() => {
+    if (open) {
+      inputRef.current?.focus()
+      setSearch('')
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const onDocClick = (e: MouseEvent) => {
+      if (containerRef.current?.contains(e.target as Node)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [open])
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setOpen(false)
+      setSearch('')
+      return
+    }
+    if (e.key === 'Enter' && filtered.length === 1) {
+      onSelect(filtered[0]!)
+      setOpen(false)
+      setSearch('')
+    }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value
+    setSearch(v)
+    if (isAddressLike(v)) {
+      onAddressPaste(v.trim())
+      setOpen(false)
+      setSearch('')
+    }
+  }
+
+  return (
+    <div className="np-token-select np-token-select--combobox" ref={containerRef}>
+      <TokenIcon symbol={displaySymbol} size={28} />
+      <button
+        type="button"
+        className="np-token-select-trigger"
+        onClick={() => !disabled && setOpen((o) => !o)}
+        disabled={disabled}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+      >
+        <span className="np-token-select-value">{displaySymbol}</span>
+        <span className="np-token-select-chevron">▾</span>
+      </button>
+      {open && (
+        <div className="np-token-select-dropdown" role="listbox">
+          <input
+            ref={inputRef}
+            type="text"
+            className="np-token-select-input"
+            placeholder="Search by name or paste address"
+            value={search}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            onClick={(e) => e.stopPropagation()}
+            aria-autocomplete="list"
+          />
+          <div className="np-token-select-list">
+            {filtered.length === 0 ? (
+              <div className="np-token-select-empty">
+                {q ? 'No match. Paste 0x or 0.0.XXXXX address.' : 'No tokens.'}
+              </div>
+            ) : (
+              filtered.map((t) => {
+                const suffix = t.address ? ` (${t.address.slice(-6)})` : ''
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className="np-token-select-option"
+                    onClick={() => {
+                      onSelect(t)
+                      setOpen(false)
+                      setSearch('')
+                    }}
+                    role="option"
+                  >
+                    <TokenIcon symbol={t.symbol} size={20} />
+                    <span>{t.symbol}{suffix}</span>
+                  </button>
+                )
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
@@ -80,15 +235,16 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
   const { token: resolved1, loading: lookup1Loading, error: lookup1Error } = useTokenLookup(token1Addr)
 
   // Step 2: price range + deposits
-  const [rangeMode, setRangeMode] = useState<RangeMode>('full')
-  const [minPriceStr, setMinPriceStr] = useState('0')
-  const [maxPriceStr, setMaxPriceStr] = useState('∞')
-  const [tickLower, setTickLower] = useState(-887220)
-  const [tickUpper, setTickUpper] = useState(887220)
-  const [amount0, setAmount0] = useState('')
-  const [amount1, setAmount1] = useState('')
+  const [rangeMode, setRangeMode] = useState<RangeMode>('custom')
+  const [minPriceStr, setMinPriceStr] = useState('0.9980')
+  const [maxPriceStr, setMaxPriceStr] = useState('1.0020')
+  const [tickLower, setTickLower] = useState(-120)
+  const [tickUpper, setTickUpper] = useState(120)
+  const [amount0, setAmount0] = useState('1000')
+  const [amount1, setAmount1] = useState('1000')
   const [liquidityAmount, setLiquidityAmount] = useState('100000000')
-  const currentPriceRef = 1 // 1:1 for new pool; upgrade later with getPoolState
+  const [initialPriceStr, setInitialPriceStr] = useState('1')
+  const initialPrice = (() => { const p = parseFloat(initialPriceStr); return Number.isFinite(p) && p > 0 ? p : 1 })()
 
   // Pool state
   const [poolInitialized, setPoolInitialized] = useState<boolean | null>(null)
@@ -107,9 +263,28 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
   if (!publicClientRef.current && typeof window !== 'undefined') {
     publicClientRef.current = createPublicClient({
       chain: HEDERA_TESTNET,
-      transport: http(HEDERA_TESTNET.rpcUrls.default.http[0]),
+      transport: http(getRpcUrl()),
     }) as PublicClient
   }
+
+  const { accountId, isConnected, hashConnectRef } = useHashPack()
+  const userEvmFromAccountId = accountIdToEvmAddress(accountId)
+
+  const userEvmAddress = userEvmFromAccountId
+  // Prefer accountId (0.0.X) for balance so Mirror Node accepts it; fallback to EVM address
+  const ownerForBalance = isConnected && accountId ? accountId : userEvmAddress
+  const addr0ForBalance = (token0Addr || resolveAddress(token0)).trim()
+  const addr1ForBalance = (token1Addr || resolveAddress(token1)).trim()
+  const { balanceFormatted: balance0Formatted, loading: balance0Loading } = useTokenBalance(
+    addr0ForBalance,
+    ownerForBalance,
+    resolveDecimals(token0)
+  )
+  const { balanceFormatted: balance1Formatted, loading: balance1Loading } = useTokenBalance(
+    addr1ForBalance,
+    ownerForBalance,
+    resolveDecimals(token1)
+  )
 
   // Restore from preselected pool
   useEffect(() => {
@@ -198,26 +373,6 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     setTickUpper(roundToTickSpacing(priceToTick(maxP), tickSpacing))
   }, [minPriceStr, maxPriceStr, tickSpacing, rangeMode])
 
-  const applyStrategy = (strategy: (typeof PRICE_STRATEGIES)[number]) => {
-    if (rangeMode === 'full') setRangeMode('custom')
-    const ref = currentPriceRef
-    if ('tickDelta' in strategy && strategy.tickDelta !== undefined) {
-      const centerTick = roundToTickSpacing(priceToTick(ref), tickSpacing)
-      const delta = strategy.tickDelta * tickSpacing
-      setTickLower(centerTick - delta)
-      setTickUpper(centerTick + delta)
-      setMinPriceStr(tickToPrice(centerTick - delta).toFixed(4))
-      setMaxPriceStr(tickToPrice(centerTick + delta).toFixed(4))
-      return
-    }
-    const minPct = 'minPct' in strategy ? strategy.minPct ?? 0 : 0
-    const maxPct = 'maxPct' in strategy ? strategy.maxPct ?? 0 : 0
-    setMinPriceStr((ref * (1 + minPct)).toFixed(4))
-    setMaxPriceStr((ref * (1 + maxPct)).toFixed(4))
-    setTickLower(roundToTickSpacing(priceToTick(ref * (1 + minPct)), tickSpacing))
-    setTickUpper(roundToTickSpacing(priceToTick(ref * (1 + maxPct)), tickSpacing))
-  }
-
   const setFullRange = () => {
     setRangeMode('full')
     setMinPriceStr('0')
@@ -228,7 +383,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
 
   const setCustomRange = () => {
     setRangeMode('custom')
-    const ref = currentPriceRef
+    const ref = initialPrice
     const minP = ref * 0.95
     const maxP = ref * 1.05
     setMinPriceStr(minP.toFixed(4))
@@ -239,33 +394,45 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
 
   const adjustMinPrice = (delta: number) => {
     if (rangeMode === 'full') return
-    const p = parseFloat(minPriceStr) || currentPriceRef
+    const p = parseFloat(minPriceStr) || initialPrice
     const newP = Math.max(0, p * (1 + delta))
     setMinPriceStr(newP.toFixed(4))
     setTickLower(roundToTickSpacing(priceToTick(newP), tickSpacing))
   }
   const adjustMaxPrice = (delta: number) => {
     if (rangeMode === 'full') return
-    const p = parseFloat(maxPriceStr) || currentPriceRef
+    const p = parseFloat(maxPriceStr) || initialPrice
     const newP = p * (1 + delta)
     setMaxPriceStr(newP.toFixed(4))
     setTickUpper(roundToTickSpacing(priceToTick(newP), tickSpacing))
   }
 
-  /** Percentage from current price */
+  /** Percentage from initial price */
   const minPricePct = (): string => {
     if (rangeMode === 'full') return ''
     const p = parseFloat(minPriceStr)
     if (!Number.isFinite(p)) return ''
-    const pct = ((p - currentPriceRef) / currentPriceRef) * 100
+    const pct = ((p - initialPrice) / initialPrice) * 100
     return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`
   }
   const maxPricePct = (): string => {
     if (rangeMode === 'full') return ''
     const p = parseFloat(maxPriceStr)
     if (!Number.isFinite(p)) return ''
-    const pct = ((p - currentPriceRef) / currentPriceRef) * 100
+    const pct = ((p - initialPrice) / initialPrice) * 100
     return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`
+  }
+
+  /** Deposit math: equivalent amount at initial price (token1 per token0) */
+  const amount1AtPrice = (a0: string): string => {
+    const n = parseFloat(a0)
+    if (!Number.isFinite(n) || n <= 0) return '—'
+    return (n * initialPrice).toFixed(6)
+  }
+  const amount0AtPrice = (a1: string): string => {
+    const n = parseFloat(a1)
+    if (!Number.isFinite(n) || n <= 0 || initialPrice <= 0) return '—'
+    return (n / initialPrice).toFixed(6)
   }
 
   const isValidHex = (s: string) => /^0x[0-9a-f]{40}$/i.test(s)
@@ -276,51 +443,54 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     return a0 && a1 && a0 !== a1 && isValidHex(a0) && isValidHex(a1)
   }
 
-  // Create pool only (PoolManager.initialize)
+  // Create pool only (PoolManager.initialize) — uses Hedera SDK + HashConnect
   const createPoolOnly = useCallback(async () => {
+    if (!isConnected || !accountId) { setError('Connect HashPack first.'); return }
+    const hc = hashConnectRef.current
+    if (!hc) { setError('HashPack not initialized. Refresh and try again.'); return }
     const addr0 = (token0Addr || resolveAddress(token0)).trim()
     const addr1 = (token1Addr || resolveAddress(token1)).trim()
     if (!addr0 || !addr1 || addr0 === addr1) { setError('Select two different tokens.'); return }
     if (!poolManagerAddress) { setError('PoolManager address not configured.'); return }
 
-    const provider = typeof window !== 'undefined' && (window as unknown as { ethereum?: unknown }).ethereum
-    if (!provider) { setError('No EVM wallet found.'); return }
-
     setError(null); setPending(true); setTxHash(null)
     try {
-      const { createWalletClient, custom } = await import('viem')
-      const walletClient = createWalletClient({ chain: HEDERA_TESTNET, transport: custom(provider as Parameters<typeof custom>[0]) })
-      const [address] = await walletClient.requestAddresses()
-      if (!address) { setError('Connect wallet first.'); setPending(false); return }
-
+      console.log('[Create pool] HashPack accountId:', accountId)
       const poolKey = buildPoolKey(addr0 as `0x${string}`, addr1 as `0x${string}`, fee, tickSpacing)
       const sqrtPriceX96 = BigInt(SQRT_PRICE_PRESETS['1'] ?? '79228162514264337593543950336')
 
-      const hash = await walletClient.writeContract({
-        address: poolManagerAddress as `0x${string}`,
+      const txId = await hederaContractExecute({
+        hashConnect: hc,
+        accountId,
+        contractId: poolManagerAddress,
         abi: PoolManagerAbi,
         functionName: 'initialize',
         args: [poolKey, sqrtPriceX96],
-        account: address,
+        gas: HEDERA_GAS_INITIALIZE,
       })
-      setTxHash(hash)
+      setTxHash(txId)
       setPoolInitialized(true)
+      console.log('[Create pool] success:', txId)
     } catch (err: unknown) {
+      const exactMessage = err instanceof Error ? err.message : String(err)
+      console.error('[Create pool] exact error message:', exactMessage)
+      console.error('[Create pool] full error:', { message: exactMessage, err })
       setError(getFriendlyErrorMessage(err, 'transaction'))
     } finally {
       setPending(false)
     }
-  }, [poolManagerAddress, token0Addr, token1Addr, token0.symbol, token1.symbol, fee, tickSpacing])
+  }, [poolManagerAddress, token0Addr, token1Addr, token0.symbol, token1.symbol, fee, tickSpacing, isConnected, accountId, hashConnectRef])
 
-  // Add liquidity (approve + transfer + multicall: initializePool + modifyLiquidities)
+  // Add liquidity: transfer tokens to PM, then multicall(initializePool + modifyLiquidities) in one tx.
+  // Uses Hedera SDK ContractExecuteTransaction via HashConnect — no EVM JSON-RPC at all.
   const addLiquidity = useCallback(async () => {
     if (!positionManagerAddress) { setError('Set NEXT_PUBLIC_POSITION_MANAGER_ADDRESS in .env.local.'); return }
+    if (!isConnected || !accountId) { setError('Connect HashPack first.'); return }
+    const hc = hashConnectRef.current
+    if (!hc) { setError('HashPack not initialized. Refresh and try again.'); return }
     const addr0 = (token0Addr || resolveAddress(token0)).trim()
     const addr1 = (token1Addr || resolveAddress(token1)).trim()
     if (!addr0 || !addr1 || addr0 === addr1) { setError('Select two different tokens.'); return }
-
-    const provider = typeof window !== 'undefined' && (window as unknown as { ethereum?: unknown }).ethereum
-    if (!provider) { setError('No EVM wallet found.'); return }
 
     const dec0 = resolveDecimals(token0)
     const dec1 = resolveDecimals(token1)
@@ -333,49 +503,84 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     if (amount0Wei === 0n && amount1Wei === 0n) { setError('Enter amount for at least one token.'); return }
     if (liquidityWei === 0n) { setError('Enter liquidity amount.'); return }
 
+    // Check user's HTS token balances before attempting transfer
+    const pc = publicClientRef.current
+    if (pc) {
+      try {
+        const erc20Abi = [{ type: 'function', name: 'balanceOf', inputs: [{ name: 'account', type: 'address' }], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' }] as const
+        const userAddr = accountIdToEvmAddress(accountId) as `0x${string}`
+        const [bal0, bal1] = await Promise.all([
+          amount0Wei > 0n ? pc.readContract({ address: addr0 as `0x${string}`, abi: erc20Abi, functionName: 'balanceOf', args: [userAddr] }) as Promise<bigint> : Promise.resolve(0n),
+          amount1Wei > 0n ? pc.readContract({ address: addr1 as `0x${string}`, abi: erc20Abi, functionName: 'balanceOf', args: [userAddr] }) as Promise<bigint> : Promise.resolve(0n),
+        ])
+        console.log('[Add liquidity] user balances:', { token0: bal0.toString(), token1: bal1.toString(), need0: amount0Wei.toString(), need1: amount1Wei.toString() })
+        if (amount0Wei > 0n && bal0 < amount0Wei) { setError(`Insufficient ${token0.symbol} balance: have ${bal0.toString()} need ${amount0Wei.toString()}`); return }
+        if (amount1Wei > 0n && bal1 < amount1Wei) { setError(`Insufficient ${token1.symbol} balance: have ${bal1.toString()} need ${amount1Wei.toString()}`); return }
+      } catch (e) { console.warn('[Add liquidity] balance check failed (continuing):', e) }
+    }
+
     setError(null); setPending(true); setTxHash(null)
     try {
-      const { createWalletClient, custom } = await import('viem')
-      const walletClient = createWalletClient({ chain: HEDERA_TESTNET, transport: custom(provider as Parameters<typeof custom>[0]) })
-      const [userAddress] = await walletClient.requestAddresses()
-      if (!userAddress) { setError('Connect wallet first.'); setPending(false); return }
+      console.log('[Add liquidity] HashPack accountId:', accountId)
+      const ownerEvmAddress = accountIdToEvmAddress(accountId)
+      if (!ownerEvmAddress) { setError('Cannot derive EVM address from account ID.'); setPending(false); return }
 
       const poolKey = buildPoolKey(addr0 as `0x${string}`, addr1 as `0x${string}`, fee, tickSpacing)
-      const pmAddr = positionManagerAddress as `0x${string}`
+      const pmAddr = positionManagerAddress
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600)
-      const unlockData = encodeUnlockDataMint(poolKey, tickLower, tickUpper, liquidityWei, amount0Wei, amount1Wei, userAddress)
+      const unlockData = encodeUnlockDataMint(poolKey, tickLower, tickUpper, liquidityWei, amount0Wei, amount1Wei, ownerEvmAddress as `0x${string}`)
 
-      // Approve + transfer for each token
+      // Step 1: Transfer tokens to PositionManager via Hedera SDK (separate txs per token)
       for (const [currency, amountWei] of [[poolKey.currency0, amount0Wei], [poolKey.currency1, amount1Wei]] as const) {
         if (amountWei > 0n) {
-          const allowance = (await publicClientRef.current!.readContract({
-            address: currency as `0x${string}`, abi: ERC20Abi, functionName: 'allowance', args: [userAddress, pmAddr],
-          })) as bigint
-          if (allowance < amountWei) {
-            const h = await walletClient.writeContract({
-              address: currency as `0x${string}`, abi: ERC20Abi, functionName: 'approve', args: [pmAddr, amountWei], account: userAddress,
-            })
-            await publicClientRef.current!.waitForTransactionReceipt({ hash: h })
-          }
-          await walletClient.writeContract({
-            address: currency as `0x${string}`, abi: ERC20Abi, functionName: 'transfer', args: [pmAddr, amountWei], account: userAddress,
+          console.log('[Add liquidity] transferring', amountWei.toString(), 'of', currency, 'to PM')
+          await hederaTokenTransfer({
+            hashConnect: hc,
+            accountId,
+            tokenAddress: currency,
+            to: pmAddr,
+            amount: amountWei,
+            gas: HEDERA_GAS_ERC20,
           })
+          console.log('[Add liquidity] transfer confirmed')
         }
       }
 
-      // Multicall: initializePool + modifyLiquidities
-      const initCalldata = encodeFunctionData({ abi: PositionManagerAbi, functionName: 'initializePool', args: [poolKey, SQRT_PRICE_1_1] })
-      const modifyCalldata = encodeFunctionData({ abi: PositionManagerAbi, functionName: 'modifyLiquidities', args: [unlockData, deadline] })
-      const hash = await walletClient.writeContract({
-        address: pmAddr, abi: PositionManagerAbi, functionName: 'multicall', args: [[initCalldata, modifyCalldata]], account: userAddress,
+      // Step 2: Encode initializePool + modifyLiquidities calldata for multicall
+      const { encodeFunctionData: encFn } = await import('viem')
+      const initializeCalldata = encFn({
+        abi: PositionManagerAbi,
+        functionName: 'initializePool',
+        args: [poolKey, SQRT_PRICE_1_1],
+      }) as `0x${string}`
+      const modifyCalldata = encFn({
+        abi: PositionManagerAbi,
+        functionName: 'modifyLiquidities',
+        args: [unlockData, deadline],
+      }) as `0x${string}`
+
+      // Step 3: Single multicall: initializePool (no-op if already init) + modifyLiquidities
+      console.log('[Add liquidity] calling multicall(initializePool + modifyLiquidities)')
+      const txId = await hederaContractMulticall({
+        hashConnect: hc,
+        accountId,
+        contractId: pmAddr,
+        calls: [initializeCalldata, modifyCalldata],
+        gas: HEDERA_GAS_MODIFY_LIQ,
       })
-      setTxHash(hash)
+      setTxHash(txId)
+      setPoolInitialized(true)
+      console.log('[Add liquidity] multicall success:', txId)
     } catch (err: unknown) {
+      const exactMessage = err instanceof Error ? err.message : String(err)
+      const exactCode = (err as { code?: number })?.code
+      console.error('[Add liquidity] exact error message:', exactMessage)
+      console.error('[Add liquidity] full error:', { message: exactMessage, code: exactCode, err })
       setError(getFriendlyErrorMessage(err, 'transaction'))
     } finally {
       setPending(false)
     }
-  }, [positionManagerAddress, token0Addr, token1Addr, token0.symbol, token1.symbol, fee, tickSpacing, tickLower, tickUpper, amount0, amount1, liquidityAmount])
+  }, [positionManagerAddress, token0Addr, token1Addr, token0.symbol, token1.symbol, fee, tickSpacing, tickLower, tickUpper, amount0, amount1, liquidityAmount, isConnected, accountId, hashConnectRef])
 
   // Save pool to DynamoDB
   const savePool = useCallback(async () => {
@@ -449,35 +654,29 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
         {step === 1 && (
           <div className="np-card">
             <h3 className="np-section-title">Select pair</h3>
-            <p className="np-section-desc">Choose the tokens you want to provide liquidity for.</p>
+            <p className="np-section-desc">
+              Choose two HTS tokens for your pool. Paste a 0x or 0.0.XXXXX HTS address to resolve symbol and decimals.
+            </p>
 
             <div className="np-pair-row">
-              <div className="np-token-select">
-                <TokenIcon symbol={sym0} size={28} />
-                <select
-                  value={token0.id}
-                  onChange={(e) => setToken0(tokenOptions.find((t) => t.id === e.target.value) ?? tokenOptions[0]!)}
-                  disabled={tokensLoading}
-                >
-                  {tokenOptions.map((t) => {
-                    const suffix = t.address ? ` (${t.address.slice(-6)})` : ''
-                    return <option key={t.id} value={t.id}>{t.symbol}{suffix}</option>
-                  })}
-                </select>
-              </div>
-              <div className="np-token-select">
-                <TokenIcon symbol={sym1} size={28} />
-                <select
-                  value={token1.id}
-                  onChange={(e) => setToken1(tokenOptions.find((t) => t.id === e.target.value) ?? tokenOptions[1]!)}
-                  disabled={tokensLoading}
-                >
-                  {tokenOptions.map((t) => {
-                    const suffix = t.address ? ` (${t.address.slice(-6)})` : ''
-                    return <option key={t.id} value={t.id}>{t.symbol}{suffix}</option>
-                  })}
-                </select>
-              </div>
+              <TokenSelectCombobox
+                value={token0}
+                options={tokenOptions}
+                excludeId={token1.id}
+                onSelect={setToken0}
+                onAddressPaste={setToken0Addr}
+                displaySymbol={sym0}
+                disabled={tokensLoading}
+              />
+              <TokenSelectCombobox
+                value={token1}
+                options={tokenOptions}
+                excludeId={token0.id}
+                onSelect={setToken1}
+                onAddressPaste={setToken1Addr}
+                displaySymbol={sym1}
+                disabled={tokensLoading}
+              />
             </div>
 
             {/* Paste addresses */}
@@ -577,11 +776,35 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
         {/* ========== STEP 2 ========== */}
         {step === 2 && (
           <div className="np-step2-wrap">
-            {/* ---- Set Price Range ---- */}
+            {/* ---- Set initial price ---- */}
             <div className="np-card">
+              <h3 className="np-section-title">Set initial price</h3>
+              <p className="np-section-desc">
+                When creating a new pool, you must set the starting exchange rate for both tokens. This rate will reflect the initial market price.
+              </p>
+              <div className="np-initial-price-row">
+                <input
+                  type="text"
+                  className="np-initial-price-input"
+                  placeholder="0"
+                  value={initialPriceStr}
+                  onChange={(e) => setInitialPriceStr(e.target.value)}
+                  aria-label="Initial price"
+                />
+                <div className="np-initial-price-meta">
+                  <span className="np-initial-price-label">{sym1} = 1 {sym0}</span>
+                </div>
+              </div>
+              <p className="np-initial-price-warning">
+                Market price not found. Please do your own research to avoid loss of funds.
+              </p>
+            </div>
+
+            {/* ---- Set Price Range ---- */}
+            <div className="np-card np-card--range">
               <h3 className="np-section-title">Set price range</h3>
 
-              {/* Full range / Custom range toggle */}
+              {/* Full range / Custom range toggle (Uniswap-style) */}
               <div className="np-range-toggle">
                 <button
                   type="button"
@@ -599,55 +822,11 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                 </button>
               </div>
 
-              <p className="np-section-desc">
+              <p className="np-range-desc">
                 {rangeMode === 'full'
-                  ? 'Providing full range liquidity ensures continuous market participation across all possible prices, offering simplicity but with potential for higher impermanent loss.'
+                  ? 'Setting full range liquidity when creating a pool ensures continuous market participation across all possible prices, offering simplicity but with potential for higher impermanent loss.'
                   : 'Custom range allows you to concentrate your liquidity within specific price bounds, enhancing capital efficiency and fee earnings but requiring more active management.'}
               </p>
-
-              {/* Price chart placeholder */}
-              <div className="np-chart">
-                <div className="np-chart-header">
-                  <div>
-                    <div className="np-chart-price-label">Current price</div>
-                    <div className="np-chart-price">{currentPriceRef.toFixed(4)} {sym1}/{sym0}</div>
-                  </div>
-                  <div className="np-chart-tokens">
-                    <TokenIcon symbol={sym0} size={20} />
-                    <TokenIcon symbol={sym1} size={20} />
-                    <span>{sym0}</span>
-                    <span className="np-chart-token-sep">·</span>
-                    <span>{sym1}</span>
-                  </div>
-                </div>
-                <div className="np-chart-area">
-                  <div className="np-chart-gradient" />
-                  {rangeMode === 'custom' && (
-                    <div className="np-chart-range-overlay">
-                      <div className="np-chart-range-label">
-                        Ticks: {tickLower} to {tickUpper}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Price strategies */}
-              <h4 className="np-sub-title">Price strategies</h4>
-              <div className="np-strategy-grid">
-                {PRICE_STRATEGIES.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    className="np-strategy-card"
-                    onClick={() => applyStrategy(s)}
-                  >
-                    <span className="np-strategy-name">{s.label}</span>
-                    <span className="np-strategy-value">{s.value}</span>
-                    <span className="np-strategy-desc">{s.desc}</span>
-                  </button>
-                ))}
-              </div>
 
               {/* Min / Max price */}
               <div className="np-price-range">
@@ -699,10 +878,10 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
               </div>
             </div>
 
-            {/* ---- Deposit tokens ---- */}
+            {/* ---- Deposit HTS tokens ---- */}
             <div className="np-card">
-              <h3 className="np-section-title">Deposit tokens</h3>
-              <p className="np-section-desc">Specify the token amounts for your liquidity contribution.</p>
+              <h3 className="np-section-title">Deposit HTS tokens</h3>
+              <p className="np-section-desc">Specify the HTS token amounts for your liquidity contribution.</p>
 
               <div className="np-deposit-card">
                 <div className="np-deposit-input-row">
@@ -718,7 +897,10 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                     <span>{sym0}</span>
                   </div>
                 </div>
-                <div className="np-deposit-balance">0 {sym0}</div>
+                <div className="np-deposit-balance">{balance0Loading ? '…' : balance0Formatted} {sym0}</div>
+                {amount0 && parseFloat(amount0) > 0 && (
+                  <div className="np-deposit-calc">≈ {amount1AtPrice(amount0)} {sym1} at initial price</div>
+                )}
               </div>
 
               <div className="np-deposit-card">
@@ -735,7 +917,10 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                     <span>{sym1}</span>
                   </div>
                 </div>
-                <div className="np-deposit-balance">0 {sym1}</div>
+                <div className="np-deposit-balance">{balance1Loading ? '…' : balance1Formatted} {sym1}</div>
+                {amount1 && parseFloat(amount1) > 0 && (
+                  <div className="np-deposit-calc">≈ {amount0AtPrice(amount1)} {sym0} at initial price</div>
+                )}
               </div>
 
               <div className="np-liquidity-row">

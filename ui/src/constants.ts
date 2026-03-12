@@ -1,17 +1,27 @@
-// App tabs
-export const TAB = { SWAP: 'swap', POOL: 'pool', LIQUIDITY: 'liquidity' } as const
+// App tabs (Uniswap-style: Trade = Swap, Explore = all pools, Pool = your positions)
+export const TAB = { TRADE: 'trade', EXPLORE: 'explore', POOL: 'pool' } as const
 export type TabValue = (typeof TAB)[keyof typeof TAB]
+
+const HASHIO_RPC = 'https://testnet.hashio.io/api'
+/** Thirdweb free RPC for Hedera Testnet (chain 296) */
+const THIRDWEB_RPC = 'https://296.rpc.thirdweb.com'
+const DEFAULT_RPC = THIRDWEB_RPC
+
+/** RPC URL for Hedera (balance, eth_call, etc.). Use NEXT_PUBLIC_RPC_URL in .env to override. */
+export function getRpcUrl(): string {
+  return (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_RPC_URL?.trim()) || DEFAULT_RPC
+}
 
 // Hedera testnet chain for viem
 export const HEDERA_TESTNET = {
   id: 296,
   name: 'Hedera Testnet',
   nativeCurrency: { name: 'HBAR', symbol: 'HBAR', decimals: 8 },
-  rpcUrls: { default: { http: ['https://testnet.hashio.io/api'] } },
+  rpcUrls: { default: { http: [HASHIO_RPC] } },
   blockExplorers: { default: { name: 'HashScan', url: 'https://hashscan.io/testnet' } },
 } as const
 
-// Token list for Swap / Liquidity
+// Token list for Swap / Liquidity (HTS only)
 export interface TokenOption {
   id: string
   symbol: string
@@ -41,8 +51,8 @@ export const TOKEN_IMAGES: Record<string, string> = {
 }
 
 /**
- * Token symbol -> contract address. All are HTS (Hedera Token Service) long-form: 0x0000...<id>.
- * Pool key and Quoter use these same addresses. Edit with your deployed HTS token ids.
+ * HTS token symbol -> EVM address (long-form 0x0000...<id>).
+ * We only work with HTS tokens. Pool key and Quoter use these addresses.
  */
 export const TOKEN_ADDRESSES: Record<string, string> = {
   HBAR: '0x0000000000000000000000000000000000000408',

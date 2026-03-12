@@ -10,6 +10,7 @@ import { ErrorMessage } from '@/components/ErrorMessage'
 import { TokenIcon } from '@/components/TokenIcon'
 import { PoolPositions, type PoolInfo } from '@/components/PoolPositions'
 import { NewPosition } from '@/components/NewPosition'
+import { Explore } from '@/components/Explore'
 import {
   TAB,
   HEDERA_TESTNET,
@@ -24,7 +25,7 @@ import {
 import { useTokens } from '@/hooks/useTokens'
 
 function App() {
-  const [tab, setTab] = useState<string>(TAB.SWAP)
+  const [tab, setTab] = useState<string>(TAB.TRADE)
   const {
     accountId,
     formattedAccountId,
@@ -64,8 +65,8 @@ function App() {
     }
   }, [tokenOptions.length])
 
-  // Pool view: 'positions' = pool list, 'new-position' = create position stepper
-  const [poolView, setPoolView] = useState<'positions' | 'new-position'>('positions')
+  // New position form opens in a modal (click "New" or select a pool)
+  const [showNewPositionModal, setShowNewPositionModal] = useState(false)
   // Pre-selected pool for new position (from clicking a pool in the list)
   const [selectedPoolForPosition, setSelectedPoolForPosition] = useState<PoolInfo | null>(null)
   // Selected pool for swap quote (fee + tickSpacing + pair)
@@ -81,7 +82,7 @@ function App() {
 
   const quoterAddress = getQuoterAddress()
 
-  // Handle pool selection from PoolPositions component (sets swap context + navigates to new position)
+  // Handle pool selection (from Pool or Explore): set swap context, go to Pool tab, open new position modal
   const handleSelectPool = useCallback((pool: PoolInfo) => {
     const t0 = tokenOptions.find((t) => t.symbol === pool.symbol0) ?? tokenOptions[0]!
     const t1 = tokenOptions.find((t) => t.symbol === pool.symbol1) ?? tokenOptions[1]!
@@ -97,7 +98,8 @@ function App() {
     setTokenIn(t0)
     setTokenOut(t1)
     setSelectedPoolForPosition(pool)
-    setPoolView('new-position')
+    setTab(TAB.POOL)
+    setShowNewPositionModal(true)
   }, [tokenOptions])
 
   // Public client for read-only quote (eth_call)
@@ -195,12 +197,18 @@ function App() {
     <div className="app">
       <header className="header">
         <span className="logo">HieroForge</span>
-        <nav className="nav">
+        <nav className="nav nav--uniswap">
           <button
-            className={`nav-btn ${tab === TAB.SWAP ? 'active' : ''}`}
-            onClick={() => setTab(TAB.SWAP)}
+            className={`nav-btn ${tab === TAB.TRADE ? 'active' : ''}`}
+            onClick={() => setTab(TAB.TRADE)}
           >
-            Swap
+            Trade
+          </button>
+          <button
+            className={`nav-btn ${tab === TAB.EXPLORE ? 'active' : ''}`}
+            onClick={() => setTab(TAB.EXPLORE)}
+          >
+            Explore
           </button>
           <button
             className={`nav-btn ${tab === TAB.POOL ? 'active' : ''}`}
@@ -228,8 +236,8 @@ function App() {
         </button>
       </header>
 
-      <main className="main">
-        {tab === TAB.SWAP && (
+      <main className={`main ${tab === TAB.POOL ? 'main--pool-tab' : ''} ${tab === TAB.EXPLORE ? 'main--explore-tab' : ''}`}>
+        {tab === TAB.TRADE && (
           <div className={`card card--swap ${quoteError ? 'card--error' : ''}`}>
             <h2 className="card-title">Swap</h2>
             <div className={`token-row ${quoteError ? 'token-row--error' : ''}`}>
@@ -318,18 +326,28 @@ function App() {
           </div>
         )}
 
-        {tab === TAB.POOL && poolView === 'positions' && (
+        {tab === TAB.EXPLORE && (
+          <Explore onSelectPool={handleSelectPool} />
+        )}
+
+        {tab === TAB.POOL && (
           <PoolPositions
-            onCreatePosition={() => { setSelectedPoolForPosition(null); setPoolView('new-position') }}
+            onCreatePosition={() => { setSelectedPoolForPosition(null); setShowNewPositionModal(true) }}
             onSelectPool={handleSelectPool}
           />
         )}
 
-        {tab === TAB.POOL && poolView === 'new-position' && (
-          <NewPosition
-            onBack={() => setPoolView('positions')}
-            preselectedPool={selectedPoolForPosition}
-          />
+        {/* New position form in modal (HTS token pair + fee) */}
+        {showNewPositionModal && (
+          <div className="new-position-modal-overlay" onClick={() => setShowNewPositionModal(false)}>
+            <div className="new-position-modal" onClick={(e) => e.stopPropagation()}>
+              <button type="button" className="new-position-modal-close" onClick={() => setShowNewPositionModal(false)} aria-label="Close">×</button>
+              <NewPosition
+                onBack={() => setShowNewPositionModal(false)}
+                preselectedPool={selectedPoolForPosition}
+              />
+            </div>
+          </div>
         )}
       </main>
     </div>

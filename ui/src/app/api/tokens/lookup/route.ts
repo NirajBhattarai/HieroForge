@@ -53,7 +53,7 @@ async function lookupViaMirrorNode(address: string): Promise<{
 
 /**
  * GET /api/tokens/lookup?address=0x...
- * Reads token metadata from chain (ERC20 calls) + Hedera Mirror Node fallback.
+ * Reads HTS token metadata from chain (balanceOf/symbol/decimals) + Hedera Mirror Node fallback.
  * Auto-saves discovered token to DynamoDB.
  */
 export async function GET(request: Request) {

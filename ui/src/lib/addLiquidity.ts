@@ -60,11 +60,11 @@ export function encodeUnlockDataMint(
   tickLower: number,
   tickUpper: number,
   liquidity: bigint,
-  amount0: bigint,
-  amount1: bigint,
+  amount0Max: bigint,
+  amount1Max: bigint,
   owner: Address
 ): `0x${string}` {
-  // mintParams[0] = abi.encode(poolKey, tickLower, tickUpper, liquidity, amount0, amount1, owner, bytes(""))
+  // amount0Max/amount1Max = the amounts transferred to PM. Matches Foundry script: uint128(amount0), uint128(amount1).
   const mintParam = encodeAbiParameters(
     [
       {
@@ -91,8 +91,8 @@ export function encodeUnlockDataMint(
       tickLower,
       tickUpper,
       liquidity,
-      amount0,
-      amount1,
+      amount0Max,
+      amount1Max,
       owner,
       '0x',
     ]

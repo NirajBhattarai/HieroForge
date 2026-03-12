@@ -54,18 +54,28 @@ export function useTokenLookup(address: string) {
     setLoading(true)
     setError(null)
 
-    // Debounce 400ms so we don't fire on every keystroke
+    const base = typeof window !== 'undefined' ? window.location.origin : ''
+    const lookupUrl = `${base}/api/tokens/lookup?address=${encodeURIComponent(trimmed)}`
+
     const timer = setTimeout(() => {
-      fetch(`/api/tokens/lookup?address=${encodeURIComponent(trimmed)}`)
+      fetch(lookupUrl)
         .then(async (res) => {
+          if (res.status === 404) {
+            if (!cancelled) {
+              setToken(null)
+              setError('Token not found')
+            }
+            return null
+          }
           if (!res.ok) {
             const body = await res.json().catch(() => null)
             throw new Error(body?.error ?? 'Lookup failed')
           }
-          return res.json()
+          return res.json() as Promise<ResolvedToken>
         })
-        .then((data: ResolvedToken) => {
-          if (!cancelled) {
+        .then((data) => {
+          if (cancelled) return
+          if (data) {
             setToken(data)
             setError(null)
           }

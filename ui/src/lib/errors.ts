@@ -38,6 +38,7 @@ export function getFriendlyErrorMessage(err: unknown, context: 'quote' | 'transa
   if (/deadline|expired/i.test(raw)) return 'Transaction expired. Please try again.'
   if (/insufficient funds|balance too low|exceeds balance/i.test(raw)) return 'Insufficient balance.'
   if (/nonce|replacement fee/i.test(raw)) return 'Transaction conflict. Please try again.'
+  if (/incorrect request/i.test(raw)) return 'Hedera RPC rejected the request. This may be a gas estimation issue — please try again.'
   if (/network|fetch|timeout|econnrefused/i.test(raw)) return 'Network error. Check your connection and try again.'
   if (/wrong network|chain mismatch|unsupported chain/i.test(raw)) return 'Wrong network. Please switch to Hedera Testnet.'
 
