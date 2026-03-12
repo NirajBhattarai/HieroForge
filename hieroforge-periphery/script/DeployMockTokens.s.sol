@@ -54,9 +54,8 @@ contract DeployMockTokensScript is Script {
 
         vm.stopBroadcast();
 
-        (address c0, address c1) = address(token0) < address(token1)
-            ? (address(token0), address(token1))
-            : (address(token1), address(token0));
+        (address c0, address c1) =
+            address(token0) < address(token1) ? (address(token0), address(token1)) : (address(token1), address(token0));
         console.log("Token0:", address(token0));
         console.log("Token1:", address(token1));
         console.log("CURRENCY0_ADDRESS (use for pool):", c0);

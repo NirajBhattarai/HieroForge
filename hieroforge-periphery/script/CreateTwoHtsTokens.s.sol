@@ -26,7 +26,7 @@ contract CreateTwoHtsTokensScript is Script {
         IHederaTokenService.KeyValue memory keyValue;
         keyValue.inheritAccountKey = true;
         IHederaTokenService.TokenKey[] memory keys = new IHederaTokenService.TokenKey[](2);
-        keys[0] = IHederaTokenService.TokenKey(0x1, keyValue);  // Admin
+        keys[0] = IHederaTokenService.TokenKey(0x1, keyValue); // Admin
         keys[1] = IHederaTokenService.TokenKey(0x10, keyValue); // Supply
 
         IHederaTokenService.HederaToken memory tokenA;
@@ -53,9 +53,15 @@ contract CreateTwoHtsTokensScript is Script {
 
         vm.startBroadcast(pk);
 
-        (int64 codeA, address addrA) = IHederaTokenService(HTS_ADDRESS).createFungibleToken{value: value, gas: gasLimit}(tokenA, initialSupplyRaw, decimals);
+        (int64 codeA, address addrA) = IHederaTokenService(HTS_ADDRESS)
+        .createFungibleToken{value: value, gas: gasLimit}(
+            tokenA, initialSupplyRaw, decimals
+        );
         require(codeA == 22, "CreateTwoHtsTokens: token A failed");
-        (int64 codeB, address addrB) = IHederaTokenService(HTS_ADDRESS).createFungibleToken{value: value, gas: gasLimit}(tokenB, initialSupplyRaw, decimals);
+        (int64 codeB, address addrB) = IHederaTokenService(HTS_ADDRESS)
+        .createFungibleToken{value: value, gas: gasLimit}(
+            tokenB, initialSupplyRaw, decimals
+        );
         require(codeB == 22, "CreateTwoHtsTokens: token B failed");
 
         vm.stopBroadcast();

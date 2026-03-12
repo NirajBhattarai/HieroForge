@@ -29,8 +29,9 @@ abstract contract ERC721Permit_v4 is ERC721, IERC721Permit_v4 {
     }
 
     function _isApprovedOrOwner(address spender, uint256 tokenId) internal view returns (bool) {
-        return spender == ownerOf(tokenId) || getApproved[tokenId] == spender
-            || isApprovedForAll[ownerOf(tokenId)][spender];
+        return
+            spender == ownerOf(tokenId) || getApproved[tokenId] == spender
+                || isApprovedForAll[ownerOf(tokenId)][spender];
     }
 
     /// @dev Solmate ERC721 requires tokenURI; return empty string for position NFTs

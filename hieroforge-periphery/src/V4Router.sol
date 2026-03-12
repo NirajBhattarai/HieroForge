@@ -68,8 +68,8 @@ abstract contract V4Router is IV4Router, BaseActionsRouter, DeltaResolver {
     function _swapExactInputSingle(IV4Router.ExactInputSingleParams calldata params) private {
         uint128 amountIn = params.amountIn;
         if (amountIn == ActionConstants.OPEN_DELTA) {
-            amountIn = _getFullCredit(params.zeroForOne ? params.poolKey.currency0 : params.poolKey.currency1)
-                .toUint128();
+            amountIn =
+                _getFullCredit(params.zeroForOne ? params.poolKey.currency0 : params.poolKey.currency1).toUint128();
         }
         uint128 amountOut =
             _swap(params.poolKey, params.zeroForOne, -int256(uint256(amountIn)), params.hookData).toUint128();
@@ -82,8 +82,10 @@ abstract contract V4Router is IV4Router, BaseActionsRouter, DeltaResolver {
             amountOut =
                 _getFullDebt(params.zeroForOne ? params.poolKey.currency1 : params.poolKey.currency0).toUint128();
         }
-        uint128 amountIn = (uint256(-int256(_swap(params.poolKey, params.zeroForOne, int256(uint256(amountOut)), params.hookData))))
-            .toUint128();
+        uint128 amountIn = (uint256(
+                -int256(_swap(params.poolKey, params.zeroForOne, int256(uint256(amountOut)), params.hookData))
+            ))
+        .toUint128();
         if (amountIn > params.amountInMaximum) revert V4TooMuchRequested(params.amountInMaximum, amountIn);
     }
 

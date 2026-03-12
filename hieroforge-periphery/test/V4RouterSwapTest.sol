@@ -37,19 +37,12 @@ contract V4RouterSwapTest is Test, QuoterTestDeployers {
         uint256 bal0Before = IERC20(token0Addr).balanceOf(address(this));
         uint256 bal1Before = IERC20(token1Addr).balanceOf(address(this));
 
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_IN_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_IN_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
         bytes[] memory params = new bytes[](3);
         params[0] = abi.encode(
             IV4Router.ExactInputSingleParams({
-                poolKey: key,
-                zeroForOne: true,
-                amountIn: amountIn,
-                amountOutMinimum: minAmountOut,
-                hookData: ""
+                poolKey: key, zeroForOne: true, amountIn: amountIn, amountOutMinimum: minAmountOut, hookData: ""
             })
         );
         params[1] = abi.encode(currency0, amountIn);
@@ -74,19 +67,12 @@ contract V4RouterSwapTest is Test, QuoterTestDeployers {
         uint256 bal0Before = IERC20(token0Addr).balanceOf(address(this));
         uint256 bal1Before = IERC20(token1Addr).balanceOf(address(this));
 
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_IN_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_IN_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
         bytes[] memory params = new bytes[](3);
         params[0] = abi.encode(
             IV4Router.ExactInputSingleParams({
-                poolKey: key,
-                zeroForOne: false,
-                amountIn: amountIn,
-                amountOutMinimum: minAmountOut,
-                hookData: ""
+                poolKey: key, zeroForOne: false, amountIn: amountIn, amountOutMinimum: minAmountOut, hookData: ""
             })
         );
         params[1] = abi.encode(currency1, amountIn);
@@ -111,19 +97,12 @@ contract V4RouterSwapTest is Test, QuoterTestDeployers {
         uint256 bal0Before = IERC20(token0Addr).balanceOf(address(this));
         uint256 bal1Before = IERC20(token1Addr).balanceOf(address(this));
 
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_OUT_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_OUT_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
         bytes[] memory params = new bytes[](3);
         params[0] = abi.encode(
             IV4Router.ExactOutputSingleParams({
-                poolKey: key,
-                zeroForOne: true,
-                amountOut: amountOut,
-                amountInMaximum: amountInMaximum,
-                hookData: ""
+                poolKey: key, zeroForOne: true, amountOut: amountOut, amountInMaximum: amountInMaximum, hookData: ""
             })
         );
         params[1] = abi.encode(currency0, amountInMaximum);
@@ -149,19 +128,12 @@ contract V4RouterSwapTest is Test, QuoterTestDeployers {
         uint256 bal0Before = IERC20(token0Addr).balanceOf(address(this));
         uint256 bal1Before = IERC20(token1Addr).balanceOf(address(this));
 
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_OUT_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_OUT_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
         bytes[] memory params = new bytes[](3);
         params[0] = abi.encode(
             IV4Router.ExactOutputSingleParams({
-                poolKey: key,
-                zeroForOne: false,
-                amountOut: amountOut,
-                amountInMaximum: amountInMaximum,
-                hookData: ""
+                poolKey: key, zeroForOne: false, amountOut: amountOut, amountInMaximum: amountInMaximum, hookData: ""
             })
         );
         params[1] = abi.encode(currency1, amountInMaximum);
@@ -187,19 +159,12 @@ contract V4RouterSwapTest is Test, QuoterTestDeployers {
         uint128 amountIn = 100_000;
         uint128 minAmountOut = 200_000; // impossible: we put in 100k, want at least 200k out
 
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_IN_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_IN_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
         bytes[] memory params = new bytes[](3);
         params[0] = abi.encode(
             IV4Router.ExactInputSingleParams({
-                poolKey: key,
-                zeroForOne: true,
-                amountIn: amountIn,
-                amountOutMinimum: minAmountOut,
-                hookData: ""
+                poolKey: key, zeroForOne: true, amountIn: amountIn, amountOutMinimum: minAmountOut, hookData: ""
             })
         );
         params[1] = abi.encode(currency0, amountIn);
@@ -219,19 +184,12 @@ contract V4RouterSwapTest is Test, QuoterTestDeployers {
         uint128 amountOut = 95_000;
         uint128 amountInMaximum = 10; // way too low to get 95k out
 
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_OUT_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_OUT_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
         bytes[] memory params = new bytes[](3);
         params[0] = abi.encode(
             IV4Router.ExactOutputSingleParams({
-                poolKey: key,
-                zeroForOne: true,
-                amountOut: amountOut,
-                amountInMaximum: amountInMaximum,
-                hookData: ""
+                poolKey: key, zeroForOne: true, amountOut: amountOut, amountInMaximum: amountInMaximum, hookData: ""
             })
         );
         params[1] = abi.encode(currency0, amountInMaximum);
@@ -252,19 +210,12 @@ contract V4RouterSwapTest is Test, QuoterTestDeployers {
         uint128 minAmountOut = 90_000;
         uint256 settleMax = 50_000; // we owe amountIn (100k) but only allow 50k
 
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_IN_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_IN_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
         bytes[] memory params = new bytes[](3);
         params[0] = abi.encode(
             IV4Router.ExactInputSingleParams({
-                poolKey: key,
-                zeroForOne: true,
-                amountIn: amountIn,
-                amountOutMinimum: minAmountOut,
-                hookData: ""
+                poolKey: key, zeroForOne: true, amountIn: amountIn, amountOutMinimum: minAmountOut, hookData: ""
             })
         );
         params[1] = abi.encode(currency0, settleMax); // SETTLE_ALL(currency0, 50k) but debt is 100k
@@ -285,19 +236,12 @@ contract V4RouterSwapTest is Test, QuoterTestDeployers {
         uint128 minAmountOut = 90_000;
         uint256 takeMin = 200_000; // we receive ~99k but require at least 200k
 
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_IN_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_IN_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
         bytes[] memory params = new bytes[](3);
         params[0] = abi.encode(
             IV4Router.ExactInputSingleParams({
-                poolKey: key,
-                zeroForOne: true,
-                amountIn: amountIn,
-                amountOutMinimum: minAmountOut,
-                hookData: ""
+                poolKey: key, zeroForOne: true, amountIn: amountIn, amountOutMinimum: minAmountOut, hookData: ""
             })
         );
         params[1] = abi.encode(currency0, amountIn);
@@ -316,19 +260,12 @@ contract V4RouterSwapTest is Test, QuoterTestDeployers {
     function test_execute_revertsWhenDeadlinePassed() public {
         uint128 amountIn = 100_000;
         uint128 minAmountOut = 90_000;
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_IN_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_IN_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
         bytes[] memory params = new bytes[](3);
         params[0] = abi.encode(
             IV4Router.ExactInputSingleParams({
-                poolKey: key,
-                zeroForOne: true,
-                amountIn: amountIn,
-                amountOutMinimum: minAmountOut,
-                hookData: ""
+                poolKey: key, zeroForOne: true, amountIn: amountIn, amountOutMinimum: minAmountOut, hookData: ""
             })
         );
         params[1] = abi.encode(currency0, amountIn);
@@ -380,19 +317,12 @@ contract V4RouterSwapTest is Test, QuoterTestDeployers {
         uint256 bal0Before = IERC20(token0Addr).balanceOf(address(this));
         uint256 bal1Before = IERC20(token1Addr).balanceOf(address(this));
 
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_IN_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_IN_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
         bytes[] memory params = new bytes[](3);
         params[0] = abi.encode(
             IV4Router.ExactInputSingleParams({
-                poolKey: key,
-                zeroForOne: true,
-                amountIn: amountIn,
-                amountOutMinimum: minAmountOut,
-                hookData: ""
+                poolKey: key, zeroForOne: true, amountIn: amountIn, amountOutMinimum: minAmountOut, hookData: ""
             })
         );
         params[1] = abi.encode(currency0, amountIn);
@@ -416,19 +346,12 @@ contract V4RouterSwapTest is Test, QuoterTestDeployers {
         address token1Addr = Currency.unwrap(currency1);
         uint256 bal1Before = IERC20(token1Addr).balanceOf(address(this));
 
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_IN_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_IN_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
         bytes[] memory params = new bytes[](3);
         params[0] = abi.encode(
             IV4Router.ExactInputSingleParams({
-                poolKey: key,
-                zeroForOne: true,
-                amountIn: amountIn,
-                amountOutMinimum: minAmountOut,
-                hookData: ""
+                poolKey: key, zeroForOne: true, amountIn: amountIn, amountOutMinimum: minAmountOut, hookData: ""
             })
         );
         params[1] = abi.encode(currency0, amountIn);
@@ -453,19 +376,12 @@ contract V4RouterSwapTest is Test, QuoterTestDeployers {
         uint256 bal0Before = IERC20(token0Addr).balanceOf(address(this));
         uint256 bal1Before = IERC20(token1Addr).balanceOf(address(this));
 
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_OUT_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_OUT_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
         bytes[] memory params = new bytes[](3);
         params[0] = abi.encode(
             IV4Router.ExactOutputSingleParams({
-                poolKey: key,
-                zeroForOne: true,
-                amountOut: amountOut,
-                amountInMaximum: amountInMaximum,
-                hookData: ""
+                poolKey: key, zeroForOne: true, amountOut: amountOut, amountInMaximum: amountInMaximum, hookData: ""
             })
         );
         params[1] = abi.encode(currency0, amountInMaximum);

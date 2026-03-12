@@ -38,17 +38,17 @@ contract CreateHtsNftTokenScript is Script {
         token.symbol = "HF-POS";
         token.treasury = positionManager;
         token.memo = "HTS NFT for HieroForge PositionManager position receipts";
-        token.tokenSupplyType = true;  // FINITE
-        token.maxSupply = 1000000;    // max serials
+        token.tokenSupplyType = true; // FINITE
+        token.maxSupply = 1000000; // max serials
         token.freezeDefault = false;
         token.tokenKeys = new IHederaTokenService.TokenKey[](2);
-        token.tokenKeys[0] = IHederaTokenService.TokenKey(0x1, contractKey);   // Admin
-        token.tokenKeys[1] = IHederaTokenService.TokenKey(0x10, contractKey);  // Supply (mint)
+        token.tokenKeys[0] = IHederaTokenService.TokenKey(0x1, contractKey); // Admin
+        token.tokenKeys[1] = IHederaTokenService.TokenKey(0x10, contractKey); // Supply (mint)
         token.expiry = IHederaTokenService.Expiry(0, vm.addr(PRIVATE_KEY), 8000000);
 
         vm.startBroadcast(PRIVATE_KEY);
-        (responseCode, tokenAddress) = IHederaTokenService(HTS_ADDRESS)
-            .createNonFungibleToken{value: value, gas: gasLimit}(token);
+        (responseCode, tokenAddress) =
+            IHederaTokenService(HTS_ADDRESS).createNonFungibleToken{value: value, gas: gasLimit}(token);
         vm.stopBroadcast();
 
         console.log("Response code:", uint256(uint64(responseCode)));
