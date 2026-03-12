@@ -1,6 +1,0 @@
-{
-  "/api/tokens/route": "app/api/tokens/route.js",
-  "/api/pools/route": "app/api/pools/route.js",
-  "/api/tokens/lookup/route": "app/api/tokens/lookup/route.js",
-  "/page": "app/page.js"
-}
