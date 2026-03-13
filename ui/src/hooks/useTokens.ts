@@ -1,14 +1,14 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect } from "react";
 
 export interface DynamicToken {
-  address: string
-  symbol: string
-  name: string
-  decimals: number
-  logoUrl?: string
-  isHts?: boolean
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  logoUrl?: string;
+  isHts?: boolean;
 }
 
 /**
@@ -16,21 +16,21 @@ export interface DynamicToken {
  * Returns the list, a loading flag, and a refetch function.
  */
 export function useTokens() {
-  const [tokens, setTokens] = useState<DynamicToken[]>([])
-  const [loading, setLoading] = useState(true)
+  const [tokens, setTokens] = useState<DynamicToken[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const fetchTokens = () => {
-    setLoading(true)
-    fetch('/api/tokens')
+    setLoading(true);
+    fetch("/api/tokens")
       .then((res) => (res.ok ? res.json() : []))
       .then((data: DynamicToken[]) => setTokens(data))
       .catch(() => setTokens([]))
-      .finally(() => setLoading(false))
-  }
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
-    fetchTokens()
-  }, [])
+    fetchTokens();
+  }, []);
 
-  return { tokens, loading, refetch: fetchTokens }
+  return { tokens, loading, refetch: fetchTokens };
 }

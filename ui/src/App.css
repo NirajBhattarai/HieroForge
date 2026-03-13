@@ -70,7 +70,9 @@
   color: var(--muted);
   font-size: 0.9375rem;
   font-weight: 500;
-  transition: color 0.2s, background 0.2s;
+  transition:
+    color 0.2s,
+    background 0.2s;
 }
 
 .nav-btn:hover {
@@ -91,7 +93,10 @@
   color: #fff;
   font-size: 0.875rem;
   font-weight: 600;
-  transition: border-color 0.2s, background 0.2s, color 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    color 0.2s;
 }
 
 .connect-btn:hover:not(:disabled) {
@@ -322,7 +327,10 @@
   color: #0d0d0d;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    box-shadow 0.2s;
 }
 
 .explore-pool-card:hover {
@@ -379,12 +387,16 @@
   border-radius: var(--radius-xl);
   padding: 32px;
   box-shadow: var(--shadow-lg);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .card--error {
   border-color: rgba(248, 113, 113, 0.4);
-  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.15), var(--shadow-lg);
+  box-shadow:
+    0 0 0 1px rgba(248, 113, 113, 0.15),
+    var(--shadow-lg);
 }
 
 .card-title {
@@ -402,7 +414,9 @@
   border-radius: var(--radius);
   padding: 16px 20px;
   margin-bottom: 12px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .token-row:focus-within {
@@ -517,7 +531,11 @@
   align-items: center;
   justify-content: center;
   font-size: 1.1rem;
-  transition: border-color 0.2s, color 0.2s, background 0.2s, transform 0.15s;
+  transition:
+    border-color 0.2s,
+    color 0.2s,
+    background 0.2s,
+    transform 0.15s;
 }
 
 .flip-btn:hover {
@@ -538,7 +556,10 @@
   color: #0f1419;
   font-size: 1rem;
   font-weight: 700;
-  transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+  transition:
+    background 0.2s,
+    transform 0.1s,
+    box-shadow 0.2s;
 }
 
 .primary-btn:hover:not(:disabled) {
@@ -621,7 +642,10 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s, transform 0.1s;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    transform 0.1s;
 }
 
 .pool-card:hover {
@@ -709,7 +733,9 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 }
 
 .strategy-card:hover {
@@ -770,7 +796,9 @@
   color: var(--muted);
   font-size: 1.25rem;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 
 .price-adj-btn:hover {
@@ -850,7 +878,9 @@
   border-radius: var(--radius);
   margin-bottom: 10px;
   background: var(--bg-input);
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 }
 
 .pool-item:hover {
@@ -1047,7 +1077,9 @@
   font-size: 1.5rem;
   line-height: 1;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 
 .new-position-modal-close:hover {
@@ -1220,7 +1252,7 @@
 .pool-dropdown-arrow {
   padding: 10px 10px;
   border: none;
-  border-left: 1px solid rgba(255,255,255,0.2);
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
   background: #0d0d0d;
   color: #fff;
   font-size: 0.7rem;
@@ -1236,12 +1268,14 @@
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 }
 
 .pool-filter-btn:hover {
   border-color: #4b5563;
-  background: rgba(255,255,255,0.05);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .pool-filter-btn--icon {
@@ -1251,8 +1285,8 @@
 /* Load by ID */
 .pool-load-by-id {
   padding: 16px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
 }
 
@@ -1306,8 +1340,8 @@
   justify-content: center;
   text-align: center;
   padding: 48px 32px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 20px;
 }
 
@@ -1347,12 +1381,14 @@
   font-size: 0.9375rem;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 }
 
 .pool-btn-explore:hover {
   border-color: #4b5563;
-  background: rgba(255,255,255,0.05);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .pool-btn-new-position {
@@ -1374,14 +1410,16 @@
 .pool-empty-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(255,255,255,0.2);
+  border: 3px solid rgba(255, 255, 255, 0.2);
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .pool-positions-error {
@@ -1403,16 +1441,18 @@
   justify-content: space-between;
   gap: 16px;
   padding: 18px 20px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 }
 
 .pool-position-card:hover {
   border-color: rgba(252, 114, 255, 0.4);
-  background: rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .pool-position-left {
@@ -1532,7 +1572,7 @@
 
 .pool-info-close:hover {
   color: #fff;
-  background: rgba(255,255,255,0.1);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .pool-footer-link {
@@ -1581,7 +1621,7 @@
   text-align: center;
   color: #9ca3af;
   font-size: 0.875rem;
-  background: rgba(255,255,255,0.03);
+  background: rgba(255, 255, 255, 0.03);
   border-radius: 12px;
 }
 
@@ -1590,16 +1630,18 @@
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 }
 
 .pool-top-card:hover {
   border-color: rgba(252, 114, 255, 0.3);
-  background: rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .pool-top-icons {
@@ -1680,7 +1722,7 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.25);
+  background: rgba(255, 255, 255, 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1856,10 +1898,16 @@
   max-width: 960px;
   margin: 0 auto;
   padding: 32px 24px 48px;
-  background: linear-gradient(165deg, rgba(19, 19, 32, 0.6) 0%, rgba(26, 26, 46, 0.4) 100%);
+  background: linear-gradient(
+    165deg,
+    rgba(19, 19, 32, 0.6) 0%,
+    rgba(26, 26, 46, 0.4) 100%
+  );
   border-radius: 24px;
   border: 1px solid rgba(58, 58, 78, 0.5);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(252, 114, 255, 0.03) inset;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(252, 114, 255, 0.03) inset;
 }
 
 @media (max-width: 768px) {
@@ -1868,7 +1916,9 @@
     gap: 24px;
     padding: 24px 16px 40px;
   }
-  .np-sidebar { display: none; }
+  .np-sidebar {
+    display: none;
+  }
 }
 
 /* ---- Sidebar steps ---- */
@@ -1902,13 +1952,18 @@
   background: #1e1e2e;
   border: 2px solid #3a3a4e;
   margin-top: 0;
-  transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
+  transition:
+    background 0.25s,
+    border-color 0.25s,
+    box-shadow 0.25s;
 }
 
 .np-step--active .np-step-dot {
   background: linear-gradient(135deg, #fc72ff 0%, #e04ef2 100%);
   border-color: rgba(252, 114, 255, 0.6);
-  box-shadow: 0 0 16px rgba(252, 114, 255, 0.4), 0 0 32px rgba(252, 114, 255, 0.15);
+  box-shadow:
+    0 0 16px rgba(252, 114, 255, 0.4),
+    0 0 32px rgba(252, 114, 255, 0.15);
 }
 
 .np-step-line {
@@ -1958,7 +2013,11 @@
   align-items: center;
   justify-content: space-between;
   padding: 18px 24px;
-  background: linear-gradient(135deg, rgba(26, 26, 46, 0.9) 0%, rgba(30, 30, 46, 0.95) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(26, 26, 46, 0.9) 0%,
+    rgba(30, 30, 46, 0.95) 100%
+  );
   border: 1px solid rgba(58, 58, 78, 0.6);
   border-radius: 18px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
@@ -2006,7 +2065,9 @@
   font-size: 0.8125rem;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 }
 
 .np-edit-btn:hover {
@@ -2016,11 +2077,17 @@
 
 /* ---- Card container ---- */
 .np-card {
-  background: linear-gradient(180deg, rgba(19, 19, 32, 0.95) 0%, rgba(22, 22, 38, 0.98) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(19, 19, 32, 0.95) 0%,
+    rgba(22, 22, 38, 0.98) 100%
+  );
   border: 1px solid rgba(58, 58, 78, 0.5);
   border-radius: 22px;
   padding: 32px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12), 0 1px 0 rgba(255, 255, 255, 0.02) inset;
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.02) inset;
 }
 
 .np-step2-wrap {
@@ -2072,7 +2139,9 @@
   border-radius: 16px;
   border: 1px solid rgba(58, 58, 78, 0.6);
   background: rgba(26, 26, 46, 0.7);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .np-token-select:focus-within {
@@ -2218,7 +2287,9 @@
   color: #fff;
   font-size: 0.8125rem;
   font-family: ui-monospace, monospace;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .np-addr-input:focus {
@@ -2242,8 +2313,13 @@
 }
 
 @keyframes np-pulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .np-addr-error {
@@ -2276,7 +2352,10 @@
   border: 1px solid rgba(58, 58, 78, 0.6);
   background: rgba(26, 26, 46, 0.7);
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    box-shadow 0.2s;
 }
 
 .np-fee-card:hover {
@@ -2375,7 +2454,11 @@
   font-size: 1.0625rem;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.2s, opacity 0.2s, box-shadow 0.2s, transform 0.15s;
+  transition:
+    background 0.2s,
+    opacity 0.2s,
+    box-shadow 0.2s,
+    transform 0.15s;
   box-shadow: 0 4px 16px rgba(252, 114, 255, 0.25);
 }
 
@@ -2423,7 +2506,9 @@
   font-size: 0.9375rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 
 .np-range-btn--active {
@@ -2439,7 +2524,11 @@
 
 /* ---- Price chart placeholder ---- */
 .np-chart {
-  background: linear-gradient(180deg, rgba(26, 26, 46, 0.9) 0%, rgba(22, 22, 40, 0.95) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(26, 26, 46, 0.9) 0%,
+    rgba(22, 22, 40, 0.95) 100%
+  );
   border: 1px solid rgba(58, 58, 78, 0.5);
   border-radius: 12px;
   padding: 14px 16px;
@@ -2487,7 +2576,11 @@
   height: 100px;
   border-radius: 10px;
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(252, 114, 255, 0.06) 0%, transparent 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(252, 114, 255, 0.06) 0%,
+    transparent 100%
+  );
   border: 1px solid rgba(58, 58, 78, 0.3);
 }
 
@@ -2547,7 +2640,11 @@
   background: rgba(26, 26, 46, 0.7);
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s, transform 0.15s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    transform 0.15s,
+    box-shadow 0.2s;
 }
 
 .np-strategy-card:hover {
@@ -2635,7 +2732,10 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    border-color 0.2s;
   flex-shrink: 0;
 }
 
@@ -2679,7 +2779,9 @@
   border-radius: 16px;
   padding: 20px 24px;
   margin-bottom: 12px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .np-deposit-card:focus-within {
@@ -2734,63 +2836,6 @@
   text-align: right;
 }
 
-.np-deposit-calc {
-  margin-top: 6px;
-  font-size: 0.75rem;
-  color: var(--accent);
-  font-weight: 500;
-}
-
-/* ---- Set initial price ---- */
-.np-initial-price-row {
-  margin-bottom: 8px;
-}
-
-.np-initial-price-input {
-  width: 100%;
-  padding: 16px 18px;
-  border-radius: 14px;
-  border: 1px solid rgba(58, 58, 78, 0.5);
-  background: rgba(26, 26, 46, 0.7);
-  color: #fff;
-  font-size: 1.5rem;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.np-initial-price-input:focus {
-  outline: none;
-  border-color: rgba(252, 114, 255, 0.5);
-}
-
-.np-initial-price-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.np-initial-price-label {
-  font-size: 0.8125rem;
-  color: #9ca3af;
-}
-
-.np-initial-price-warning {
-  margin: 12px 0 0 0;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: rgba(251, 191, 36, 0.1);
-  color: #fbbf24;
-  font-size: 0.8125rem;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.np-initial-price-warning::before {
-  content: '▲';
-  font-size: 0.75rem;
-}
-
 /* ---- Liquidity ---- */
 .np-liquidity-row {
   margin-bottom: 20px;
@@ -2814,7 +2859,9 @@
   background: rgba(26, 26, 46, 0.7);
   color: #fff;
   font-size: 1rem;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .np-liquidity-input:focus {
@@ -2865,7 +2912,10 @@
   font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.2s, opacity 0.2s, box-shadow 0.2s;
+  transition:
+    background 0.2s,
+    opacity 0.2s,
+    box-shadow 0.2s;
 }
 
 .np-action-btn:disabled {
@@ -2913,7 +2963,9 @@
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
 }
 
 .np-save-btn:hover:not(:disabled) {
@@ -2951,7 +3003,9 @@
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
-  transition: color 0.2s, background 0.2s;
+  transition:
+    color 0.2s,
+    background 0.2s;
 }
 
 .pool-tab-btn:hover {

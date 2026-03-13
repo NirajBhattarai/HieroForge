@@ -3,10 +3,10 @@ pragma solidity ^0.8.13;
 
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
-import {Quoter} from "../src/Quoter.sol";
+import {V4Quoter} from "../src/V4Quoter.sol";
 import {IPoolManager} from "hieroforge-core/interfaces/IPoolManager.sol";
 
-/// @notice Deploys Quoter to Hedera testnet (requires PoolManager already deployed).
+/// @notice Deploys V4Quoter to Hedera testnet (requires PoolManager already deployed).
 /// Usage:
 ///   export PRIVATE_KEY=0x... POOL_MANAGER_ADDRESS=0x...
 ///   forge script script/DeployQuoter.s.sol:DeployQuoterScript --rpc-url testnet --broadcast --private-key $PRIVATE_KEY
@@ -17,10 +17,10 @@ contract DeployQuoterScript is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        Quoter quoter = new Quoter(IPoolManager(poolManager));
+        V4Quoter quoter = new V4Quoter(IPoolManager(poolManager));
 
         vm.stopBroadcast();
 
-        console.log("Quoter:", address(quoter));
+        console.log("V4Quoter:", address(quoter));
     }
 }
