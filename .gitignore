@@ -20,3 +20,6 @@ docs/
 ui/node_modules/
 ui/dist/
 ui/.next/
+
+# Embedded git repo (use submodule if needed)
+hieroforge-periphery/lib/permit2/
