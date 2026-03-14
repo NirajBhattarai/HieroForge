@@ -9,7 +9,11 @@ import { ErrorMessage } from "./ErrorMessage";
 import { useHashPack } from "@/context/HashPackContext";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
 import { getTokenDecimals, getPositionManagerAddress } from "@/constants";
-import { buildPoolKey, encodeUnlockDataMint } from "@/lib/addLiquidity";
+import {
+  buildPoolKey,
+  encodeUnlockDataMint,
+  encodeUnlockDataMintFromDeltas,
+} from "@/lib/addLiquidity";
 import {
   encodePriceSqrt,
   computeLiquidityFromAmount,
@@ -58,6 +62,7 @@ export function AddLiquidityModal({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [useFromDeltas, setUseFromDeltas] = useState(false);
 
   const decimals0 = pool.decimals0 ?? getTokenDecimals(pool.symbol0);
   const decimals1 = pool.decimals1 ?? getTokenDecimals(pool.symbol1);
@@ -214,15 +219,25 @@ export function AddLiquidityModal({
         decimals1,
       );
 
-      const unlockData = encodeUnlockDataMint(
-        poolKey,
-        tickLower,
-        tickUpper,
-        liquidityWei,
-        amount0Wei,
-        amount1Wei,
-        ownerEvmAddress as `0x${string}`,
-      );
+      const unlockData = useFromDeltas
+        ? encodeUnlockDataMintFromDeltas(
+            poolKey,
+            tickLower,
+            tickUpper,
+            liquidityWei,
+            amount0Wei,
+            amount1Wei,
+            ownerEvmAddress as `0x${string}`,
+          )
+        : encodeUnlockDataMint(
+            poolKey,
+            tickLower,
+            tickUpper,
+            liquidityWei,
+            amount0Wei,
+            amount1Wei,
+            ownerEvmAddress as `0x${string}`,
+          );
 
       // Transfer tokens to PositionManager
       for (const [currency, amountWei] of [
@@ -278,6 +293,7 @@ export function AddLiquidityModal({
     decimals0,
     decimals1,
     referencePrice,
+    useFromDeltas,
     isConnected,
     accountId,
     hashConnectRef,
@@ -450,6 +466,31 @@ export function AddLiquidityModal({
           </a>
         </div>
       )}
+
+      {/* FROM_DELTAS toggle */}
+      <div className="flex items-center justify-between px-1 py-2 rounded-xl bg-surface-2/50 border border-white/[0.04]">
+        <div className="pl-2">
+          <span className="text-xs font-medium text-text-secondary">
+            Use FROM_DELTAS
+          </span>
+          <p className="text-[10px] text-text-tertiary mt-0.5">
+            Auto-resolve amounts from pool manager deltas
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setUseFromDeltas(!useFromDeltas)}
+          className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer mr-2 ${
+            useFromDeltas ? "bg-accent" : "bg-surface-3"
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+              useFromDeltas ? "translate-x-5" : ""
+            }`}
+          />
+        </button>
+      </div>
 
       <Button
         variant="primary"

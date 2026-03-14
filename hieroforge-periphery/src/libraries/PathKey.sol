@@ -35,4 +35,19 @@ library PathKeyLibrary {
         zeroForOne = Currency.unwrap(currencyIn) == Currency.unwrap(currency0);
         poolKey = PoolKey(currency0, currency1, params.fee, params.tickSpacing, params.hooks);
     }
+
+    /// @notice Same as above but accepts memory PathKey (used for multi-hop decoded from abi.decode)
+    function getPoolAndSwapDirectionMemory(PathKey memory params, Currency currencyIn)
+        internal
+        pure
+        returns (PoolKey memory poolKey, bool zeroForOne)
+    {
+        Currency currencyOut = params.intermediateCurrency;
+        (Currency currency0, Currency currency1) = Currency.unwrap(currencyIn) < Currency.unwrap(currencyOut)
+            ? (currencyIn, currencyOut)
+            : (currencyOut, currencyIn);
+
+        zeroForOne = Currency.unwrap(currencyIn) == Currency.unwrap(currency0);
+        poolKey = PoolKey(currency0, currency1, params.fee, params.tickSpacing, params.hooks);
+    }
 }

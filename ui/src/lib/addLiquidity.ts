@@ -4,6 +4,10 @@ import {
   INCREASE_LIQUIDITY_ACTION,
   DECREASE_LIQUIDITY_ACTION,
   BURN_POSITION_ACTION,
+  MINT_POSITION_FROM_DELTAS_ACTION,
+  INCREASE_LIQUIDITY_FROM_DELTAS_ACTION,
+  PM_SETTLE_PAIR,
+  PM_CLOSE_CURRENCY,
   SQRT_PRICE_1_1,
 } from "../abis/PositionManager";
 
@@ -185,5 +189,197 @@ export function encodeUnlockDataBurn(
       { type: "bytes[]", name: "params" },
     ],
     [actions, [burnParam]],
+  ) as `0x${string}`;
+}
+
+// ---------------------------------------------------------------------------
+// FROM_DELTAS variants — auto-settle using PM's internal delta balances
+// ---------------------------------------------------------------------------
+
+function packActions(...ids: number[]): `0x${string}` {
+  return ("0x" +
+    ids.map((a) => a.toString(16).padStart(2, "0")).join("")) as `0x${string}`;
+}
+
+/**
+ * Encode unlockData for MINT_POSITION_FROM_DELTAS + SETTLE_PAIR.
+ * The PositionManager resolves the exact token amounts from its internal deltas
+ * rather than requiring explicit amount0Max/amount1Max.
+ */
+export function encodeUnlockDataMintFromDeltas(
+  poolKey: PoolKey,
+  tickLower: number,
+  tickUpper: number,
+  liquidity: bigint,
+  amount0Max: bigint,
+  amount1Max: bigint,
+  owner: Address,
+): `0x${string}` {
+  const mintParam = encodeAbiParameters(
+    [
+      {
+        type: "tuple",
+        name: "poolKey",
+        components: [
+          { type: "address", name: "currency0" },
+          { type: "address", name: "currency1" },
+          { type: "uint24", name: "fee" },
+          { type: "int24", name: "tickSpacing" },
+          { type: "address", name: "hooks" },
+        ],
+      },
+      { type: "int24", name: "tickLower" },
+      { type: "int24", name: "tickUpper" },
+      { type: "uint256", name: "liquidity" },
+      { type: "uint128", name: "amount0Max" },
+      { type: "uint128", name: "amount1Max" },
+      { type: "address", name: "owner" },
+      { type: "bytes", name: "hookData" },
+    ],
+    [
+      poolKey,
+      tickLower,
+      tickUpper,
+      liquidity,
+      amount0Max,
+      amount1Max,
+      owner,
+      "0x",
+    ],
+  );
+
+  // SETTLE_PAIR param = abi.encode(currency0, currency1)
+  const settlePairParam = encodeAbiParameters(
+    [
+      { type: "address", name: "currency0" },
+      { type: "address", name: "currency1" },
+    ],
+    [poolKey.currency0, poolKey.currency1],
+  );
+
+  const actions = packActions(MINT_POSITION_FROM_DELTAS_ACTION, PM_SETTLE_PAIR);
+
+  return encodeAbiParameters(
+    [
+      { type: "bytes", name: "actions" },
+      { type: "bytes[]", name: "params" },
+    ],
+    [actions, [mintParam, settlePairParam]],
+  ) as `0x${string}`;
+}
+
+/**
+ * Encode unlockData for INCREASE_LIQUIDITY_FROM_DELTAS + SETTLE_PAIR.
+ * Adds liquidity to an existing position using PM delta resolution.
+ */
+export function encodeUnlockDataIncreaseFromDeltas(
+  tokenId: bigint,
+  liquidity: bigint,
+  amount0Max: bigint,
+  amount1Max: bigint,
+  currency0: Address,
+  currency1: Address,
+): `0x${string}` {
+  const increaseParam = encodeAbiParameters(
+    [
+      { type: "uint256", name: "tokenId" },
+      { type: "uint256", name: "liquidity" },
+      { type: "uint128", name: "amount0Max" },
+      { type: "uint128", name: "amount1Max" },
+      { type: "bytes", name: "hookData" },
+    ],
+    [tokenId, liquidity, amount0Max, amount1Max, "0x"],
+  );
+
+  const settlePairParam = encodeAbiParameters(
+    [
+      { type: "address", name: "currency0" },
+      { type: "address", name: "currency1" },
+    ],
+    [currency0, currency1],
+  );
+
+  const actions = packActions(
+    INCREASE_LIQUIDITY_FROM_DELTAS_ACTION,
+    PM_SETTLE_PAIR,
+  );
+
+  return encodeAbiParameters(
+    [
+      { type: "bytes", name: "actions" },
+      { type: "bytes[]", name: "params" },
+    ],
+    [actions, [increaseParam, settlePairParam]],
+  ) as `0x${string}`;
+}
+
+/**
+ * Encode unlockData for MINT_POSITION_FROM_DELTAS + CLOSE_CURRENCY (for each currency).
+ * CLOSE_CURRENCY settles any remaining debt and takes any remaining credits.
+ */
+export function encodeUnlockDataMintFromDeltasWithClose(
+  poolKey: PoolKey,
+  tickLower: number,
+  tickUpper: number,
+  liquidity: bigint,
+  amount0Max: bigint,
+  amount1Max: bigint,
+  owner: Address,
+): `0x${string}` {
+  const mintParam = encodeAbiParameters(
+    [
+      {
+        type: "tuple",
+        name: "poolKey",
+        components: [
+          { type: "address", name: "currency0" },
+          { type: "address", name: "currency1" },
+          { type: "uint24", name: "fee" },
+          { type: "int24", name: "tickSpacing" },
+          { type: "address", name: "hooks" },
+        ],
+      },
+      { type: "int24", name: "tickLower" },
+      { type: "int24", name: "tickUpper" },
+      { type: "uint256", name: "liquidity" },
+      { type: "uint128", name: "amount0Max" },
+      { type: "uint128", name: "amount1Max" },
+      { type: "address", name: "owner" },
+      { type: "bytes", name: "hookData" },
+    ],
+    [
+      poolKey,
+      tickLower,
+      tickUpper,
+      liquidity,
+      amount0Max,
+      amount1Max,
+      owner,
+      "0x",
+    ],
+  );
+
+  // CLOSE_CURRENCY takes a single currency address
+  const close0Param = encodeAbiParameters(
+    [{ type: "address", name: "currency" }],
+    [poolKey.currency0],
+  );
+  const close1Param = encodeAbiParameters(
+    [{ type: "address", name: "currency" }],
+    [poolKey.currency1],
+  );
+
+  const actions = packActions(
+    MINT_POSITION_FROM_DELTAS_ACTION,
+    PM_CLOSE_CURRENCY,
+    PM_CLOSE_CURRENCY,
+  );
+
+  return encodeAbiParameters(
+    [
+      { type: "bytes", name: "actions" },
+      { type: "bytes[]", name: "params" },
+    ],
+    [actions, [mintParam, close0Param, close1Param]],
   ) as `0x${string}`;
 }

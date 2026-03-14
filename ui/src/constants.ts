@@ -55,6 +55,20 @@ export { getTokenAddress, getTokenDecimals } from "@/lib/tokenRegistry";
 export const DEFAULT_FEE = 3000;
 export const DEFAULT_TICK_SPACING = 60;
 
+/** Supported fee tiers (Uniswap v4-style). */
+export const FEE_TIERS = [
+  { fee: 500, label: "0.05%", desc: "Best for stable pairs" },
+  { fee: 3000, label: "0.3%", desc: "Best for most pairs", tag: "Most used" },
+  { fee: 10000, label: "1%", desc: "Best for exotic pairs" },
+] as const;
+
+/** Map fee to its associated tickSpacing. */
+export function feeTierToTickSpacing(fee: number): number {
+  if (fee === 500) return 10;
+  if (fee === 10000) return 200;
+  return 60;
+}
+
 // Contract addresses (from env) – Next.js NEXT_PUBLIC_* available on client and server
 export function getPoolManagerAddress(): string {
   return (process.env.NEXT_PUBLIC_POOL_MANAGER_ADDRESS ?? "").trim();

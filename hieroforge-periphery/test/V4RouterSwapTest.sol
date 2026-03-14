@@ -10,6 +10,8 @@ import {Commands} from "../src/libraries/Commands.sol";
 import {Actions} from "../src/libraries/Actions.sol";
 import {IV4Router} from "../src/interfaces/IV4Router.sol";
 import {IUniversalRouter} from "../src/interfaces/IUniversalRouter.sol";
+import {PositionManager} from "../src/PositionManager.sol";
+import {IPositionManager} from "../src/interfaces/IPositionManager.sol";
 import {QuoterTestDeployers} from "./utils/QuoterTestDeployers.sol";
 
 /// @notice V4Router swap tests using HTS tokens (single-hop exact-in and exact-out).
@@ -23,7 +25,8 @@ contract V4RouterSwapTest is Test, QuoterTestDeployers {
         deployFreshManagerAndRouters();
         deployMintAndApprove2CurrenciesHTS();
         setupPoolWithLiquidity();
-        universalRouter = new UniversalRouter(manager);
+        PositionManager pm = new PositionManager(manager);
+        universalRouter = new UniversalRouter(manager, IPositionManager(address(pm)));
         // Test contract is the execute() caller; SETTLE_ALL pays from msgSender() so we approve universalRouter to pull from this
         IERC20(Currency.unwrap(currency0)).approve(address(universalRouter), type(uint256).max);
         IERC20(Currency.unwrap(currency1)).approve(address(universalRouter), type(uint256).max);

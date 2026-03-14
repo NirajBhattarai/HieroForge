@@ -12,4 +12,10 @@ library Commands {
 
     /// @notice Execute a v4 swap via V4Router (payload passed to _executeV4Swap)
     uint256 internal constant V4_SWAP = 0x10;
+
+    /// @notice Execute a v4 position manager call (payload passed to PositionManager.modifyLiquidities)
+    uint256 internal constant V4_POSITION_CALL = 0x11;
+
+    /// @notice Sweep the contract's balance of a token to a recipient
+    uint256 internal constant SWEEP = 0x12;
 }

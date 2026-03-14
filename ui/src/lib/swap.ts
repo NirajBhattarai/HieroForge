@@ -11,6 +11,15 @@ export interface SwapPoolKey {
   hooks: Address;
 }
 
+/** A single leg of a multi-hop path (matches PathKey.sol). */
+export interface PathKey {
+  intermediateCurrency: Address;
+  fee: number;
+  tickSpacing: number;
+  hooks: Address;
+  hookData: `0x${string}`;
+}
+
 /**
  * Build a canonical PoolKey (currency0 < currency1).
  */
@@ -27,6 +36,29 @@ export function buildSwapPoolKey(
   return { currency0, currency1, fee, tickSpacing, hooks: HOOKS_ZERO };
 }
 
+/**
+ * Build a PathKey[] for a multi-hop route through intermediate tokens.
+ * route = [tokenIn, tokenMid1, tokenMid2, ..., tokenOut]
+ * fees/tickSpacings = one per hop (length = route.length - 1)
+ */
+export function buildPath(
+  route: string[],
+  fees: number[],
+  tickSpacings: number[],
+): PathKey[] {
+  const path: PathKey[] = [];
+  for (let i = 1; i < route.length; i++) {
+    path.push({
+      intermediateCurrency: getAddress(route[i]!) as Address,
+      fee: fees[i - 1]!,
+      tickSpacing: tickSpacings[i - 1]!,
+      hooks: HOOKS_ZERO,
+      hookData: "0x",
+    });
+  }
+  return path;
+}
+
 // ABI types for encoding
 const POOL_KEY_TUPLE = {
   type: "tuple" as const,
@@ -40,6 +72,18 @@ const POOL_KEY_TUPLE = {
   name: "poolKey",
 };
 
+const PATH_KEY_TUPLE = {
+  type: "tuple[]" as const,
+  components: [
+    { type: "address" as const, name: "intermediateCurrency" },
+    { type: "uint24" as const, name: "fee" },
+    { type: "int24" as const, name: "tickSpacing" },
+    { type: "address" as const, name: "hooks" },
+    { type: "bytes" as const, name: "hookData" },
+  ],
+  name: "path",
+};
+
 const EXACT_INPUT_SINGLE_PARAMS = [
   POOL_KEY_TUPLE,
   { type: "bool" as const, name: "zeroForOne" },
@@ -48,16 +92,99 @@ const EXACT_INPUT_SINGLE_PARAMS = [
   { type: "bytes" as const, name: "hookData" },
 ];
 
+const EXACT_OUTPUT_SINGLE_PARAMS = [
+  POOL_KEY_TUPLE,
+  { type: "bool" as const, name: "zeroForOne" },
+  { type: "uint128" as const, name: "amountOut" },
+  { type: "uint128" as const, name: "amountInMaximum" },
+  { type: "bytes" as const, name: "hookData" },
+];
+
+const EXACT_INPUT_PARAMS = [
+  { type: "address" as const, name: "currencyIn" },
+  PATH_KEY_TUPLE,
+  { type: "uint128" as const, name: "amountIn" },
+  { type: "uint128" as const, name: "amountOutMinimum" },
+];
+
+const EXACT_OUTPUT_PARAMS = [
+  { type: "address" as const, name: "currencyOut" },
+  PATH_KEY_TUPLE,
+  { type: "uint128" as const, name: "amountOut" },
+  { type: "uint128" as const, name: "amountInMaximum" },
+];
+
+// --- Helper to pack action bytes ---
+function packActions(...actionIds: number[]): `0x${string}` {
+  return ("0x" +
+    actionIds
+      .map((a) => a.toString(16).padStart(2, "0"))
+      .join("")) as `0x${string}`;
+}
+
+function wrapV4Swap(
+  actions: `0x${string}`,
+  params: `0x${string}`[],
+): { commands: `0x${string}`; inputs: `0x${string}`[] } {
+  const input0 = encodeAbiParameters(
+    [
+      { type: "bytes", name: "actions" },
+      { type: "bytes[]", name: "params" },
+    ],
+    [actions, params],
+  );
+  const commands = ("0x" +
+    Commands.V4_SWAP.toString(16).padStart(2, "0")) as `0x${string}`;
+  return { commands, inputs: [input0] };
+}
+
+// --- Settlement param encoders ---
+function encodeSettleAll(currency: Address, maxAmount: bigint): `0x${string}` {
+  return encodeAbiParameters(
+    [
+      { type: "address", name: "currency" },
+      { type: "uint256", name: "maxAmount" },
+    ],
+    [currency, maxAmount],
+  );
+}
+
+function encodeTakeAll(currency: Address, minAmount: bigint): `0x${string}` {
+  return encodeAbiParameters(
+    [
+      { type: "address", name: "currency" },
+      { type: "uint256", name: "minAmount" },
+    ],
+    [currency, minAmount],
+  );
+}
+
+function encodeSettlePair(
+  currency0: Address,
+  currency1: Address,
+): `0x${string}` {
+  return encodeAbiParameters(
+    [
+      { type: "address", name: "currency0" },
+      { type: "address", name: "currency1" },
+    ],
+    [currency0, currency1],
+  );
+}
+
+function encodeTakePair(currency0: Address, currency1: Address): `0x${string}` {
+  return encodeAbiParameters(
+    [
+      { type: "address", name: "currency0" },
+      { type: "address", name: "currency1" },
+    ],
+    [currency0, currency1],
+  );
+}
+
 /**
- * Encode the full calldata for UniversalRouter.execute() to perform an exact-input single-hop swap.
- *
- * Encoding layers (matches V4RouterSwapTest.sol):
- * 1. commands = abi.encodePacked(uint8(V4_SWAP))  →  0x10
- * 2. inputs[0] = abi.encode(actions, params)
- *    - actions = abi.encodePacked(SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL)  →  0x060c0f
- *    - params[0] = abi.encode(ExactInputSingleParams)
- *    - params[1] = abi.encode(currencyIn, amountIn)
- *    - params[2] = abi.encode(currencyOut, amountOutMinimum)
+ * Encode exact-input single-hop swap for UniversalRouter.execute().
+ * Uses SETTLE_ALL + TAKE_ALL settlement.
  */
 export function encodeSwapExactInSingle(params: {
   poolKey: SwapPoolKey;
@@ -67,55 +194,149 @@ export function encodeSwapExactInSingle(params: {
 }): { commands: `0x${string}`; inputs: `0x${string}`[] } {
   const { poolKey, zeroForOne, amountIn, amountOutMinimum } = params;
 
-  // Currency being sold (settled) and bought (taken)
   const currencyIn = zeroForOne ? poolKey.currency0 : poolKey.currency1;
   const currencyOut = zeroForOne ? poolKey.currency1 : poolKey.currency0;
 
-  // actions = packed bytes [0x06, 0x0c, 0x0f]
-  const actions = ("0x" +
-    Actions.SWAP_EXACT_IN_SINGLE.toString(16).padStart(2, "0") +
-    Actions.SETTLE_ALL.toString(16).padStart(2, "0") +
-    Actions.TAKE_ALL.toString(16).padStart(2, "0")) as `0x${string}`;
+  const actions = packActions(
+    Actions.SWAP_EXACT_IN_SINGLE,
+    Actions.SETTLE_ALL,
+    Actions.TAKE_ALL,
+  );
 
-  // params[0] = abi.encode(ExactInputSingleParams)
   const swapParam = encodeAbiParameters(EXACT_INPUT_SINGLE_PARAMS, [
     poolKey,
     zeroForOne,
     amountIn,
     amountOutMinimum,
-    "0x", // hookData
+    "0x",
   ]);
+  const settleParam = encodeSettleAll(currencyIn, amountIn);
+  const takeParam = encodeTakeAll(currencyOut, amountOutMinimum);
 
-  // params[1] = abi.encode(currency, maxAmount) for SETTLE_ALL
-  const settleParam = encodeAbiParameters(
-    [
-      { type: "address", name: "currency" },
-      { type: "uint256", name: "maxAmount" },
-    ],
-    [currencyIn, amountIn],
-  );
-
-  // params[2] = abi.encode(currency, minAmount) for TAKE_ALL
-  const takeParam = encodeAbiParameters(
-    [
-      { type: "address", name: "currency" },
-      { type: "uint256", name: "minAmount" },
-    ],
-    [currencyOut, amountOutMinimum],
-  );
-
-  // inputs[0] = abi.encode(bytes actions, bytes[] params)
-  const input0 = encodeAbiParameters(
-    [
-      { type: "bytes", name: "actions" },
-      { type: "bytes[]", name: "params" },
-    ],
-    [actions, [swapParam, settleParam, takeParam]],
-  );
-
-  // commands = single byte V4_SWAP
-  const commands = ("0x" +
-    Commands.V4_SWAP.toString(16).padStart(2, "0")) as `0x${string}`;
-
-  return { commands, inputs: [input0] };
+  return wrapV4Swap(actions, [swapParam, settleParam, takeParam]);
 }
+
+/**
+ * Encode exact-output single-hop swap for UniversalRouter.execute().
+ * Uses SETTLE_ALL + TAKE_ALL settlement.
+ */
+export function encodeSwapExactOutSingle(params: {
+  poolKey: SwapPoolKey;
+  zeroForOne: boolean;
+  amountOut: bigint;
+  amountInMaximum: bigint;
+}): { commands: `0x${string}`; inputs: `0x${string}`[] } {
+  const { poolKey, zeroForOne, amountOut, amountInMaximum } = params;
+
+  const currencyIn = zeroForOne ? poolKey.currency0 : poolKey.currency1;
+  const currencyOut = zeroForOne ? poolKey.currency1 : poolKey.currency0;
+
+  const actions = packActions(
+    Actions.SWAP_EXACT_OUT_SINGLE,
+    Actions.SETTLE_ALL,
+    Actions.TAKE_ALL,
+  );
+
+  const swapParam = encodeAbiParameters(EXACT_OUTPUT_SINGLE_PARAMS, [
+    poolKey,
+    zeroForOne,
+    amountOut,
+    amountInMaximum,
+    "0x",
+  ]);
+  const settleParam = encodeSettleAll(currencyIn, amountInMaximum);
+  const takeParam = encodeTakeAll(currencyOut, amountOut);
+
+  return wrapV4Swap(actions, [swapParam, settleParam, takeParam]);
+}
+
+/**
+ * Encode exact-input multi-hop swap for UniversalRouter.execute().
+ * Uses SETTLE_ALL + TAKE_ALL settlement.
+ *
+ * @param currencyIn - the starting token address
+ * @param path - PathKey[] describing intermediate hops
+ * @param amountIn - exact amount to spend
+ * @param amountOutMinimum - minimum output after all hops
+ */
+export function encodeSwapExactIn(params: {
+  currencyIn: Address;
+  path: PathKey[];
+  amountIn: bigint;
+  amountOutMinimum: bigint;
+}): { commands: `0x${string}`; inputs: `0x${string}`[] } {
+  const { currencyIn, path, amountIn, amountOutMinimum } = params;
+
+  // The output currency is the last pathKey's intermediateCurrency
+  const currencyOut = path[path.length - 1]!.intermediateCurrency;
+
+  const actions = packActions(
+    Actions.SWAP_EXACT_IN,
+    Actions.SETTLE_ALL,
+    Actions.TAKE_ALL,
+  );
+
+  const swapParam = encodeAbiParameters(EXACT_INPUT_PARAMS, [
+    currencyIn,
+    path.map((p) => ({
+      intermediateCurrency: p.intermediateCurrency,
+      fee: p.fee,
+      tickSpacing: p.tickSpacing,
+      hooks: p.hooks,
+      hookData: p.hookData,
+    })),
+    amountIn,
+    amountOutMinimum,
+  ]);
+  const settleParam = encodeSettleAll(currencyIn, amountIn);
+  const takeParam = encodeTakeAll(currencyOut, amountOutMinimum);
+
+  return wrapV4Swap(actions, [swapParam, settleParam, takeParam]);
+}
+
+/**
+ * Encode exact-output multi-hop swap for UniversalRouter.execute().
+ * Uses SETTLE_ALL + TAKE_ALL settlement.
+ *
+ * @param currencyOut - the desired output token address
+ * @param path - PathKey[] describing intermediate hops (reversed from exact-in)
+ * @param amountOut - exact amount desired
+ * @param amountInMaximum - maximum amount willing to spend
+ */
+export function encodeSwapExactOut(params: {
+  currencyOut: Address;
+  path: PathKey[];
+  amountOut: bigint;
+  amountInMaximum: bigint;
+}): { commands: `0x${string}`; inputs: `0x${string}`[] } {
+  const { currencyOut, path, amountOut, amountInMaximum } = params;
+
+  // The input currency is the last pathKey's intermediateCurrency (reversed path)
+  const currencyIn = path[path.length - 1]!.intermediateCurrency;
+
+  const actions = packActions(
+    Actions.SWAP_EXACT_OUT,
+    Actions.SETTLE_ALL,
+    Actions.TAKE_ALL,
+  );
+
+  const swapParam = encodeAbiParameters(EXACT_OUTPUT_PARAMS, [
+    currencyOut,
+    path.map((p) => ({
+      intermediateCurrency: p.intermediateCurrency,
+      fee: p.fee,
+      tickSpacing: p.tickSpacing,
+      hooks: p.hooks,
+      hookData: p.hookData,
+    })),
+    amountOut,
+    amountInMaximum,
+  ]);
+  const settleParam = encodeSettleAll(currencyIn, amountInMaximum);
+  const takeParam = encodeTakeAll(currencyOut, amountOut);
+
+  return wrapV4Swap(actions, [swapParam, settleParam, takeParam]);
+}
+
+/** Re-export for components. */
+export { encodeSettlePair, encodeTakePair };

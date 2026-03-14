@@ -2,6 +2,8 @@
 pragma solidity ^0.8.13;
 
 import {PoolKey} from "hieroforge-core/types/PoolKey.sol";
+import {Currency} from "hieroforge-core/types/Currency.sol";
+import {PathKey} from "../libraries/PathKey.sol";
 
 /// @title IV4Router
 /// @notice Interface for the V4Router contract (HieroForge periphery — swap routing via hieroforge-core)
@@ -17,7 +19,7 @@ interface IV4Router {
     error V4TooMuchRequested(uint256 amountInMaximum, uint256 amountRequested);
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // Param structs (single-hop; multi-hop can be added later)
+    // Param structs — single-hop
     // ─────────────────────────────────────────────────────────────────────────────
 
     /// @notice Parameters for a single-hop exact-input swap
@@ -38,5 +40,23 @@ interface IV4Router {
         bytes hookData;
     }
 
-    // Methods will be added gradually (e.g. swapExactInputSingle, swapExactOutputSingle, etc.)
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Param structs — multi-hop
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// @notice Parameters for a multi-hop exact-input swap
+    struct ExactInputParams {
+        Currency currencyIn;
+        PathKey[] path;
+        uint128 amountIn;
+        uint128 amountOutMinimum;
+    }
+
+    /// @notice Parameters for a multi-hop exact-output swap
+    struct ExactOutputParams {
+        Currency currencyOut;
+        PathKey[] path;
+        uint128 amountOut;
+        uint128 amountInMaximum;
+    }
 }

@@ -55,6 +55,14 @@ export const INCREASE_LIQUIDITY_ACTION = 0x00;
 export const DECREASE_LIQUIDITY_ACTION = 0x01;
 export const MINT_POSITION_ACTION = 0x02;
 export const BURN_POSITION_ACTION = 0x03;
+export const INCREASE_LIQUIDITY_FROM_DELTAS_ACTION = 0x04;
+export const MINT_POSITION_FROM_DELTAS_ACTION = 0x05;
+
+// Settlement actions (also usable inside PositionManager action chains)
+export const PM_SETTLE = 0x0b;
+export const PM_SETTLE_PAIR = 0x0d;
+export const PM_TAKE_PAIR = 0x11;
+export const PM_CLOSE_CURRENCY = 0x12;
 
 // sqrtPriceX96 for 1:1 (Q64.96)
 export const SQRT_PRICE_1_1 = 79228162514264337593543950336n;

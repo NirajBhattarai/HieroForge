@@ -18,6 +18,8 @@ import {
 import {BalanceDelta} from "../../src/types/BalanceDelta.sol";
 import {TickMath} from "../../src/libraries/TickMath.sol";
 import {Currency} from "../../src/types/Currency.sol";
+import {SwapParams} from "../../src/types/SwapParams.sol";
+import {IUnlockCallback} from "../../src/callback/IUnlockCallback.sol";
 import {Deployers} from "../utils/Deployers.sol";
 import {MockERC20} from "../utils/MockERC20.sol";
 import {IERC20} from "hedera-forking/IERC20.sol";
@@ -691,5 +693,845 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         if (paid0 > 0 && paid1 > 0) {
             assertApproxEqRel(paid0 * 196, paid1 * 1000, 0.05e18, "paid0:paid1 ~ 1000:196");
         }
+    }
+
+    // ========================================================================
+    // FEE ACCRUAL TESTS — Swap then collect fees via modifyLiquidity
+    // ========================================================================
+
+    /// @notice After a swap, LP position accrues fees; claiming with zero-delta returns nonzero feeDelta (HTS-HTS)
+    function test_feeAccrual_htsHts_afterSwap_feeDeltaNonZero() public {
+        _fundRouter(5e9);
+
+        // Add large liquidity so swap has room
+        ModifyLiquidityParams memory addParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1e9, salt: bytes32(0)});
+        modifyLiquidityRouter.modifyLiquidity(key, addParams, ZERO_BYTES);
+
+        // Fund router for swap
+        _fundRouter(5e8);
+
+        // Swap: exact input 10000 token0 -> token1
+        SwapParams memory swapParams = SwapParams({
+            amountSpecified: -10000,
+            tickSpacing: 60,
+            zeroForOne: true,
+            sqrtPriceLimitX96: TickMath.minSqrtPrice() + 1,
+            lpFeeOverride: 0
+        });
+        modifyLiquidityRouter.swap(key, swapParams, ZERO_BYTES);
+
+        // Claim fees: zero liquidityDelta
+        ModifyLiquidityParams memory claimParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 0, salt: bytes32(0)});
+        (, BalanceDelta feeDelta) = modifyLiquidityRouter.modifyLiquidity(key, claimParams, ZERO_BYTES);
+
+        // Fee accrued on token0 (input side of zeroForOne swap); fee0 > 0, fee1 == 0
+        assertGt(feeDelta.amount0(), 0, "fee0 should be positive after zeroForOne swap");
+        assertEq(feeDelta.amount1(), 0, "fee1 should be 0 after zeroForOne swap");
+    }
+
+    /// @notice After a oneForZero swap, fee accrues on token1 side (HTS-HTS)
+    function test_feeAccrual_htsHts_afterOneForZeroSwap() public {
+        _fundRouter(5e9);
+
+        ModifyLiquidityParams memory addParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1e9, salt: bytes32(0)});
+        modifyLiquidityRouter.modifyLiquidity(key, addParams, ZERO_BYTES);
+
+        _fundRouter(5e8);
+
+        // Swap: exact input token1 -> token0
+        SwapParams memory swapParams = SwapParams({
+            amountSpecified: -10000,
+            tickSpacing: 60,
+            zeroForOne: false,
+            sqrtPriceLimitX96: TickMath.maxSqrtPrice() - 1,
+            lpFeeOverride: 0
+        });
+        modifyLiquidityRouter.swap(key, swapParams, ZERO_BYTES);
+
+        // Claim fees
+        ModifyLiquidityParams memory claimParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 0, salt: bytes32(0)});
+        (, BalanceDelta feeDelta) = modifyLiquidityRouter.modifyLiquidity(key, claimParams, ZERO_BYTES);
+
+        assertEq(feeDelta.amount0(), 0, "fee0 should be 0 after oneForZero swap");
+        assertGt(feeDelta.amount1(), 0, "fee1 should be positive after oneForZero swap");
+    }
+
+    /// @notice Fee accrual with ERC20-ERC20 pool: same behavior as HTS-HTS
+    function test_feeAccrual_erc20Erc20_afterSwap() public {
+        (PoolKey memory erc20Key,, Currency c0, Currency c1) = _setupERC20Pool(SQRT_PRICE_1_1, 3000, 60);
+
+        // Fund for liquidity
+        _fundRouterWithCurrencies(c0, c1, 1e17);
+
+        ModifyLiquidityParams memory addParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1e15, salt: bytes32(0)});
+        modifyLiquidityRouter.modifyLiquidity(erc20Key, addParams, ZERO_BYTES);
+
+        // Fund for swap
+        _fundRouterWithCurrencies(c0, c1, 1e15);
+
+        SwapParams memory swapParams = SwapParams({
+            amountSpecified: -1e12,
+            tickSpacing: 60,
+            zeroForOne: true,
+            sqrtPriceLimitX96: TickMath.minSqrtPrice() + 1,
+            lpFeeOverride: 0
+        });
+        modifyLiquidityRouter.swap(erc20Key, swapParams, ZERO_BYTES);
+
+        ModifyLiquidityParams memory claimParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 0, salt: bytes32(0)});
+        (, BalanceDelta feeDelta) = modifyLiquidityRouter.modifyLiquidity(erc20Key, claimParams, ZERO_BYTES);
+
+        assertGt(feeDelta.amount0(), 0, "ERC20: fee0 positive after swap");
+        assertEq(feeDelta.amount1(), 0, "ERC20: fee1 zero after zeroForOne");
+    }
+
+    /// @notice Fee accrual with mixed ERC20-HTS pool
+    function test_feeAccrual_erc20Hts_afterSwap() public {
+        (PoolKey memory mixedKey, Currency c0, Currency c1) = _setupMixedPool();
+
+        _fundRouterWithCurrencies(c0, c1, 5e9);
+
+        ModifyLiquidityParams memory addParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1e9, salt: bytes32(0)});
+        modifyLiquidityRouter.modifyLiquidity(mixedKey, addParams, ZERO_BYTES);
+
+        _fundRouterWithCurrencies(c0, c1, 5e8);
+
+        SwapParams memory swapParams = SwapParams({
+            amountSpecified: -10000,
+            tickSpacing: 60,
+            zeroForOne: true,
+            sqrtPriceLimitX96: TickMath.minSqrtPrice() + 1,
+            lpFeeOverride: 0
+        });
+        modifyLiquidityRouter.swap(mixedKey, swapParams, ZERO_BYTES);
+
+        ModifyLiquidityParams memory claimParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 0, salt: bytes32(0)});
+        (, BalanceDelta feeDelta) = modifyLiquidityRouter.modifyLiquidity(mixedKey, claimParams, ZERO_BYTES);
+
+        assertGt(feeDelta.amount0(), 0, "mixed: fee0 positive after zeroForOne swap");
+    }
+
+    /// @notice Fees collected on remove: when removing after swap, callerDelta includes principal + fees
+    function test_feeAccrual_htsHts_feesCollectedOnRemove() public {
+        _fundRouter(5e9);
+
+        int256 L = 1e9;
+        ModifyLiquidityParams memory addParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: L, salt: bytes32(0)});
+        (BalanceDelta addDelta,) = modifyLiquidityRouter.modifyLiquidity(key, addParams, ZERO_BYTES);
+        uint256 paid0 = uint256(uint128(-addDelta.amount0()));
+
+        // Swap to generate fees
+        _fundRouter(5e8);
+        SwapParams memory swapParams = SwapParams({
+            amountSpecified: -100000,
+            tickSpacing: 60,
+            zeroForOne: true,
+            sqrtPriceLimitX96: TickMath.minSqrtPrice() + 1,
+            lpFeeOverride: 0
+        });
+        modifyLiquidityRouter.swap(key, swapParams, ZERO_BYTES);
+
+        // Remove all liquidity — should get principal + fees
+        ModifyLiquidityParams memory removeParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: -L, salt: bytes32(0)});
+        (BalanceDelta removeDelta, BalanceDelta feeDelta) =
+            modifyLiquidityRouter.modifyLiquidity(key, removeParams, ZERO_BYTES);
+
+        // Principal: get back approximately what we paid
+        assertGt(removeDelta.amount0(), 0, "receive token0 on remove");
+        assertGt(removeDelta.amount1(), 0, "receive token1 on remove");
+
+        // Fee included in callerDelta: removeDelta.amount0 > paid0 because fees added
+        uint256 received0 = uint256(uint128(removeDelta.amount0()));
+        assertGt(received0, paid0, "received0 > paid0 due to fees");
+
+        // feeDelta should also report fee amounts
+        assertGt(feeDelta.amount0(), 0, "feeDelta0 positive");
+    }
+
+    /// @notice Multiple swaps in both directions: fees accrue on both token0 and token1
+    function test_feeAccrual_htsHts_bidirectionalSwaps() public {
+        _fundRouter(5e9);
+
+        ModifyLiquidityParams memory addParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1e9, salt: bytes32(0)});
+        modifyLiquidityRouter.modifyLiquidity(key, addParams, ZERO_BYTES);
+
+        // Swap zeroForOne
+        _fundRouter(5e8);
+        modifyLiquidityRouter.swap(
+            key,
+            SwapParams({
+                amountSpecified: -50000,
+                tickSpacing: 60,
+                zeroForOne: true,
+                sqrtPriceLimitX96: TickMath.minSqrtPrice() + 1,
+                lpFeeOverride: 0
+            }),
+            ZERO_BYTES
+        );
+
+        // Swap oneForZero
+        _fundRouter(5e8);
+        modifyLiquidityRouter.swap(
+            key,
+            SwapParams({
+                amountSpecified: -50000,
+                tickSpacing: 60,
+                zeroForOne: false,
+                sqrtPriceLimitX96: TickMath.maxSqrtPrice() - 1,
+                lpFeeOverride: 0
+            }),
+            ZERO_BYTES
+        );
+
+        // Claim fees
+        ModifyLiquidityParams memory claimParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 0, salt: bytes32(0)});
+        (, BalanceDelta feeDelta) = modifyLiquidityRouter.modifyLiquidity(key, claimParams, ZERO_BYTES);
+
+        assertGt(feeDelta.amount0(), 0, "fee0 positive after bidirectional swaps");
+        assertGt(feeDelta.amount1(), 0, "fee1 positive after bidirectional swaps");
+    }
+
+    // ========================================================================
+    // DIFFERENT FEE TIERS — 500 (0.05%), 3000 (0.3%), 10000 (1%)
+    // ========================================================================
+
+    /// @notice Low fee tier (500 = 0.05%): verify add liquidity works with HTS-HTS
+    function test_addLiquidity_htsHts_lowFeeTier() public {
+        (PoolKey memory lowFeeKey,) = initPool(currency0, currency1, 500, 10, SQRT_PRICE_1_1);
+        _fundRouter(5e9);
+
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -10, tickUpper: 10, liquidityDelta: 1e9, salt: bytes32(0)});
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(lowFeeKey, params, ZERO_BYTES);
+
+        assertLt(delta.amount0(), 0, "pay token0");
+        assertLt(delta.amount1(), 0, "pay token1");
+    }
+
+    /// @notice High fee tier (10000 = 1%): verify add liquidity works with ERC20-ERC20
+    function test_addLiquidity_erc20Erc20_highFeeTier() public {
+        (PoolKey memory erc20Key,, Currency c0, Currency c1) = _setupERC20Pool(SQRT_PRICE_1_1, 10000, 200);
+
+        _fundRouterWithCurrencies(c0, c1, 1e17);
+
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -200, tickUpper: 200, liquidityDelta: 1e15, salt: bytes32(0)});
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(erc20Key, params, ZERO_BYTES);
+
+        assertLt(delta.amount0(), 0, "ERC20 high fee: pay token0");
+        assertLt(delta.amount1(), 0, "ERC20 high fee: pay token1");
+    }
+
+    /// @notice Low fee tier collects less fees than high fee tier for same swap amount
+    function test_feeAccrual_lowVsHighFeeTier_comparison() public {
+        // Low fee pool (500 = 0.05%, tickSpacing 10)
+        (PoolKey memory lowKey,) = initPool(currency0, currency1, 500, 10, SQRT_PRICE_1_1);
+        _fundRouter(5e9);
+        modifyLiquidityRouter.modifyLiquidity(
+            lowKey,
+            ModifyLiquidityParams({tickLower: -10, tickUpper: 10, liquidityDelta: 1e9, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        // High fee pool (10000 = 1%, tickSpacing 200) — use new ERC20 pair to avoid collision
+        (PoolKey memory highKey,, Currency c0h, Currency c1h) = _setupERC20Pool(SQRT_PRICE_1_1, 10000, 200);
+        _fundRouterWithCurrencies(c0h, c1h, 1e17);
+        modifyLiquidityRouter.modifyLiquidity(
+            highKey,
+            ModifyLiquidityParams({tickLower: -200, tickUpper: 200, liquidityDelta: 1e15, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        // Swap same amount on low-fee HTS pool
+        _fundRouter(5e8);
+        modifyLiquidityRouter.swap(
+            lowKey,
+            SwapParams({
+                amountSpecified: -10000,
+                tickSpacing: 10,
+                zeroForOne: true,
+                sqrtPriceLimitX96: TickMath.minSqrtPrice() + 1,
+                lpFeeOverride: 0
+            }),
+            ZERO_BYTES
+        );
+        (, BalanceDelta feeLow) = modifyLiquidityRouter.modifyLiquidity(
+            lowKey,
+            ModifyLiquidityParams({tickLower: -10, tickUpper: 10, liquidityDelta: 0, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        // Swap same amount on high-fee ERC20 pool
+        _fundRouterWithCurrencies(c0h, c1h, 1e15);
+        modifyLiquidityRouter.swap(
+            highKey,
+            SwapParams({
+                amountSpecified: -10000,
+                tickSpacing: 200,
+                zeroForOne: true,
+                sqrtPriceLimitX96: TickMath.minSqrtPrice() + 1,
+                lpFeeOverride: 0
+            }),
+            ZERO_BYTES
+        );
+        (, BalanceDelta feeHigh) = modifyLiquidityRouter.modifyLiquidity(
+            highKey,
+            ModifyLiquidityParams({tickLower: -200, tickUpper: 200, liquidityDelta: 0, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        // High fee tier should collect more fees
+        assertGt(feeHigh.amount0(), feeLow.amount0(), "high fee tier collects more fees than low");
+    }
+
+    // ========================================================================
+    // TICK SPACING VARIATIONS
+    // ========================================================================
+
+    /// @notice tickSpacing = 1: finest granularity, add liquidity at [-1, 1]
+    function test_addLiquidity_htsHts_tickSpacing1() public {
+        (PoolKey memory key1,) = initPool(currency0, currency1, 100, 1, SQRT_PRICE_1_1);
+        _fundRouter(5e9);
+
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -1, tickUpper: 1, liquidityDelta: 1e9, salt: bytes32(0)});
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(key1, params, ZERO_BYTES);
+
+        assertLt(delta.amount0(), 0, "tickSpacing=1: pay token0");
+        assertLt(delta.amount1(), 0, "tickSpacing=1: pay token1");
+    }
+
+    /// @notice tickSpacing = 200: coarse granularity with ERC20
+    function test_addLiquidity_erc20Erc20_tickSpacing200() public {
+        (PoolKey memory erc20Key,, Currency c0, Currency c1) = _setupERC20Pool(SQRT_PRICE_1_1, 3000, 200);
+        _fundRouterWithCurrencies(c0, c1, 1e17);
+
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -200, tickUpper: 200, liquidityDelta: 1e15, salt: bytes32(0)});
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(erc20Key, params, ZERO_BYTES);
+
+        assertLt(delta.amount0(), 0);
+        assertLt(delta.amount1(), 0);
+    }
+
+    // ========================================================================
+    // DIFFERENT INITIAL PRICES — Test asymmetric token amounts
+    // ========================================================================
+
+    /// @notice Price 2:1 (SQRT_PRICE_2_1): more token1 required, less token0 (HTS-HTS)
+    function test_addLiquidity_htsHts_price2to1() public {
+        reinitPoolWithSqrtPrice(SQRT_PRICE_2_1);
+        _fundRouter(5e9);
+
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1000, salt: bytes32(0)});
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(key, params, ZERO_BYTES);
+
+        // At price 2:1, pool tick is positive; range [-120, 120] contains tick 0..6931
+        // Both tokens required but ratio shifts
+        assertTrue(delta.amount0() < 0 || delta.amount1() < 0, "pay at least one token");
+    }
+
+    /// @notice Price 1:4 (SQRT_PRICE_1_4): HTS-HTS at very skewed ratio
+    function test_addLiquidity_htsHts_price1to4() public {
+        reinitPoolWithSqrtPrice(SQRT_PRICE_1_4);
+        _fundRouter(5e9);
+
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1000, salt: bytes32(0)});
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(key, params, ZERO_BYTES);
+
+        assertTrue(delta.amount0() < 0 || delta.amount1() < 0, "pay at least one token at 1:4");
+    }
+
+    /// @notice Price 4:1 (SQRT_PRICE_4_1): ERC20-ERC20 at high skew
+    function test_addLiquidity_erc20Erc20_price4to1() public {
+        (PoolKey memory erc20Key,, Currency c0, Currency c1) = _setupERC20Pool(SQRT_PRICE_4_1, 3000, 60);
+        _fundRouterWithCurrencies(c0, c1, 1e17);
+
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1e15, salt: bytes32(0)});
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(erc20Key, params, ZERO_BYTES);
+
+        assertTrue(delta.amount0() < 0 || delta.amount1() < 0, "ERC20 4:1: pay at least one token");
+    }
+
+    /// @notice Price 1:2 (SQRT_PRICE_1_2): mixed ERC20-HTS
+    function test_addLiquidity_erc20Hts_price1to2() public {
+        MockERC20 mockErc20 = new MockERC20();
+        mockErc20.mint(address(this), 1e18);
+        address erc20Addr = address(mockErc20);
+        address htsAddr = Currency.unwrap(currency0);
+        (Currency c0, Currency c1) =
+            erc20Addr < htsAddr ? (Currency.wrap(erc20Addr), currency0) : (currency0, Currency.wrap(erc20Addr));
+        mockErc20.approve(address(modifyLiquidityRouter), type(uint256).max);
+
+        (PoolKey memory poolKey,) = initPool(c0, c1, 3000, 60, SQRT_PRICE_1_2);
+
+        _fundRouterWithCurrencies(c0, c1, 5e9);
+
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1000, salt: bytes32(0)});
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(poolKey, params, ZERO_BYTES);
+
+        assertTrue(delta.amount0() < 0 || delta.amount1() < 0, "mixed 1:2: pay at least one token");
+    }
+
+    // ========================================================================
+    // LARGE LIQUIDITY VALUES — Stress test with HTS and ERC20
+    // ========================================================================
+
+    /// @notice Large liquidity add with ERC20 (1e18): verify no overflow
+    function test_addLiquidity_erc20Erc20_largeLiquidity() public {
+        (PoolKey memory erc20Key,, Currency c0, Currency c1) = _setupERC20Pool(SQRT_PRICE_1_1, 3000, 60);
+        _fundRouterWithCurrencies(c0, c1, 5e17);
+
+        int256 largeLiquidity = 1e16;
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: largeLiquidity, salt: bytes32(0)});
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(erc20Key, params, ZERO_BYTES);
+
+        assertLt(delta.amount0(), 0, "large L: pay token0");
+        assertLt(delta.amount1(), 0, "large L: pay token1");
+    }
+
+    /// @notice Small liquidity (1 wei): can add and remove
+    function test_addLiquidity_htsHts_minimalLiquidity() public {
+        _fundRouter(5e9);
+
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1, salt: bytes32(0)});
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(key, params, ZERO_BYTES);
+
+        // Delta may be zero for very small L due to rounding
+        assertTrue(delta.amount0() <= 0 && delta.amount1() <= 0, "minimal L: non-positive deltas");
+
+        // Remove
+        ModifyLiquidityParams memory removeParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: -1, salt: bytes32(0)});
+        (BalanceDelta removeDelta,) = modifyLiquidityRouter.modifyLiquidity(key, removeParams, ZERO_BYTES);
+        assertTrue(removeDelta.amount0() >= 0 && removeDelta.amount1() >= 0, "minimal L: non-negative remove deltas");
+    }
+
+    // ========================================================================
+    // CONCURRENT POSITIONS — Multiple LPs, multiple token types, overlapping ranges
+    // ========================================================================
+
+    /// @notice Two LP positions at overlapping ranges in same HTS-HTS pool, then swap: both collect fees
+    function test_feeAccrual_htsHts_twoPositionsOverlapping_bothCollectFees() public {
+        _fundRouter(5e9);
+
+        // Position A: [-120, 120]
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1e9, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        // Position B: [-60, 60] (narrower, overlapping)
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 1e9, salt: bytes32(uint256(1))}),
+            ZERO_BYTES
+        );
+
+        // Swap to generate fees
+        _fundRouter(5e8);
+        modifyLiquidityRouter.swap(
+            key,
+            SwapParams({
+                amountSpecified: -50000,
+                tickSpacing: 60,
+                zeroForOne: true,
+                sqrtPriceLimitX96: TickMath.minSqrtPrice() + 1,
+                lpFeeOverride: 0
+            }),
+            ZERO_BYTES
+        );
+
+        // Claim fees for position A
+        (, BalanceDelta feeA) = modifyLiquidityRouter.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 0, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        // Claim fees for position B
+        (, BalanceDelta feeB) = modifyLiquidityRouter.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 0, salt: bytes32(uint256(1))}),
+            ZERO_BYTES
+        );
+
+        assertGt(feeA.amount0(), 0, "position A: fee0 positive");
+        assertGt(feeB.amount0(), 0, "position B: fee0 positive");
+
+        // Narrower position B should get more fee per liquidity (higher concentration)
+        // But since same L and B is narrower, it gets proportionally more when tick is in range
+        // Both should have positive fees; exact ratio depends on swap path
+    }
+
+    /// @notice Two positions: one HTS-HTS, one ERC20-ERC20, same price — independent pools
+    function test_addLiquidity_htsAndErc20_independentPools() public {
+        // HTS-HTS pool already set up
+        _fundRouter(5e9);
+        (BalanceDelta htsDelta,) = modifyLiquidityRouter.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1000, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        // ERC20-ERC20 pool
+        (PoolKey memory erc20Key,, Currency c0, Currency c1) = _setupERC20Pool(SQRT_PRICE_1_1, 3000, 60);
+        _fundRouterWithCurrencies(c0, c1, 1e17);
+        (BalanceDelta erc20Delta,) = modifyLiquidityRouter.modifyLiquidity(
+            erc20Key,
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1000, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        // Both should succeed independently with same L and range
+        assertLt(htsDelta.amount0(), 0, "HTS pool: pay token0");
+        assertLt(erc20Delta.amount0(), 0, "ERC20 pool: pay token0");
+        // Same L at same price and range → same amounts (modulo token decimals)
+        assertEq(htsDelta.amount0(), erc20Delta.amount0(), "same L produces same amount0");
+        assertEq(htsDelta.amount1(), erc20Delta.amount1(), "same L produces same amount1");
+    }
+
+    // ========================================================================
+    // WIDE RANGE / FULL RANGE POSITIONS
+    // ========================================================================
+
+    /// @notice Full-range position: tickLower = MIN_TICK_ALIGNED, tickUpper = MAX_TICK_ALIGNED
+    function test_addLiquidity_htsHts_fullRange() public {
+        _fundRouter(5e9);
+
+        int24 tickSpacing = 60;
+        int24 tickLower = -887220; // -14787 * 60
+        int24 tickUpper = 887220; // 14787 * 60
+
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: tickLower, tickUpper: tickUpper, liquidityDelta: 100, salt: bytes32(0)});
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(key, params, ZERO_BYTES);
+
+        assertLt(delta.amount0(), 0, "full range: pay token0");
+        assertLt(delta.amount1(), 0, "full range: pay token1");
+    }
+
+    /// @notice Full-range with ERC20 then swap and collect fees
+    function test_feeAccrual_erc20Erc20_fullRange_afterSwap() public {
+        (PoolKey memory erc20Key,, Currency c0, Currency c1) = _setupERC20Pool(SQRT_PRICE_1_1, 3000, 60);
+        _fundRouterWithCurrencies(c0, c1, 1e17);
+
+        int24 tickLower = -887220;
+        int24 tickUpper = 887220;
+
+        modifyLiquidityRouter.modifyLiquidity(
+            erc20Key,
+            ModifyLiquidityParams({tickLower: tickLower, tickUpper: tickUpper, liquidityDelta: 1e15, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        _fundRouterWithCurrencies(c0, c1, 1e15);
+        modifyLiquidityRouter.swap(
+            erc20Key,
+            SwapParams({
+                amountSpecified: -1e12,
+                tickSpacing: 60,
+                zeroForOne: true,
+                sqrtPriceLimitX96: TickMath.minSqrtPrice() + 1,
+                lpFeeOverride: 0
+            }),
+            ZERO_BYTES
+        );
+
+        (, BalanceDelta feeDelta) = modifyLiquidityRouter.modifyLiquidity(
+            erc20Key,
+            ModifyLiquidityParams({tickLower: tickLower, tickUpper: tickUpper, liquidityDelta: 0, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        assertGt(feeDelta.amount0(), 0, "full range ERC20: fee0 after swap");
+    }
+
+    // ========================================================================
+    // POOL STATE VERIFICATION — Check on-chain state after operations
+    // ========================================================================
+
+    /// @notice After adding liquidity, getPoolState returns same price and tick (no price change)
+    function test_addLiquidity_htsHts_poolStateUnchanged() public {
+        _fundRouter(5e9);
+
+        (bool initBefore, uint160 priceBefore, int24 tickBefore) =
+            PoolManager(address(manager)).getPoolState(key.toId());
+        assertTrue(initBefore, "pool initialized before");
+
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1e9, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        (bool initAfter, uint160 priceAfter, int24 tickAfter) = PoolManager(address(manager)).getPoolState(key.toId());
+        assertTrue(initAfter, "pool still initialized");
+        assertEq(priceAfter, priceBefore, "price unchanged after add liquidity");
+        assertEq(tickAfter, tickBefore, "tick unchanged after add liquidity");
+    }
+
+    /// @notice After swap + remove all liquidity, pool is still initialized but empty
+    function test_removeLiquidity_htsHts_poolStillInitializedWhenEmpty() public {
+        _fundRouter(5e9);
+
+        int256 L = 1e9;
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: L, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        // Remove all
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: -L, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        (bool init, uint160 price,) = PoolManager(address(manager)).getPoolState(key.toId());
+        assertTrue(init, "pool still initialized after removing all liquidity");
+        assertGt(price, 0, "price still set");
+    }
+
+    // ========================================================================
+    // SETTLEMENT EDGE CASES
+    // ========================================================================
+
+    /// @notice Unlock without settling reverts with CurrencyNotSettled
+    function test_modifyLiquidity_revertWhen_currencyNotSettled() public {
+        NoSettleRouter noSettle = new NoSettleRouter(manager);
+        _fundRouter(5e9);
+
+        vm.expectRevert(IPoolManager.CurrencyNotSettled.selector);
+        noSettle.modifyLiquidityNoSettle(
+            key, ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1000, salt: bytes32(0)})
+        );
+    }
+
+    /// @notice Double unlock reverts with AlreadyUnlocked
+    function test_unlock_revertWhen_alreadyUnlocked() public {
+        DoubleUnlockRouter doubleRouter = new DoubleUnlockRouter(manager);
+        vm.expectRevert(IPoolManager.AlreadyUnlocked.selector);
+        doubleRouter.attemptDoubleUnlock();
+    }
+
+    // ========================================================================
+    // HOOKDATA PASSTHROUGH
+    // ========================================================================
+
+    /// @notice hookData is accepted and doesn't affect behavior (no hooks set)
+    function test_modifyLiquidity_hookDataPassthrough() public {
+        _fundRouter(5e9);
+
+        bytes memory customHookData = abi.encode("custom_hook_data", uint256(42));
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1000, salt: bytes32(0)});
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(key, params, customHookData);
+
+        assertLt(delta.amount0(), 0, "hookData: pay token0 normally");
+        assertLt(delta.amount1(), 0, "hookData: pay token1 normally");
+    }
+
+    // ========================================================================
+    // ADD → SWAP → ADD MORE → REMOVE ALL LIFECYCLE
+    // ========================================================================
+
+    /// @notice Full lifecycle: add → swap → add more → remove all; verify final balances (HTS-HTS)
+    function test_lifecycle_htsHts_addSwapAddRemoveAll() public {
+        _fundRouter(5e9);
+
+        int256 L1 = 1e9;
+        int256 L2 = 5e8;
+
+        // Step 1: Add initial liquidity
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: L1, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        // Step 2: Swap
+        _fundRouter(5e8);
+        modifyLiquidityRouter.swap(
+            key,
+            SwapParams({
+                amountSpecified: -50000,
+                tickSpacing: 60,
+                zeroForOne: true,
+                sqrtPriceLimitX96: TickMath.minSqrtPrice() + 1,
+                lpFeeOverride: 0
+            }),
+            ZERO_BYTES
+        );
+
+        // Step 3: Add more liquidity (same range, same salt → cumulative)
+        _fundRouter(5e8);
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: L2, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        // Step 4: Remove all (L1 + L2)
+        (BalanceDelta removeDelta, BalanceDelta feeDelta) = modifyLiquidityRouter.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: -(L1 + L2), salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        assertGt(removeDelta.amount0(), 0, "lifecycle: receive token0");
+        assertGt(removeDelta.amount1(), 0, "lifecycle: receive token1");
+        // Fee from L2 deposit (L2 joined after swap, so it gets fee from add time, not prior swap)
+        // But the position has accumulated fees from both L1 and L2 portions
+    }
+
+    /// @notice Full lifecycle with ERC20-ERC20
+    function test_lifecycle_erc20Erc20_addSwapRemove() public {
+        (PoolKey memory erc20Key,, Currency c0, Currency c1) = _setupERC20Pool(SQRT_PRICE_1_1, 3000, 60);
+        _fundRouterWithCurrencies(c0, c1, 1e17);
+
+        int256 L = 1e15;
+
+        // Add
+        modifyLiquidityRouter.modifyLiquidity(
+            erc20Key,
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: L, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        // Swap
+        _fundRouterWithCurrencies(c0, c1, 1e15);
+        modifyLiquidityRouter.swap(
+            erc20Key,
+            SwapParams({
+                amountSpecified: -1e12,
+                tickSpacing: 60,
+                zeroForOne: true,
+                sqrtPriceLimitX96: TickMath.minSqrtPrice() + 1,
+                lpFeeOverride: 0
+            }),
+            ZERO_BYTES
+        );
+
+        // Remove + collect fees
+        (BalanceDelta removeDelta, BalanceDelta feeDelta) = modifyLiquidityRouter.modifyLiquidity(
+            erc20Key,
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: -L, salt: bytes32(0)}),
+            ZERO_BYTES
+        );
+
+        assertGt(removeDelta.amount0(), 0, "ERC20 lifecycle: receive token0");
+        assertGt(removeDelta.amount1(), 0, "ERC20 lifecycle: receive token1");
+        assertGt(feeDelta.amount0(), 0, "ERC20 lifecycle: fee0 collected");
+    }
+
+    // ========================================================================
+    // HELPER FUNCTIONS
+    // ========================================================================
+
+    /// @notice Fund router with both HTS currencies
+    function _fundRouter(uint256 amount) internal {
+        IERC20(Currency.unwrap(currency0)).transfer(address(modifyLiquidityRouter), amount);
+        IERC20(Currency.unwrap(currency1)).transfer(address(modifyLiquidityRouter), amount);
+    }
+
+    /// @notice Fund router with arbitrary currencies
+    function _fundRouterWithCurrencies(Currency c0, Currency c1, uint256 amount) internal {
+        IERC20(Currency.unwrap(c0)).transfer(address(modifyLiquidityRouter), amount);
+        IERC20(Currency.unwrap(c1)).transfer(address(modifyLiquidityRouter), amount);
+    }
+
+    /// @notice Setup an ERC20-ERC20 pool and return key + currencies
+    function _setupERC20Pool(uint160 sqrtPrice, uint24 fee, int24 tickSpacing)
+        internal
+        returns (PoolKey memory poolKey, PoolId id, Currency c0, Currency c1)
+    {
+        MockERC20 mock0 = new MockERC20();
+        MockERC20 mock1 = new MockERC20();
+        mock0.mint(address(this), 1e18);
+        mock1.mint(address(this), 1e18);
+        address a0 = address(mock0);
+        address a1 = address(mock1);
+        (c0, c1) = a0 < a1 ? (Currency.wrap(a0), Currency.wrap(a1)) : (Currency.wrap(a1), Currency.wrap(a0));
+        mock0.approve(address(modifyLiquidityRouter), type(uint256).max);
+        mock1.approve(address(modifyLiquidityRouter), type(uint256).max);
+        (poolKey, id) = initPool(c0, c1, fee, tickSpacing, sqrtPrice);
+    }
+
+    /// @notice Setup a mixed ERC20-HTS pool; returns sorted key and currencies
+    function _setupMixedPool() internal returns (PoolKey memory poolKey, Currency c0, Currency c1) {
+        MockERC20 mockErc20 = new MockERC20();
+        mockErc20.mint(address(this), 1e18);
+        address erc20Addr = address(mockErc20);
+        address htsAddr = Currency.unwrap(currency0);
+        (c0, c1) = erc20Addr < htsAddr ? (Currency.wrap(erc20Addr), currency0) : (currency0, Currency.wrap(erc20Addr));
+        mockErc20.approve(address(modifyLiquidityRouter), type(uint256).max);
+        (poolKey,) = initPool(c0, c1, 3000, 60, SQRT_PRICE_1_1);
+    }
+}
+
+// ========================================================================
+// AUXILIARY TEST CONTRACTS
+// ========================================================================
+
+/// @notice Router that calls modifyLiquidity but doesn't settle (tests CurrencyNotSettled)
+contract NoSettleRouter is IUnlockCallback {
+    IPoolManager public immutable manager;
+
+    constructor(IPoolManager _manager) {
+        manager = _manager;
+    }
+
+    function modifyLiquidityNoSettle(PoolKey memory key, ModifyLiquidityParams memory params) external {
+        manager.unlock(abi.encode(key, params));
+    }
+
+    function unlockCallback(bytes calldata rawData) external override returns (bytes memory) {
+        require(msg.sender == address(manager), "NoSettleRouter: only manager");
+        (PoolKey memory key, ModifyLiquidityParams memory params) =
+            abi.decode(rawData, (PoolKey, ModifyLiquidityParams));
+        manager.modifyLiquidity(key, params, "");
+        // Intentionally do not settle — NonzeroDeltaCount != 0 → revert
+        return "";
+    }
+}
+
+/// @notice Router that attempts to call unlock twice (tests AlreadyUnlocked)
+contract DoubleUnlockRouter is IUnlockCallback {
+    IPoolManager public immutable manager;
+
+    constructor(IPoolManager _manager) {
+        manager = _manager;
+    }
+
+    function attemptDoubleUnlock() external {
+        manager.unlock(abi.encode(uint8(1)));
+    }
+
+    function unlockCallback(bytes calldata) external override returns (bytes memory) {
+        require(msg.sender == address(manager), "DoubleUnlockRouter: only manager");
+        // Attempt second unlock while already unlocked
+        manager.unlock("");
+        return "";
     }
 }

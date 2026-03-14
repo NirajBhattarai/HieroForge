@@ -19,6 +19,12 @@ interface IUniversalRouter {
     /// @notice Thrown when an unknown command type is dispatched
     error InvalidCommandType(uint256 commandType);
 
+    /// @notice Thrown when SWEEP balance is below minimum
+    error InsufficientSweepBalance();
+
+    /// @notice Thrown when native ETH/HBAR sweep fails
+    error SweepFailed();
+
     /// @notice Executes encoded commands with provided inputs. Reverts if deadline has passed.
     /// @param commands Concatenated command bytes (each 1 byte: optional FLAG_ALLOW_REVERT + command type)
     /// @param inputs ABI-encoded inputs for each command (inputs[i] for commands[i])

@@ -29,6 +29,21 @@ export interface QuoteParams {
   hookData: `0x${string}`;
 }
 
+/** Multi-hop PathKey for the Quoter (matches IV4Quoter.QuoteExactParams). */
+export interface QuotePathKey {
+  intermediateCurrency: string;
+  fee: number;
+  tickSpacing: number;
+  hooks: string;
+  hookData: `0x${string}`;
+}
+
+export interface QuoteMultiParams {
+  exactCurrency: string;
+  path: QuotePathKey[];
+  exactAmount: bigint;
+}
+
 export interface QuoteResult {
   amount: bigint;
   gasEstimate: bigint;
@@ -321,4 +336,132 @@ export async function quoteExactOutputSingleWithGas(
     "quoteExactOutputSingle",
     params,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Multi-hop quote support
+// ---------------------------------------------------------------------------
+
+/**
+ * Core multi-hop quote logic — mirrors `executeQuote` but with QuoteExactParams struct.
+ */
+async function executeQuoteMulti(
+  publicClient: PublicClient,
+  quoterAddress: `0x${string}`,
+  functionName: string,
+  params: QuoteMultiParams,
+): Promise<QuoteResult> {
+  const calldata = encodeFunctionData({
+    abi: QuoterAbi,
+    functionName,
+    args: [params],
+  });
+
+  try {
+    const result = await publicClient.call({
+      to: quoterAddress,
+      data: calldata,
+    });
+    const raw = result as unknown;
+    const resultHex =
+      typeof raw === "string" && raw.startsWith("0x")
+        ? raw
+        : typeof (raw as { data?: string })?.data === "string"
+          ? (raw as { data: string }).data
+          : null;
+
+    const decoded = tryDecodeQuoteReturn(functionName, resultHex);
+    if (decoded !== null) return decoded;
+
+    const amount = parseQuoteSwapRevert(resultHex);
+    if (amount !== null) return { amount, gasEstimate: 0n };
+
+    if (resultHex?.startsWith(NOT_ENOUGH_LIQUIDITY_SELECTOR))
+      throw new NotEnoughLiquidityError();
+  } catch (err: unknown) {
+    if (err instanceof NotEnoughLiquidityError) throw err;
+
+    const hex = getRevertDataHex(err);
+    const decoded = tryDecodeQuoteReturn(functionName, hex);
+    if (decoded !== null) return decoded;
+    const amount = parseQuoteSwapRevert(hex);
+    if (amount !== null) return { amount, gasEstimate: 0n };
+    if (hex?.startsWith(NOT_ENOUGH_LIQUIDITY_SELECTOR))
+      throw new NotEnoughLiquidityError();
+
+    const rawHex = await rawEthCall(quoterAddress, calldata);
+    const rawDecoded = tryDecodeQuoteReturn(functionName, rawHex);
+    if (rawDecoded !== null) return rawDecoded;
+    const rawAmount = parseQuoteSwapRevert(rawHex);
+    if (rawAmount !== null) return { amount: rawAmount, gasEstimate: 0n };
+    if (rawHex?.startsWith(NOT_ENOUGH_LIQUIDITY_SELECTOR))
+      throw new NotEnoughLiquidityError();
+
+    throw err;
+  }
+  throw new Error("V4Quoter: unexpected empty response");
+}
+
+/**
+ * Build QuoteMultiParams for multi-hop quoting.
+ * @param exactCurrency - the input currency for exact-in, or output currency for exact-out
+ * @param path - PathKey[] route through intermediate tokens
+ * @param exactAmount - amount in or out
+ */
+export function quoteMultiParams(
+  exactCurrency: string,
+  path: QuotePathKey[],
+  exactAmount: bigint,
+): QuoteMultiParams {
+  return {
+    exactCurrency,
+    path: path.map((p) => ({
+      intermediateCurrency: p.intermediateCurrency,
+      fee: p.fee,
+      tickSpacing: p.tickSpacing,
+      hooks: p.hooks || ZERO_ADDRESS,
+      hookData: p.hookData || "0x",
+    })),
+    exactAmount,
+  };
+}
+
+/**
+ * Quote exact-input multi-hop: given amountIn through a path, get amountOut.
+ */
+export async function quoteExactInput(
+  publicClient: PublicClient,
+  quoterAddress: `0x${string}`,
+  exactCurrency: string,
+  path: QuotePathKey[],
+  amountIn: bigint,
+): Promise<bigint> {
+  const params = quoteMultiParams(exactCurrency, path, amountIn);
+  const result = await executeQuoteMulti(
+    publicClient,
+    quoterAddress,
+    "quoteExactInput",
+    params,
+  );
+  return result.amount;
+}
+
+/**
+ * Quote exact-output multi-hop: given desired amountOut, get required amountIn.
+ */
+export async function quoteExactOutput(
+  publicClient: PublicClient,
+  quoterAddress: `0x${string}`,
+  exactCurrency: string,
+  path: QuotePathKey[],
+  amountOut: bigint,
+): Promise<bigint> {
+  const params = quoteMultiParams(exactCurrency, path, amountOut);
+  const result = await executeQuoteMulti(
+    publicClient,
+    quoterAddress,
+    "quoteExactOutput",
+    params,
+  );
+  return result.amount;
 }

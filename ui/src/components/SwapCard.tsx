@@ -1,9 +1,22 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { createPublicClient, http, parseUnits, formatUnits } from "viem";
+import {
+  createPublicClient,
+  http,
+  parseUnits,
+  formatUnits,
+  getAddress,
+  type Address,
+} from "viem";
 import { useHashPack } from "@/context/HashPackContext";
-import { quoteExactInputSingle, NotEnoughLiquidityError } from "@/lib/quote";
+import {
+  quoteExactInputSingle,
+  quoteExactOutputSingle,
+  quoteExactInput,
+  NotEnoughLiquidityError,
+  type QuotePathKey,
+} from "@/lib/quote";
 import { getFriendlyErrorMessage } from "@/lib/errors";
 import { ErrorMessage } from "@/components/ErrorMessage";
 import { TokenIcon } from "@/components/TokenIcon";
@@ -18,12 +31,21 @@ import {
   getRouterAddress,
   DEFAULT_FEE,
   DEFAULT_TICK_SPACING,
+  FEE_TIERS,
+  feeTierToTickSpacing,
   type TokenOption,
 } from "@/constants";
 import { useTokens } from "@/hooks/useTokens";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
 import { hederaContractExecute } from "@/lib/hederaContract";
-import { buildSwapPoolKey, encodeSwapExactInSingle } from "@/lib/swap";
+import {
+  buildSwapPoolKey,
+  encodeSwapExactInSingle,
+  encodeSwapExactOutSingle,
+  encodeSwapExactIn,
+  buildPath,
+  type PathKey,
+} from "@/lib/swap";
 import { UniversalRouterAbi } from "@/abis/UniversalRouter";
 import { ERC20Abi } from "@/abis/ERC20";
 
@@ -38,6 +60,10 @@ interface SwapCardProps {
     symbol1: string;
   } | null;
 }
+
+type SwapMode = "exactIn" | "exactOut";
+
+const SLIPPAGE_OPTIONS = [0.5, 1, 2, 5] as const;
 
 export function SwapCard({ selectedPool }: SwapCardProps) {
   const { accountId, isConnected, hashConnectRef } = useHashPack();
@@ -57,7 +83,7 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
     name: t.name,
   }));
 
-  // Swap state (must be declared before addrIn/addrOut/useTokenBalance)
+  // Swap state
   const EMPTY_TOKEN: TokenOption = {
     id: "",
     symbol: "",
@@ -70,7 +96,22 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [tokenIn, setTokenIn] = useState<TokenOption>(EMPTY_TOKEN);
   const [tokenOut, setTokenOut] = useState<TokenOption>(EMPTY_TOKEN);
-  const [selectorOpen, setSelectorOpen] = useState<"in" | "out" | null>(null);
+  const [selectorOpen, setSelectorOpen] = useState<"in" | "out" | "mid" | null>(
+    null,
+  );
+
+  // Multi-hop
+  const [intermediateToken, setIntermediateToken] =
+    useState<TokenOption | null>(null);
+  const [multiHopEnabled, setMultiHopEnabled] = useState(false);
+
+  // Swap mode & slippage settings
+  const [swapMode, setSwapMode] = useState<SwapMode>("exactIn");
+  const [slippage, setSlippage] = useState(2);
+  const [showSettings, setShowSettings] = useState(false);
+  const [customSlippage, setCustomSlippage] = useState("");
+  const [swapFee, setSwapFee] = useState(DEFAULT_FEE);
+  const swapTickSpacing = feeTierToTickSpacing(swapFee);
 
   const addrIn = resolveAddress(tokenIn);
   const addrOut = resolveAddress(tokenOut);
@@ -111,15 +152,22 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
 
   // Quote
   useEffect(() => {
+    const primaryAmount = swapMode === "exactIn" ? amountIn : amountOut;
     if (
       !quoterAddress ||
-      !amountIn ||
-      amountIn === "." ||
-      amountIn === "0" ||
-      amountIn === "0."
+      !primaryAmount ||
+      primaryAmount === "." ||
+      primaryAmount === "0" ||
+      primaryAmount === "0."
     ) {
-      if (amountIn === "" || amountIn === "0" || amountIn === "0.")
-        setAmountOut("");
+      if (
+        primaryAmount === "" ||
+        primaryAmount === "0" ||
+        primaryAmount === "0."
+      ) {
+        if (swapMode === "exactIn") setAmountOut("");
+        else setAmountIn("");
+      }
       setQuoteError(null);
       setQuoteLoading(false);
       return;
@@ -127,59 +175,139 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
     const addrIn = resolveAddress(tokenIn);
     const addrOut = resolveAddress(tokenOut);
     if (!addrIn || !addrOut || addrIn === addrOut) {
-      setAmountOut("");
+      if (swapMode === "exactIn") setAmountOut("");
+      else setAmountIn("");
       setQuoteError(null);
       setQuoteLoading(false);
       return;
     }
 
-    const currency0 = addrIn < addrOut ? addrIn : addrOut;
-    const currency1 = addrIn < addrOut ? addrOut : addrIn;
-    const zeroForOne = addrIn < addrOut;
-    const useSelected =
-      selectedPool &&
-      selectedPool.currency0.toLowerCase() === currency0.toLowerCase() &&
-      selectedPool.currency1.toLowerCase() === currency1.toLowerCase();
-    const fee = useSelected ? selectedPool.fee : DEFAULT_FEE;
-    const tickSpacing = useSelected
-      ? selectedPool.tickSpacing
-      : DEFAULT_TICK_SPACING;
-    const poolKey = { currency0, currency1, fee, tickSpacing };
     const decimalsIn = resolveDecimals(tokenIn);
     const decimalsOut = resolveDecimals(tokenOut);
+    const addrMid =
+      intermediateToken && multiHopEnabled
+        ? resolveAddress(intermediateToken)
+        : null;
 
     let cancelled = false;
     setQuoteError(null);
     setQuoteLoading(true);
     const id = setTimeout(async () => {
       try {
-        let amountInWei: bigint;
-        try {
-          amountInWei = parseUnits(amountIn, decimalsIn);
-        } catch {
-          if (!cancelled) setAmountOut("");
-          if (!cancelled) setQuoteLoading(false);
-          return;
-        }
         const client = publicClientRef.current;
         if (!client) {
           if (!cancelled) setQuoteLoading(false);
           return;
         }
-        const amountOutWei = await quoteExactInputSingle(
-          client as import("viem").PublicClient,
-          quoterAddress as `0x${string}`,
-          poolKey,
-          zeroForOne,
-          amountInWei,
-        );
-        if (!cancelled) {
-          setAmountOut(formatUnits(amountOutWei, decimalsOut));
-          setQuoteError(null);
+
+        // Multi-hop path?
+        if (addrMid && addrMid !== addrIn && addrMid !== addrOut) {
+          // Multi-hop: In → Mid → Out
+          const path: QuotePathKey[] = [
+            {
+              intermediateCurrency: addrMid,
+              fee: swapFee,
+              tickSpacing: swapTickSpacing,
+              hooks: "0x0000000000000000000000000000000000000000",
+              hookData: "0x",
+            },
+            {
+              intermediateCurrency: addrOut,
+              fee: swapFee,
+              tickSpacing: swapTickSpacing,
+              hooks: "0x0000000000000000000000000000000000000000",
+              hookData: "0x",
+            },
+          ];
+
+          if (swapMode === "exactIn") {
+            let amountInWei: bigint;
+            try {
+              amountInWei = parseUnits(amountIn, decimalsIn);
+            } catch {
+              if (!cancelled) setAmountOut("");
+              if (!cancelled) setQuoteLoading(false);
+              return;
+            }
+            const amountOutWei = await quoteExactInput(
+              client as import("viem").PublicClient,
+              quoterAddress as `0x${string}`,
+              addrIn,
+              path,
+              amountInWei,
+            );
+            if (!cancelled) {
+              setAmountOut(formatUnits(amountOutWei, decimalsOut));
+              setQuoteError(null);
+            }
+          } else {
+            // exact-output multi-hop not implemented in quoter UI yet
+            if (!cancelled) {
+              setAmountIn("");
+              setQuoteError("Exact output multi-hop not yet supported");
+            }
+          }
+        } else {
+          // Single-hop
+          const currency0 = addrIn < addrOut ? addrIn : addrOut;
+          const currency1 = addrIn < addrOut ? addrOut : addrIn;
+          const zeroForOne = addrIn < addrOut;
+          const useSelected =
+            selectedPool &&
+            selectedPool.currency0.toLowerCase() === currency0.toLowerCase() &&
+            selectedPool.currency1.toLowerCase() === currency1.toLowerCase();
+          const fee = useSelected ? selectedPool.fee : swapFee;
+          const tickSpacing = useSelected
+            ? selectedPool.tickSpacing
+            : swapTickSpacing;
+          const poolKey = { currency0, currency1, fee, tickSpacing };
+
+          if (swapMode === "exactIn") {
+            let amountInWei: bigint;
+            try {
+              amountInWei = parseUnits(amountIn, decimalsIn);
+            } catch {
+              if (!cancelled) setAmountOut("");
+              if (!cancelled) setQuoteLoading(false);
+              return;
+            }
+            const amountOutWei = await quoteExactInputSingle(
+              client as import("viem").PublicClient,
+              quoterAddress as `0x${string}`,
+              poolKey,
+              zeroForOne,
+              amountInWei,
+            );
+            if (!cancelled) {
+              setAmountOut(formatUnits(amountOutWei, decimalsOut));
+              setQuoteError(null);
+            }
+          } else {
+            let amountOutWei: bigint;
+            try {
+              amountOutWei = parseUnits(amountOut, decimalsOut);
+            } catch {
+              if (!cancelled) setAmountIn("");
+              if (!cancelled) setQuoteLoading(false);
+              return;
+            }
+            const amountInWei = await quoteExactOutputSingle(
+              client as import("viem").PublicClient,
+              quoterAddress as `0x${string}`,
+              poolKey,
+              zeroForOne,
+              amountOutWei,
+            );
+            if (!cancelled) {
+              setAmountIn(formatUnits(amountInWei, decimalsIn));
+              setQuoteError(null);
+            }
+          }
         }
       } catch (err) {
         if (!cancelled) {
-          setAmountOut("");
+          if (swapMode === "exactIn") setAmountOut("");
+          else setAmountIn("");
           setQuoteError(
             err instanceof NotEnoughLiquidityError
               ? err.message
@@ -193,13 +321,26 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
       cancelled = true;
       clearTimeout(id);
     };
-  }, [amountIn, tokenIn.symbol, tokenOut.symbol, quoterAddress, selectedPool]);
+  }, [
+    amountIn,
+    amountOut,
+    swapMode,
+    tokenIn.symbol,
+    tokenOut.symbol,
+    intermediateToken?.symbol,
+    multiHopEnabled,
+    quoterAddress,
+    selectedPool,
+    swapFee,
+  ]);
 
   const flipTokens = () => {
     setTokenIn(tokenOut);
     setTokenOut(tokenIn);
     setAmountIn(amountOut);
-    setAmountOut("");
+    setAmountOut(amountIn);
+    // Flip mode too (input becomes output and vice versa)
+    setSwapMode(swapMode === "exactIn" ? "exactOut" : "exactIn");
   };
 
   const handleSwap = useCallback(async () => {
@@ -221,22 +362,20 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
       const decimalsIn = resolveDecimals(tokenIn);
       const decimalsOut = resolveDecimals(tokenOut);
       const amountInWei = parseUnits(amountIn, decimalsIn);
-      const quotedOutWei = parseUnits(amountOut, decimalsOut);
-      const amountOutMinimum = (quotedOutWei * 98n) / 100n;
+      const amountOutWei = parseUnits(amountOut, decimalsOut);
 
-      const useSelected =
-        selectedPool &&
-        selectedPool.currency0.toLowerCase() ===
-          (addrIn < addrOut ? addrIn : addrOut).toLowerCase() &&
-        selectedPool.currency1.toLowerCase() ===
-          (addrIn < addrOut ? addrOut : addrIn).toLowerCase();
-      const fee = useSelected ? selectedPool.fee : DEFAULT_FEE;
-      const tickSpacing = useSelected
-        ? selectedPool.tickSpacing
-        : DEFAULT_TICK_SPACING;
+      const slippageBps = BigInt(Math.round(slippage * 100));
+      const addrMid =
+        intermediateToken && multiHopEnabled
+          ? resolveAddress(intermediateToken)
+          : null;
+      const isMultiHop = addrMid && addrMid !== addrIn && addrMid !== addrOut;
 
-      const poolKey = buildSwapPoolKey(addrIn, addrOut, fee, tickSpacing);
-      const zeroForOne = addrIn.toLowerCase() < addrOut.toLowerCase();
+      // Approve router for input token
+      const approveAmount =
+        swapMode === "exactIn"
+          ? amountInWei
+          : (amountInWei * (10000n + slippageBps)) / 10000n;
 
       console.log("[swap] Approving router to spend input token...");
       await hederaContractExecute({
@@ -245,18 +384,74 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
         contractId: addrIn,
         abi: ERC20Abi,
         functionName: "approve",
-        args: [routerAddress, amountInWei],
+        args: [routerAddress, approveAmount],
         gas: 800_000,
       });
 
-      console.log("[swap] Executing swap via UniversalRouter...");
-      const { commands, inputs } = encodeSwapExactInSingle({
-        poolKey,
-        zeroForOne,
-        amountIn: amountInWei,
-        amountOutMinimum,
-      });
+      let commands: `0x${string}`;
+      let inputs: `0x${string}`[];
 
+      if (isMultiHop) {
+        // Multi-hop: In → Mid → Out
+        const pathKeys = buildPath(
+          [addrIn, addrMid!, addrOut],
+          [swapFee, swapFee],
+          [swapTickSpacing, swapTickSpacing],
+        );
+        const amountOutMinimum =
+          (amountOutWei * (10000n - slippageBps)) / 10000n;
+        ({ commands, inputs } = encodeSwapExactIn({
+          currencyIn: getAddress(addrIn) as Address,
+          path: pathKeys,
+          amountIn: amountInWei,
+          amountOutMinimum,
+        }));
+      } else if (swapMode === "exactIn") {
+        // Single-hop exact input
+        const useSelected =
+          selectedPool &&
+          selectedPool.currency0.toLowerCase() ===
+            (addrIn < addrOut ? addrIn : addrOut).toLowerCase() &&
+          selectedPool.currency1.toLowerCase() ===
+            (addrIn < addrOut ? addrOut : addrIn).toLowerCase();
+        const fee = useSelected ? selectedPool.fee : swapFee;
+        const tickSpacing = useSelected
+          ? selectedPool.tickSpacing
+          : swapTickSpacing;
+        const poolKey = buildSwapPoolKey(addrIn, addrOut, fee, tickSpacing);
+        const zeroForOne = addrIn.toLowerCase() < addrOut.toLowerCase();
+        const amountOutMinimum =
+          (amountOutWei * (10000n - slippageBps)) / 10000n;
+        ({ commands, inputs } = encodeSwapExactInSingle({
+          poolKey,
+          zeroForOne,
+          amountIn: amountInWei,
+          amountOutMinimum,
+        }));
+      } else {
+        // Single-hop exact output
+        const useSelected =
+          selectedPool &&
+          selectedPool.currency0.toLowerCase() ===
+            (addrIn < addrOut ? addrIn : addrOut).toLowerCase() &&
+          selectedPool.currency1.toLowerCase() ===
+            (addrIn < addrOut ? addrOut : addrIn).toLowerCase();
+        const fee = useSelected ? selectedPool.fee : swapFee;
+        const tickSpacing = useSelected
+          ? selectedPool.tickSpacing
+          : swapTickSpacing;
+        const poolKey = buildSwapPoolKey(addrIn, addrOut, fee, tickSpacing);
+        const zeroForOne = addrIn.toLowerCase() < addrOut.toLowerCase();
+        const amountInMaximum = (amountInWei * (10000n + slippageBps)) / 10000n;
+        ({ commands, inputs } = encodeSwapExactOutSingle({
+          poolKey,
+          zeroForOne,
+          amountOut: amountOutWei,
+          amountInMaximum,
+        }));
+      }
+
+      console.log("[swap] Executing swap via UniversalRouter...");
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 120);
 
       const txId = await hederaContractExecute({
@@ -266,7 +461,7 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
         abi: UniversalRouterAbi,
         functionName: "execute",
         args: [commands, inputs, deadline],
-        gas: 3_000_000,
+        gas: isMultiHop ? 5_000_000 : 3_000_000,
       });
 
       console.log("[swap] Swap completed:", txId);
@@ -285,9 +480,14 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
     routerAddress,
     amountIn,
     amountOut,
+    swapMode,
+    slippage,
     tokenIn,
     tokenOut,
+    intermediateToken,
+    multiHopEnabled,
     selectedPool,
+    swapFee,
     hashConnectRef,
   ]);
 
@@ -297,11 +497,13 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
         setTokenOut(tokenIn);
       }
       setTokenIn(token);
-    } else {
+    } else if (selectorOpen === "out") {
       if (token.id === tokenIn.id) {
         setTokenIn(tokenOut);
       }
       setTokenOut(token);
+    } else if (selectorOpen === "mid") {
+      setIntermediateToken(token);
     }
     setSelectorOpen(null);
   };
@@ -337,13 +539,47 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
             <div className="p-4">
               {/* Header */}
               <div className="flex items-center justify-between px-1 pt-0.5 pb-2">
-                <h2 className="text-lg font-semibold text-text-primary tracking-tight">
-                  Swap
-                </h2>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-semibold text-text-primary tracking-tight">
+                    Swap
+                  </h2>
+                  {/* Mode toggle */}
+                  <div className="flex rounded-lg bg-surface-2/80 border border-white/[0.06] p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSwapMode("exactIn");
+                        setAmountOut("");
+                      }}
+                      className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all cursor-pointer ${
+                        swapMode === "exactIn"
+                          ? "bg-accent/20 text-accent"
+                          : "text-text-tertiary hover:text-text-secondary"
+                      }`}
+                    >
+                      Exact In
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSwapMode("exactOut");
+                        setAmountIn("");
+                      }}
+                      className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all cursor-pointer ${
+                        swapMode === "exactOut"
+                          ? "bg-accent/20 text-accent"
+                          : "text-text-tertiary hover:text-text-secondary"
+                      }`}
+                    >
+                      Exact Out
+                    </button>
+                  </div>
+                </div>
                 <button
                   type="button"
                   className="p-2 rounded-xl text-text-tertiary hover:text-text-secondary hover:bg-surface-3/80 transition-all duration-200 cursor-pointer"
                   title="Settings"
+                  onClick={() => setShowSettings(!showSettings)}
                 >
                   <svg
                     width="18"
@@ -361,6 +597,145 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
                 </button>
               </div>
 
+              {/* Settings panel */}
+              {showSettings && (
+                <div className="mb-3 p-3 rounded-xl bg-surface-2/80 border border-white/[0.06] space-y-3 animate-[fadeIn_0.15s_ease-out]">
+                  {/* Slippage */}
+                  <div>
+                    <span className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+                      Slippage Tolerance
+                    </span>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      {SLIPPAGE_OPTIONS.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => {
+                            setSlippage(s);
+                            setCustomSlippage("");
+                          }}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer ${
+                            slippage === s && !customSlippage
+                              ? "bg-accent/20 text-accent border border-accent/30"
+                              : "bg-surface-3/60 text-text-secondary border border-white/[0.06] hover:border-accent/20"
+                          }`}
+                        >
+                          {s}%
+                        </button>
+                      ))}
+                      <div className="relative flex-1 min-w-[70px]">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="Custom"
+                          value={customSlippage}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setCustomSlippage(v);
+                            const n = parseFloat(v);
+                            if (Number.isFinite(n) && n > 0 && n <= 50)
+                              setSlippage(n);
+                          }}
+                          className="w-full px-3 py-1.5 text-xs font-medium bg-surface-3/60 rounded-lg border border-white/[0.06] text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-accent/30"
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-text-tertiary">
+                          %
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Multi-hop toggle */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+                      Multi-hop Route
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setMultiHopEnabled(!multiHopEnabled)}
+                      className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer ${
+                        multiHopEnabled ? "bg-accent" : "bg-surface-3"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                          multiHopEnabled ? "translate-x-5" : ""
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Intermediate token picker */}
+                  {multiHopEnabled && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-text-tertiary">
+                        Route through:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectorOpen("mid")}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface-3/80 border border-white/[0.08] hover:border-accent/30 transition-all cursor-pointer text-xs font-medium"
+                      >
+                        {intermediateToken ? (
+                          <>
+                            <TokenIcon
+                              symbol={intermediateToken.symbol}
+                              size={16}
+                            />
+                            <span className="text-text-primary">
+                              {intermediateToken.symbol}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-text-tertiary">
+                            Select token
+                          </span>
+                        )}
+                        <svg
+                          width="10"
+                          height="10"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          className="text-text-tertiary"
+                        >
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Fee tier selector */}
+                  <div>
+                    <span className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+                      Fee Tier
+                    </span>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      {FEE_TIERS.map((tier) => (
+                        <button
+                          key={tier.fee}
+                          type="button"
+                          onClick={() => setSwapFee(tier.fee)}
+                          className={`relative px-3 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer ${
+                            swapFee === tier.fee
+                              ? "bg-accent/20 text-accent border border-accent/30"
+                              : "bg-surface-3/60 text-text-secondary border border-white/[0.06] hover:border-accent/20"
+                          }`}
+                        >
+                          {tier.label}
+                          {"tag" in tier && tier.tag && (
+                            <span className="absolute -top-1.5 -right-1.5 px-1 py-0.5 text-[8px] leading-none font-semibold rounded bg-accent/30 text-accent">
+                              ★
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* You pay */}
               <div className="bg-surface-2/80 rounded-xl border border-white/[0.04] p-4 mb-1">
                 <div className="flex items-center justify-between mb-2">
@@ -369,15 +744,20 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    className="flex-1 bg-transparent text-3xl font-semibold text-text-primary placeholder:text-text-disabled outline-none min-w-0"
-                    placeholder="0"
-                    value={amountIn}
-                    onChange={(e) => setAmountIn(e.target.value)}
-                    aria-label="Amount to pay"
-                  />
+                  {swapMode === "exactOut" && quoteLoading ? (
+                    <Skeleton className="h-9 w-40 flex-1 rounded-lg" />
+                  ) : (
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      className="flex-1 bg-transparent text-3xl font-semibold text-text-primary placeholder:text-text-disabled outline-none min-w-0"
+                      placeholder="0"
+                      value={amountIn}
+                      readOnly={swapMode === "exactOut" && !!quoterAddress}
+                      onChange={(e) => setAmountIn(e.target.value)}
+                      aria-label="Amount to pay"
+                    />
+                  )}
                   <button
                     type="button"
                     onClick={() => setSelectorOpen("in")}
@@ -443,7 +823,7 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  {quoteLoading ? (
+                  {swapMode === "exactIn" && quoteLoading ? (
                     <Skeleton className="h-9 w-40 flex-1 rounded-lg" />
                   ) : (
                     <input
@@ -452,7 +832,7 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
                       className="flex-1 bg-transparent text-3xl font-semibold text-text-primary placeholder:text-text-disabled outline-none min-w-0"
                       placeholder="0"
                       value={amountOut}
-                      readOnly={!!quoterAddress}
+                      readOnly={swapMode === "exactIn" && !!quoterAddress}
                       onChange={(e) => setAmountOut(e.target.value)}
                       aria-label="Amount to receive"
                       aria-invalid={!!quoteError}
@@ -490,17 +870,69 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
                 )}
               </div>
 
-              {/* Rate info */}
+              {/* Route & rate info */}
               {amountIn && amountOut && !quoteError && (
-                <div className="flex items-center justify-between px-1 py-2 mt-2">
-                  <span className="text-xs text-text-tertiary">
-                    1 {tokenIn.symbol} ={" "}
-                    {(parseFloat(amountOut) / parseFloat(amountIn)).toFixed(6)}{" "}
-                    {tokenOut.symbol}
-                  </span>
-                  <span className="text-xs text-text-tertiary">
-                    ~2% slippage
-                  </span>
+                <div className="px-1 py-2 mt-2 space-y-1">
+                  {/* Route display */}
+                  {multiHopEnabled && intermediateToken && (
+                    <div className="flex items-center gap-1.5 text-xs text-text-tertiary">
+                      <span className="font-medium text-text-secondary">
+                        Route:
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <TokenIcon symbol={tokenIn.symbol} size={14} />
+                        {tokenIn.symbol}
+                      </span>
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        className="text-accent"
+                      >
+                        <polyline points="9 18 15 12 9 6" />
+                      </svg>
+                      <span className="flex items-center gap-1">
+                        <TokenIcon
+                          symbol={intermediateToken.symbol}
+                          size={14}
+                        />
+                        {intermediateToken.symbol}
+                      </span>
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        className="text-accent"
+                      >
+                        <polyline points="9 18 15 12 9 6" />
+                      </svg>
+                      <span className="flex items-center gap-1">
+                        <TokenIcon symbol={tokenOut.symbol} size={14} />
+                        {tokenOut.symbol}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-text-tertiary">
+                      1 {tokenIn.symbol} ={" "}
+                      {(parseFloat(amountOut) / parseFloat(amountIn)).toFixed(
+                        6,
+                      )}{" "}
+                      {tokenOut.symbol}
+                    </span>
+                    <span className="text-xs text-text-tertiary">
+                      ~{slippage}% slippage ·{" "}
+                      {FEE_TIERS.find((t) => t.fee === swapFee)?.label ??
+                        `${swapFee / 10000}%`}{" "}
+                      fee
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -595,8 +1027,20 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
         onClose={() => setSelectorOpen(null)}
         onSelect={handleTokenSelect}
         tokens={tokenOptions}
-        selectedToken={selectorOpen === "in" ? tokenIn : tokenOut}
-        excludeToken={selectorOpen === "in" ? tokenOut : tokenIn}
+        selectedToken={
+          selectorOpen === "in"
+            ? tokenIn
+            : selectorOpen === "out"
+              ? tokenOut
+              : (intermediateToken ?? EMPTY_TOKEN)
+        }
+        excludeToken={
+          selectorOpen === "mid"
+            ? undefined
+            : selectorOpen === "in"
+              ? tokenOut
+              : tokenIn
+        }
       />
     </>
   );

@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import {Currency} from "hieroforge-core/types/Currency.sol";
 import {PoolKey} from "hieroforge-core/types/PoolKey.sol";
 import {IV4Router} from "../interfaces/IV4Router.sol";
+import {PathKey} from "./PathKey.sol";
 
 /// @title Library for abi decoding of calldata
 library CalldataDecoder {
@@ -108,6 +109,20 @@ library CalldataDecoder {
         hookData = params.toBytes(11);
     }
 
+    /// @notice Decode burn position params: tokenId, amount0Min, amount1Min, hookData
+    function decodeBurnParams(bytes calldata params)
+        internal
+        pure
+        returns (uint256 tokenId, uint128 amount0Min, uint128 amount1Min, bytes calldata hookData)
+    {
+        assembly ("memory-safe") {
+            tokenId := calldataload(params.offset)
+            amount0Min := calldataload(add(params.offset, 0x20))
+            amount1Min := calldataload(add(params.offset, 0x40))
+        }
+        hookData = params.toBytes(3);
+    }
+
     /// @dev equivalent to: abi.decode(params, (IV4Router.ExactInputSingleParams)) in calldata
     function decodeSwapExactInSingleParams(bytes calldata params)
         internal
@@ -173,6 +188,106 @@ library CalldataDecoder {
                 mstore(0, SLICE_ERROR_SELECTOR)
                 revert(0x1c, 4)
             }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Multi-hop swap decoders (use abi.decode — PathKey[] is dynamic)
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// @dev Decode multi-hop exact-input params: (Currency currencyIn, PathKey[] path, uint128 amountIn, uint128 amountOutMinimum)
+    function decodeSwapExactInParams(bytes calldata params)
+        internal
+        pure
+        returns (IV4Router.ExactInputParams memory swapParams)
+    {
+        swapParams = abi.decode(params, (IV4Router.ExactInputParams));
+    }
+
+    /// @dev Decode multi-hop exact-output params: (Currency currencyOut, PathKey[] path, uint128 amountOut, uint128 amountInMaximum)
+    function decodeSwapExactOutParams(bytes calldata params)
+        internal
+        pure
+        returns (IV4Router.ExactOutputParams memory swapParams)
+    {
+        swapParams = abi.decode(params, (IV4Router.ExactOutputParams));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Settlement action decoders
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// @dev Decode (Currency, uint256, bool) — used by SETTLE
+    function decodeCurrencyUint256AndBool(bytes calldata params)
+        internal
+        pure
+        returns (Currency currency, uint256 amount, bool payerIsUser)
+    {
+        assembly ("memory-safe") {
+            if lt(params.length, 0x60) {
+                mstore(0, SLICE_ERROR_SELECTOR)
+                revert(0x1c, 4)
+            }
+            currency := calldataload(params.offset)
+            amount := calldataload(add(params.offset, 0x20))
+            payerIsUser := calldataload(add(params.offset, 0x40))
+        }
+    }
+
+    /// @dev Decode (Currency, address, uint256) — used by TAKE, TAKE_PORTION
+    function decodeCurrencyAddressAndUint256(bytes calldata params)
+        internal
+        pure
+        returns (Currency currency, address recipient, uint256 amount)
+    {
+        assembly ("memory-safe") {
+            if lt(params.length, 0x60) {
+                mstore(0, SLICE_ERROR_SELECTOR)
+                revert(0x1c, 4)
+            }
+            currency := calldataload(params.offset)
+            recipient := calldataload(add(params.offset, 0x20))
+            amount := calldataload(add(params.offset, 0x40))
+        }
+    }
+
+    /// @dev Decode (Currency, Currency) — used by SETTLE_PAIR
+    function decodeCurrencyPair(bytes calldata params) internal pure returns (Currency currency0, Currency currency1) {
+        assembly ("memory-safe") {
+            if lt(params.length, 0x40) {
+                mstore(0, SLICE_ERROR_SELECTOR)
+                revert(0x1c, 4)
+            }
+            currency0 := calldataload(params.offset)
+            currency1 := calldataload(add(params.offset, 0x20))
+        }
+    }
+
+    /// @dev Decode (Currency, Currency, address) — used by TAKE_PAIR
+    function decodeCurrencyPairAndAddress(bytes calldata params)
+        internal
+        pure
+        returns (Currency currency0, Currency currency1, address recipient)
+    {
+        assembly ("memory-safe") {
+            if lt(params.length, 0x60) {
+                mstore(0, SLICE_ERROR_SELECTOR)
+                revert(0x1c, 4)
+            }
+            currency0 := calldataload(params.offset)
+            currency1 := calldataload(add(params.offset, 0x20))
+            recipient := calldataload(add(params.offset, 0x40))
+        }
+    }
+
+    /// @dev Decode (Currency) — used by CLOSE_CURRENCY
+    function decodeCurrency(bytes calldata params) internal pure returns (Currency currency) {
+        assembly ("memory-safe") {
+            if lt(params.length, 0x20) {
+                mstore(0, SLICE_ERROR_SELECTOR)
+                revert(0x1c, 4)
+            }
+            currency := calldataload(params.offset)
         }
     }
 }

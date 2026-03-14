@@ -13,6 +13,7 @@ interface PositionDetailProps {
   onBack: () => void;
   onAddLiquidity: () => void;
   onRemoveLiquidity: () => void;
+  onBurnPosition: () => void;
 }
 
 function formatFee(fee: number): string {
@@ -24,6 +25,7 @@ export function PositionDetail({
   onBack,
   onAddLiquidity,
   onRemoveLiquidity,
+  onBurnPosition,
 }: PositionDetailProps) {
   const { symbol0, symbol1, fee } = pool;
   const { accountId, isConnected } = useHashPack();
@@ -70,6 +72,9 @@ export function PositionDetail({
           </Button>
           <Button variant="secondary" size="sm" onClick={onRemoveLiquidity}>
             Remove liquidity
+          </Button>
+          <Button variant="danger" size="sm" onClick={onBurnPosition}>
+            Burn position
           </Button>
         </div>
       </div>

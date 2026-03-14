@@ -3,7 +3,7 @@
 # Same invocation style as verify-contracts.sh and modify.sh: run from repo, optional target.
 #
 # Usage:
-#   ./scripts/deploy.sh [pool-manager|tokens|position-manager|quoter|all]
+#   ./scripts/deploy.sh [pool-manager|tokens|position-manager|router|quoter|all]
 #   ./scripts/deploy.sh                    # same as 'all': full stack
 #   ./scripts/deploy.sh tokens             # deploy tokens only (USE_HTS=1 for HTS)
 #   ./scripts/deploy.sh quoter             # deploy Quoter only (requires POOL_MANAGER_ADDRESS)
@@ -153,6 +153,31 @@ run_quoter() {
   echo "  Verify with: ./scripts/verify-contracts.sh Quoter"
 }
 
+run_router() {
+  if [[ -z "$POOL_MANAGER_ADDRESS" ]]; then
+    echo "Error: POOL_MANAGER_ADDRESS not set. Run: ./scripts/deploy.sh pool-manager"
+    exit 1
+  fi
+  if [[ -z "$POSITION_MANAGER_ADDRESS" ]]; then
+    echo "Error: POSITION_MANAGER_ADDRESS not set. Run: ./scripts/deploy.sh position-manager"
+    exit 1
+  fi
+  echo "[deploy] Deploying UniversalRouter..."
+  forge build -q
+  OUT=$(forge script script/DeployUniversalRouter.s.sol:DeployUniversalRouterScript \
+    --rpc-url "$RPC" \
+    --private-key "$KEY" \
+    --broadcast 2>&1)
+  echo "$OUT"
+  ROUTER_ADDRESS=$(echo "$OUT" | grep -oE 'UniversalRouter: 0x[a-fA-F0-9]{40}' | head -1 | sed 's/UniversalRouter: //')
+  if [[ -z "$ROUTER_ADDRESS" ]]; then
+    echo "Failed to parse ROUTER_ADDRESS."
+    exit 1
+  fi
+  env_set "ROUTER_ADDRESS" "$ROUTER_ADDRESS"
+  echo "  ROUTER_ADDRESS=$ROUTER_ADDRESS"
+}
+
 export PRIVATE_KEY="$KEY"
 
 case "$TARGET" in
@@ -168,21 +193,26 @@ case "$TARGET" in
   quoter)
     run_quoter
     ;;
+  router)
+    run_router
+    ;;
   all)
     run_pool_manager
     run_tokens
     run_position_manager
+    run_router
     run_quoter
     echo "[deploy] Done. Next: ./scripts/modify.sh to add liquidity."
     echo "  Verify contracts: ./scripts/verify-contracts.sh all"
     ;;
   *)
-    echo "Usage: $0 [pool-manager|tokens|position-manager|quoter|all]"
+    echo "Usage: $0 [pool-manager|tokens|position-manager|router|quoter|all]"
     echo "  pool-manager     - deploy PoolManager (core)"
     echo "  tokens           - deploy mock ERC20 or HTS tokens (USE_HTS=1 for HTS)"
     echo "  position-manager - deploy PositionManager (requires POOL_MANAGER_ADDRESS)"
+    echo "  router           - deploy UniversalRouter (requires POOL_MANAGER_ADDRESS + POSITION_MANAGER_ADDRESS)"
     echo "  quoter           - deploy Quoter/V4Quoter (requires POOL_MANAGER_ADDRESS)"
-    echo "  all              - deploy full stack including Quoter (default)"
+    echo "  all              - deploy full stack (default)"
     exit 1
     ;;
 esac

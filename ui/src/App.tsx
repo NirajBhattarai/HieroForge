@@ -9,6 +9,7 @@ import { PoolPositions, type PoolInfo } from "@/components/PoolPositions";
 import { PositionDetail } from "@/components/PositionDetail";
 import { AddLiquidityModal } from "@/components/AddLiquidityModal";
 import { RemoveLiquidityModal } from "@/components/RemoveLiquidityModal";
+import { BurnPositionModal } from "@/components/BurnPositionModal";
 import { NewPosition } from "@/components/NewPosition";
 import { Explore } from "@/components/Explore";
 import { Modal } from "@/components/ui/Modal";
@@ -51,6 +52,10 @@ function App() {
   /** When set, show Remove liquidity modal (from position detail) */
   const [removeLiquidityPool, setRemoveLiquidityPool] =
     useState<PoolInfo | null>(null);
+  /** When set, show Burn position modal (from position detail) */
+  const [burnPositionPool, setBurnPositionPool] = useState<PoolInfo | null>(
+    null,
+  );
   const [selectedPool, setSelectedPool] = useState<{
     poolId: string;
     currency0: string;
@@ -148,6 +153,9 @@ function App() {
                   onRemoveLiquidity={() => {
                     setRemoveLiquidityPool(selectedPoolDetail);
                   }}
+                  onBurnPosition={() => {
+                    setBurnPositionPool(selectedPoolDetail);
+                  }}
                 />
               ) : (
                 <PoolPositions
@@ -230,6 +238,21 @@ function App() {
               <RemoveLiquidityModal
                 pool={removeLiquidityPool}
                 onClose={() => setRemoveLiquidityPool(null)}
+              />
+            )}
+          </Modal>
+
+          {/* Burn position modal (from position detail) */}
+          <Modal
+            open={!!burnPositionPool}
+            onClose={() => setBurnPositionPool(null)}
+            title="Burn position"
+            maxWidth="max-w-[480px]"
+          >
+            {burnPositionPool && (
+              <BurnPositionModal
+                pool={burnPositionPool}
+                onClose={() => setBurnPositionPool(null)}
               />
             )}
           </Modal>
