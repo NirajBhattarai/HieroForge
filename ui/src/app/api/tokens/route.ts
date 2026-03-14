@@ -31,6 +31,8 @@ export async function POST(request: Request) {
       decimals: Number(decimals),
       logoUrl: body.logoUrl ?? undefined,
       isHts: body.isHts ?? true,
+      hederaId: body.hederaId ?? undefined,
+      deployedBy: body.deployedBy ?? undefined,
     });
     return NextResponse.json({ ok: true });
   } catch (err) {

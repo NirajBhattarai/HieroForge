@@ -34,12 +34,12 @@ export function Header({
   onDisconnect,
 }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-border bg-surface-0/80 backdrop-blur-xl">
-      <div className="mx-auto max-w-6xl flex items-center justify-between h-16 px-4 lg:px-6">
+    <header className="sticky top-0 z-40 w-full border-b border-white/[0.06] bg-surface-0/90 backdrop-blur-xl shadow-[0_1px_0_0_rgba(255,255,255,0.03)]">
+      <div className="mx-auto max-w-6xl flex items-center justify-between h-14 sm:h-16 px-3 sm:px-4 lg:px-6">
         {/* Logo */}
-        <div className="flex items-center gap-6">
-          <span className="text-xl font-bold tracking-tight text-text-primary flex items-center gap-2">
-            <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+        <div className="flex items-center gap-4 sm:gap-6">
+          <span className="text-lg sm:text-xl font-bold tracking-tight text-text-primary flex items-center gap-2">
+            <svg width="26" height="26" className="sm:w-7 sm:h-7" viewBox="0 0 32 32" fill="none">
               <rect width="32" height="32" rx="8" fill="url(#logo-grad)" />
               <path
                 d="M10 22V10l6 4 6-4v12l-6-4-6 4z"
@@ -63,19 +63,19 @@ export function Header({
             HieroForge
           </span>
 
-          {/* Navigation pills */}
-          <nav className="hidden sm:flex items-center bg-surface-1 rounded-[--radius-full] p-1">
+          {/* Desktop nav pills */}
+          <nav className="hidden sm:flex items-center rounded-full p-1 bg-surface-2/80 border border-white/[0.06] shadow-inner">
             {NAV_ITEMS.map((item) => (
               <button
                 key={item.key}
                 onClick={() => setTab(item.key)}
                 className={`
-                  px-4 py-1.5 text-sm font-medium rounded-[--radius-full]
+                  px-4 py-2 text-sm font-medium rounded-full
                   transition-all duration-200 cursor-pointer
                   ${
                     tab === item.key
-                      ? "bg-surface-3 text-text-primary shadow-sm"
-                      : "text-text-tertiary hover:text-text-secondary"
+                      ? "bg-surface-1 text-text-primary shadow-sm border border-white/[0.08]"
+                      : "text-text-tertiary hover:text-text-secondary hover:bg-white/[0.04] active:bg-white/[0.06]"
                   }
                 `}
               >
@@ -86,8 +86,8 @@ export function Header({
         </div>
 
         {/* Right side */}
-        <div className="flex items-center gap-3">
-          <Badge variant="accent" className="hidden sm:inline-flex">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Badge variant="accent" className="hidden sm:inline-flex cursor-default">
             Testnet
           </Badge>
 
@@ -95,13 +95,13 @@ export function Header({
             onClick={() => (isConnected ? onDisconnect() : onConnect())}
             disabled={isConnecting || !isInitialized}
             className={`
-              px-4 py-2 text-sm font-semibold rounded-[--radius-md]
+              px-3 sm:px-4 py-2 text-sm font-semibold rounded-xl
               transition-all duration-200 cursor-pointer
               disabled:opacity-50 disabled:cursor-not-allowed
               ${
                 isConnected
-                  ? "bg-surface-2 text-text-primary border border-border hover:border-border-hover hover:bg-surface-3"
-                  : "bg-accent text-surface-0 hover:bg-accent-hover shadow-sm"
+                  ? "bg-surface-2/80 text-text-primary border border-white/[0.08] hover:border-accent/30 hover:bg-surface-3/80"
+                  : "bg-accent text-surface-0 hover:bg-accent-hover shadow-md hover:shadow-lg hover:shadow-accent/20"
               }
             `}
           >
@@ -130,7 +130,7 @@ export function Header({
               </span>
             ) : isConnected ? (
               <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-success" />
+                <span className="w-2 h-2 rounded-full bg-success ring-2 ring-success/30" />
                 {formattedAccountId || accountId || ""}
               </span>
             ) : (
@@ -140,25 +140,27 @@ export function Header({
         </div>
       </div>
 
-      {/* Mobile nav */}
-      <nav className="flex sm:hidden items-center justify-center gap-1 px-4 pb-2">
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.key}
-            onClick={() => setTab(item.key)}
-            className={`
-              px-4 py-1.5 text-sm font-medium rounded-[--radius-full]
-              transition-all duration-200 cursor-pointer flex-1 text-center
-              ${
-                tab === item.key
-                  ? "bg-surface-3 text-text-primary"
-                  : "text-text-tertiary hover:text-text-secondary"
-              }
-            `}
-          >
-            {item.label}
-          </button>
-        ))}
+      {/* Mobile nav — pill container */}
+      <nav className="flex sm:hidden items-center gap-1 px-3 pb-3 pt-0.5">
+        <div className="flex flex-1 items-center rounded-full p-1 bg-surface-2/80 border border-white/[0.06] shadow-inner">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => setTab(item.key)}
+              className={`
+                flex-1 px-3 py-2.5 text-sm font-medium rounded-full text-center
+                transition-all duration-200 cursor-pointer
+                ${
+                  tab === item.key
+                    ? "bg-surface-1 text-text-primary shadow-sm border border-white/[0.08]"
+                    : "text-text-tertiary hover:text-text-secondary active:bg-white/[0.04]"
+                }
+              `}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </nav>
     </header>
   );

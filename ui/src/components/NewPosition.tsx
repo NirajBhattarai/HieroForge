@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { createPublicClient, http, parseUnits, type PublicClient } from "viem";
 import { TokenIcon, TokenPairIcon } from "./TokenIcon";
 import { ErrorMessage } from "./ErrorMessage";
@@ -29,12 +29,11 @@ const HEDERA_GAS_ERC20 = 1_200_000;
 const HEDERA_GAS_MODIFY_LIQ = 5_000_000;
 const HEDERA_GAS_INITIALIZE = 3_000_000;
 
-import { tickToPrice, priceToTick, roundToTickSpacing } from "@/lib/priceUtils";
+import { tickToPrice, priceToTick, roundToTickSpacing, encodePriceSqrt, computeLiquidityFromAmount, liquidityToWei } from "@/lib/priceUtils";
 import { getFriendlyErrorMessage } from "@/lib/errors";
-import { PoolManagerAbi, SQRT_PRICE_PRESETS } from "@/abis/PoolManager";
-import { PositionManagerAbi, SQRT_PRICE_1_1 } from "@/abis/PositionManager";
+import { PoolManagerAbi } from "@/abis/PoolManager";
+import { PositionManagerAbi } from "@/abis/PositionManager";
 import {
-  DEFAULT_TOKENS,
   getTokenAddress,
   getTokenDecimals,
   getPoolManagerAddress,
@@ -98,16 +97,13 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     loading: tokensLoading,
     refetch: refetchTokens,
   } = useTokens();
-  const tokenOptions: TokenOption[] =
-    dynamicTokens.length > 0
-      ? dynamicTokens.map((t) => ({
-          id: t.address,
-          symbol: t.symbol,
-          address: t.address,
-          decimals: t.decimals,
-          name: t.name,
-        }))
-      : DEFAULT_TOKENS;
+  const tokenOptions: TokenOption[] = dynamicTokens.map((t) => ({
+    id: t.address,
+    symbol: t.symbol,
+    address: t.address,
+    decimals: t.decimals,
+    name: t.name,
+  }));
 
   // Helper: resolve address from TokenOption (prefers .address field, falls back to static lookup)
   const resolveAddress = (tok: TokenOption): string =>
@@ -116,8 +112,17 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     tok.decimals ?? getTokenDecimals(tok.symbol);
 
   // Step 1: pair + fee
-  const [token0, setToken0] = useState<TokenOption>(DEFAULT_TOKENS[0]!);
-  const [token1, setToken1] = useState<TokenOption>(DEFAULT_TOKENS[1]!);
+  const EMPTY_TOKEN: TokenOption = { id: "", symbol: "", address: "", decimals: 18 };
+  const [token0, setToken0] = useState<TokenOption>(EMPTY_TOKEN);
+  const [token1, setToken1] = useState<TokenOption>(EMPTY_TOKEN);
+
+  // Initialize token0/token1 when dynamic tokens load
+  useEffect(() => {
+    if (tokenOptions.length >= 2 && !token0.symbol && !token1.symbol) {
+      setToken0(tokenOptions[0]!);
+      setToken1(tokenOptions[1]!);
+    }
+  }, [tokenOptions.length]);
   const [token0Addr, setToken0Addr] = useState("");
   const [token1Addr, setToken1Addr] = useState("");
   const [fee, setFee] = useState(DEFAULT_FEE);
@@ -142,17 +147,18 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
   const [maxPriceStr, setMaxPriceStr] = useState("1.0020");
   const [tickLower, setTickLower] = useState(-120);
   const [tickUpper, setTickUpper] = useState(120);
-  const [amount0, setAmount0] = useState("1000");
-  const [amount1, setAmount1] = useState("1000");
-  const [liquidityAmount, setLiquidityAmount] = useState("100000000");
+  const [amount0, setAmount0] = useState("");
+  const [amount1, setAmount1] = useState("");
+  /** Which token amount the user last typed — drives auto-calculation of the other */
+  const [lastEditedToken, setLastEditedToken] = useState<0 | 1>(0);
+  const [liquidityAmount, setLiquidityAmount] = useState("0");
   const [initialPriceStr, setInitialPriceStr] = useState("1");
+  /** When true, display price as "token1 = 1 token0"; when false, "token0 = 1 token1" */
+  const [priceQuotePerToken0, setPriceQuotePerToken0] = useState(true);
   const initialPrice = (() => {
     const p = parseFloat(initialPriceStr);
     return Number.isFinite(p) && p > 0 ? p : 1;
   })();
-
-  // Pool state
-  const [poolInitialized, setPoolInitialized] = useState<boolean | null>(null);
 
   // TX state
   const [pending, setPending] = useState(false);
@@ -258,55 +264,6 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     }
   }, [resolved1]);
 
-  // Check pool initialized state
-  useEffect(() => {
-    if (!poolManagerAddress || !publicClientRef.current) {
-      setPoolInitialized(null);
-      return;
-    }
-    const addr0 = token0Addr || resolveAddress(token0);
-    const addr1 = token1Addr || resolveAddress(token1);
-    // Skip if addresses aren't valid EVM hex yet (e.g. user typing 0.0.XXXXX)
-    const isHex = (s: string) => /^0x[0-9a-f]{40}$/i.test(s);
-    if (!addr0 || !addr1 || addr0 === addr1 || !isHex(addr0) || !isHex(addr1)) {
-      setPoolInitialized(null);
-      return;
-    }
-    const poolKey = buildPoolKey(
-      addr0 as `0x${string}`,
-      addr1 as `0x${string}`,
-      fee,
-      tickSpacing,
-    );
-    const poolId = getPoolId(poolKey);
-    let cancelled = false;
-    publicClientRef.current
-      .readContract({
-        address: poolManagerAddress as `0x${string}`,
-        abi: PoolManagerAbi,
-        functionName: "getPoolState",
-        args: [poolId],
-      })
-      .then((value: unknown) => {
-        if (!cancelled)
-          setPoolInitialized((value as readonly [boolean, bigint, number])[0]);
-      })
-      .catch(() => {
-        if (!cancelled) setPoolInitialized(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    poolManagerAddress,
-    token0Addr,
-    token1Addr,
-    token0.symbol,
-    token1.symbol,
-    fee,
-    tickSpacing,
-  ]);
-
   const syncPriceToTicks = useCallback(() => {
     if (rangeMode === "full") return;
     const minP = parseFloat(minPriceStr);
@@ -378,6 +335,82 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     return (n / initialPrice).toFixed(6);
   };
 
+  // Compute actual price boundaries from ticks (matches what the contract sees)
+  const priceLower = useMemo(() => tickToPrice(tickLower), [tickLower]);
+  const priceUpper = useMemo(() => tickToPrice(tickUpper), [tickUpper]);
+
+  // Determine which tokens are needed based on current price vs tick range
+  const depositMode = useMemo(() => {
+    if (initialPrice <= priceLower) return "token0Only" as const;
+    if (initialPrice >= priceUpper) return "token1Only" as const;
+    return "both" as const;
+  }, [initialPrice, priceLower, priceUpper]);
+
+  // Recalculate paired amount whenever the driving input, price, or range changes.
+  // We track which token the user is editing via lastEditedToken and only re-derive
+  // the *other* token's amount to avoid circular overwrites.
+  const recalcPairedAmount = useCallback(
+    (inputToken: 0 | 1, inputAmountStr: string) => {
+      const inputAmt = parseFloat(inputAmountStr);
+      if (!Number.isFinite(inputAmt) || inputAmt <= 0) {
+        if (inputToken === 0) setAmount1("");
+        else setAmount0("");
+        setLiquidityAmount("0");
+        return;
+      }
+
+      const result = computeLiquidityFromAmount(initialPrice, priceLower, priceUpper, inputAmt, inputToken);
+      const dec0 = resolveDecimals(token0);
+      const dec1 = resolveDecimals(token1);
+      const liqWei = liquidityToWei(result.liquidity, dec0, dec1);
+      setLiquidityAmount(liqWei.toString());
+
+      if (inputToken === 0) {
+        if (depositMode === "token0Only") {
+          setAmount1("");
+        } else {
+          const newA1 = result.amount1 > 0
+            ? parseFloat(result.amount1.toFixed(Math.min(dec1, 8))).toString()
+            : "0";
+          setAmount1(newA1);
+        }
+      } else {
+        if (depositMode === "token1Only") {
+          setAmount0("");
+        } else {
+          const newA0 = result.amount0 > 0
+            ? parseFloat(result.amount0.toFixed(Math.min(dec0, 8))).toString()
+            : "0";
+          setAmount0(newA0);
+        }
+      }
+    },
+    [initialPrice, priceLower, priceUpper, depositMode, token0, token1],
+  );
+
+  // Re-run calculation when price range or initial price changes (use the last-edited token as driver)
+  useEffect(() => {
+    const driverAmt = lastEditedToken === 0 ? amount0 : amount1;
+    if (driverAmt && parseFloat(driverAmt) > 0) {
+      recalcPairedAmount(lastEditedToken, driverAmt);
+    }
+    // Only react to range/price changes, not to amount changes (amounts are handled by onChange)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPrice, priceLower, priceUpper, depositMode]);
+
+  // When deposit mode changes (range adjusted), clear the disabled token's amount
+  useEffect(() => {
+    if (depositMode === "token0Only" && amount1 !== "") {
+      setAmount1("");
+      setLastEditedToken(0);
+    }
+    if (depositMode === "token1Only" && amount0 !== "") {
+      setAmount0("");
+      setLastEditedToken(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [depositMode]);
+
   const isValidHex = (s: string) => /^0x[0-9a-f]{40}$/i.test(s);
 
   const canContinue = () => {
@@ -419,9 +452,9 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
         fee,
         tickSpacing,
       );
-      const sqrtPriceX96 = BigInt(
-        SQRT_PRICE_PRESETS["1"] ?? "79228162514264337593543950336",
-      );
+      const dec0 = resolveDecimals(token0);
+      const dec1 = resolveDecimals(token1);
+      const sqrtPriceX96 = encodePriceSqrt(initialPrice, dec0, dec1);
 
       const txId = await hederaContractExecute({
         hashConnect: hc,
@@ -433,7 +466,6 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
         gas: HEDERA_GAS_INITIALIZE,
       });
       setTxHash(txId);
-      setPoolInitialized(true);
       console.log("[Create pool] success:", txId);
     } catch (err: unknown) {
       const exactMessage = err instanceof Error ? err.message : String(err);
@@ -454,6 +486,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     token1.symbol,
     fee,
     tickSpacing,
+    initialPrice,
     isConnected,
     accountId,
     hashConnectRef,
@@ -498,7 +531,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
       return;
     }
     if (liquidityWei === 0n) {
-      setError("Enter liquidity amount.");
+      setError("Could not compute liquidity from the given amounts and price range. Adjust your inputs.");
       return;
     }
 
@@ -614,10 +647,11 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
 
       // Step 2: Encode initializePool + modifyLiquidities calldata for multicall
       const { encodeFunctionData: encFn } = await import("viem");
+      const sqrtPriceX96 = encodePriceSqrt(initialPrice, dec0, dec1);
       const initializeCalldata = encFn({
         abi: PositionManagerAbi,
         functionName: "initializePool",
-        args: [poolKey, SQRT_PRICE_1_1],
+        args: [poolKey, sqrtPriceX96],
       }) as `0x${string}`;
       const modifyCalldata = encFn({
         abi: PositionManagerAbi,
@@ -637,7 +671,6 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
         gas: HEDERA_GAS_MODIFY_LIQ,
       });
       setTxHash(txId);
-      setPoolInitialized(true);
       console.log("[Add liquidity] multicall success:", txId);
     } catch (err: unknown) {
       const exactMessage = err instanceof Error ? err.message : String(err);
@@ -665,6 +698,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     amount0,
     amount1,
     liquidityAmount,
+    initialPrice,
     isConnected,
     accountId,
     hashConnectRef,
@@ -682,6 +716,19 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
       tickSpacing,
     );
     const poolId = getPoolId(poolKey);
+
+    // Derive deployer EVM address from Hedera accountId
+    let deployedBy: string | undefined;
+    if (accountId) {
+      const m = String(accountId).match(/^(\d+)\.(\d+)\.(\d+)$/);
+      if (m) {
+        deployedBy = "0x" + BigInt(m[3]!).toString(16).padStart(40, "0");
+      }
+    }
+
+    const dec0 = resolveDecimals(token0);
+    const dec1 = resolveDecimals(token1);
+
     setSavePending(true);
     setSaveSuccess(false);
     try {
@@ -696,6 +743,13 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
           tickSpacing,
           symbol0: token0.symbol,
           symbol1: token1.symbol,
+          deployedBy,
+          initialPrice: initialPriceStr,
+          sqrtPriceX96: String(
+            encodePriceSqrt(initialPrice, dec0, dec1),
+          ),
+          decimals0: dec0,
+          decimals1: dec1,
         }),
       });
       if (!res.ok) throw new Error("Failed to save pool");
@@ -705,7 +759,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     } finally {
       setSavePending(false);
     }
-  }, [token0Addr, token1Addr, token0.symbol, token1.symbol, fee, tickSpacing]);
+  }, [token0Addr, token1Addr, token0, token1, fee, tickSpacing, accountId, initialPriceStr, initialPrice]);
 
   const sym0 = resolved0?.symbol ?? token0.symbol;
   const sym1 = resolved1?.symbol ?? token1.symbol;
@@ -717,47 +771,47 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
   const selectorTokens = tokenOptions;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 animate-[fadeIn_0.3s_ease-out]">
-      <div className="flex flex-col lg:flex-row gap-8">
-        {/* Left: Steps indicator */}
-        <aside className="hidden lg:flex flex-col items-start gap-0 w-48 shrink-0 pt-2">
-          <div className="flex items-center gap-3">
+    <div className="max-w-4xl mx-auto animate-[fadeIn_0.3s_ease-out]">
+      <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+        {/* Steps: horizontal on mobile, sidebar on lg */}
+        <aside className="flex lg:flex-col items-center lg:items-start gap-0 w-full lg:w-44 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 flex-1 lg:flex-initial lg:flex-col lg:items-start lg:pt-1">
             <div
-              className={`w-3 h-3 rounded-full shrink-0 ${step >= 1 ? "bg-accent" : "bg-surface-3"}`}
+              className={`w-3 h-3 rounded-full shrink-0 ${step >= 1 ? "bg-accent ring-2 ring-accent/30" : "bg-surface-3"}`}
             />
             <div className="flex flex-col">
               <span className="text-xs font-semibold text-text-primary">
                 Step 1
               </span>
-              <span className="text-xs text-text-tertiary">
+              <span className="text-xs text-text-tertiary hidden sm:inline">
                 Select pair & fees
               </span>
             </div>
           </div>
           <div
-            className={`w-0.5 h-8 ml-[5px] ${step >= 2 ? "bg-accent" : "bg-border"}`}
+            className={`w-8 sm:w-12 lg:w-0.5 lg:h-8 lg:ml-[5px] h-0.5 lg:h-8 flex-shrink-0 ${step >= 2 ? "bg-accent" : "bg-border"}`}
           />
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-1 lg:flex-initial lg:flex-col lg:items-start">
             <div
-              className={`w-3 h-3 rounded-full shrink-0 ${step >= 2 ? "bg-accent" : "bg-surface-3"}`}
+              className={`w-3 h-3 rounded-full shrink-0 ${step >= 2 ? "bg-accent ring-2 ring-accent/30" : "bg-surface-3"}`}
             />
             <div className="flex flex-col">
               <span className="text-xs font-semibold text-text-primary">
                 Step 2
               </span>
-              <span className="text-xs text-text-tertiary">
+              <span className="text-xs text-text-tertiary hidden sm:inline">
                 Range & deposits
               </span>
             </div>
           </div>
         </aside>
 
-        {/* Right: Content */}
-        <div className="flex-1 min-w-0 space-y-5">
-          {/* Pair header bar (step 2) */}
+        {/* Content */}
+        <div className="flex-1 min-w-0 space-y-4 sm:space-y-5">
+          {/* Pair header bar (step 2) — responsive */}
           {step === 2 && (
-            <div className="flex items-center justify-between px-5 py-3 bg-surface-1 border border-border rounded-[--radius-xl]">
-              <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3 rounded-xl bg-surface-2/80 border border-white/[0.06]">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                 <TokenPairIcon symbol0={sym0} symbol1={sym1} size={28} />
                 <span className="text-sm font-semibold text-text-primary">
                   {sym0} / {sym1}
@@ -767,7 +821,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
               </div>
               <button
                 type="button"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary rounded-[--radius-md] hover:bg-surface-2 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-text-secondary hover:text-text-primary rounded-xl hover:bg-surface-3/80 transition-colors cursor-pointer"
                 onClick={() => setStep(1)}
               >
                 <svg
@@ -788,9 +842,9 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
 
           {/* ========== STEP 1 ========== */}
           {step === 1 && (
-            <div className="bg-surface-1 border border-border rounded-[--radius-xl] p-6 space-y-6">
+            <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 p-4 sm:p-5 md:p-6 space-y-5 sm:space-y-6 shadow-inner">
               <div>
-                <h3 className="text-base font-semibold text-text-primary mb-1">
+                <h3 className="text-base sm:text-lg font-semibold text-text-primary mb-1">
                   Select pair
                 </h3>
                 <p className="text-sm text-text-tertiary">
@@ -799,14 +853,14 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                 </p>
               </div>
 
-              {/* Token pair selectors */}
-              <div className="flex items-center gap-3">
+              {/* Token pair selectors — styled like SwapCard */}
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <button
                   type="button"
-                  className="flex items-center gap-2 px-4 py-2.5 bg-surface-2 border border-border rounded-[--radius-full] hover:border-border-hover transition-colors cursor-pointer"
+                  className="group flex items-center gap-2.5 pl-3 pr-3.5 py-2.5 rounded-full bg-surface-3/90 hover:bg-surface-4 border border-white/[0.08] hover:border-accent/30 transition-all duration-200 cursor-pointer shrink-0 shadow-sm"
                   onClick={() => setToken0SelectorOpen(true)}
                 >
-                  <TokenIcon symbol={sym0} size={24} />
+                  <TokenIcon symbol={sym0} size={26} />
                   <span className="text-sm font-semibold text-text-primary">
                     {sym0}
                   </span>
@@ -817,17 +871,17 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2.5"
-                    className="text-text-tertiary"
+                    className="text-text-tertiary group-hover:text-text-secondary transition-colors"
                   >
                     <polyline points="6 9 12 15 18 9" />
                   </svg>
                 </button>
                 <button
                   type="button"
-                  className="flex items-center gap-2 px-4 py-2.5 bg-surface-2 border border-border rounded-[--radius-full] hover:border-border-hover transition-colors cursor-pointer"
+                  className="group flex items-center gap-2.5 pl-3 pr-3.5 py-2.5 rounded-full bg-surface-3/90 hover:bg-surface-4 border border-white/[0.08] hover:border-accent/30 transition-all duration-200 cursor-pointer shrink-0 shadow-sm"
                   onClick={() => setToken1SelectorOpen(true)}
                 >
-                  <TokenIcon symbol={sym1} size={24} />
+                  <TokenIcon symbol={sym1} size={26} />
                   <span className="text-sm font-semibold text-text-primary">
                     {sym1}
                   </span>
@@ -838,12 +892,24 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2.5"
-                    className="text-text-tertiary"
+                    className="text-text-tertiary group-hover:text-text-secondary transition-colors"
                   >
                     <polyline points="6 9 12 15 18 9" />
                   </svg>
                 </button>
               </div>
+              {isConnected && (
+                <p className="text-xs text-text-tertiary">
+                  Balance:{" "}
+                  <span className="font-medium text-text-secondary">
+                    {balance0Loading ? "…" : balance0Formatted} {sym0}
+                  </span>
+                  {" · "}
+                  <span className="font-medium text-text-secondary">
+                    {balance1Loading ? "…" : balance1Formatted} {sym1}
+                  </span>
+                </p>
+              )}
 
               {/* Token selector modals */}
               <TokenSelector
@@ -887,15 +953,15 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                 excludeToken={token0}
               />
 
-              {/* Paste addresses */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Paste addresses — responsive grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-text-secondary">
+                  <label className="text-xs font-medium text-text-secondary uppercase tracking-wider">
                     Token 0 address
                   </label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-[--radius-md] text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-border-focus transition-colors font-mono"
+                    className="w-full px-3 py-2.5 bg-surface-2 border border-white/[0.08] rounded-xl text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-colors font-mono"
                     placeholder="0x… or 0.0.XXXXX"
                     value={token0Addr}
                     onChange={(e) => setToken0Addr(e.target.value)}
@@ -908,7 +974,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                       <span className="text-error">{lookup0Error}</span>
                     )}
                     {resolved0 && !lookup0Loading && (
-                      <span className="text-success flex items-center gap-1">
+                      <span className="text-success flex items-center gap-1 flex-wrap">
                         <TokenIcon symbol={resolved0.symbol} size={12} />✓{" "}
                         {resolved0.symbol} — {resolved0.name} (
                         {resolved0.decimals} dec)
@@ -919,12 +985,12 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-text-secondary">
+                  <label className="text-xs font-medium text-text-secondary uppercase tracking-wider">
                     Token 1 address
                   </label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-[--radius-md] text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-border-focus transition-colors font-mono"
+                    className="w-full px-3 py-2.5 bg-surface-2 border border-white/[0.08] rounded-xl text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-colors font-mono"
                     placeholder="0x… or 0.0.XXXXX"
                     value={token1Addr}
                     onChange={(e) => setToken1Addr(e.target.value)}
@@ -937,7 +1003,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                       <span className="text-error">{lookup1Error}</span>
                     )}
                     {resolved1 && !lookup1Loading && (
-                      <span className="text-success flex items-center gap-1">
+                      <span className="text-success flex items-center gap-1 flex-wrap">
                         <TokenIcon symbol={resolved1.symbol} size={12} />✓{" "}
                         {resolved1.symbol} — {resolved1.name} (
                         {resolved1.decimals} dec)
@@ -962,10 +1028,10 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
               <div className="space-y-3">
                 <button
                   type="button"
-                  className={`w-full flex items-center justify-between p-4 rounded-[--radius-lg] border cursor-pointer transition-all ${
+                  className={`w-full flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
                     fee === 3000
-                      ? "bg-accent-muted border-accent"
-                      : "bg-surface-2 border-border hover:border-border-hover"
+                      ? "bg-accent/10 border-accent/50 shadow-sm"
+                      : "bg-surface-2/80 border-white/[0.08] hover:border-accent/30"
                   }`}
                   onClick={() => {
                     setFee(3000);
@@ -991,15 +1057,15 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                 </button>
               </div>
               {showMoreFees && (
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {FEE_TIERS.map((tier) => (
                     <button
                       key={tier.fee}
                       type="button"
-                      className={`flex flex-col items-start p-3 rounded-[--radius-lg] border cursor-pointer transition-all ${
+                      className={`flex flex-col items-start p-3 rounded-xl border cursor-pointer transition-all ${
                         fee === tier.fee
-                          ? "bg-accent-muted border-accent"
-                          : "bg-surface-2 border-border hover:border-border-hover"
+                          ? "bg-accent/10 border-accent/50"
+                          : "bg-surface-2/80 border-white/[0.08] hover:border-accent/30"
                       }`}
                       onClick={() => {
                         setFee(tier.fee);
@@ -1022,19 +1088,9 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                 </div>
               )}
 
-              {poolInitialized !== null && (
-                <div
-                  className={`flex items-center gap-2 px-4 py-3 rounded-[--radius-md] text-sm ${
-                    poolInitialized
-                      ? "bg-success-muted text-success"
-                      : "bg-accent-muted text-accent"
-                  }`}
-                >
-                  {poolInitialized
-                    ? "✓ Pool exists — you will add liquidity"
-                    : "⚡ New pool — will be created at 1:1 price"}
-                </div>
-              )}
+              <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm bg-accent-muted text-accent">
+                ⚡ New position — pool will be initialized at {initialPriceStr} {sym1} per {sym0}
+              </div>
 
               <Button
                 variant="primary"
@@ -1052,48 +1108,112 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
 
           {/* ========== STEP 2 ========== */}
           {step === 2 && (
-            <div className="space-y-5">
+            <div className="space-y-4 sm:space-y-5">
               {/* ---- Set initial price ---- */}
-              <div className="bg-surface-1 border border-border rounded-[--radius-xl] p-6 space-y-4">
+              <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 p-4 sm:p-5 md:p-6 space-y-4 shadow-inner">
                 <div>
                   <h3 className="text-base font-semibold text-text-primary mb-1">
                     Set initial price
                   </h3>
                   <p className="text-sm text-text-tertiary">
-                    When creating a new pool, set the starting exchange rate.
-                    This reflects the initial market price.
+                    When creating a new pool, you must set the starting
+                    exchange rate for both tokens. This rate will reflect the
+                    initial market price.
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="text"
-                    className="flex-1 px-4 py-3 bg-surface-2 border border-border rounded-[--radius-lg] text-2xl font-bold text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-border-focus transition-colors"
-                    placeholder="0"
-                    value={initialPriceStr}
-                    onChange={(e) => setInitialPriceStr(e.target.value)}
-                    aria-label="Initial price"
-                  />
-                  <span className="text-sm text-text-secondary shrink-0">
-                    {sym1} = 1 {sym0}
-                  </span>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+                    Initial price
+                  </label>
+                  <div className="flex flex-wrap items-stretch gap-2 sm:gap-3">
+                    <input
+                      type="text"
+                      className="flex-1 min-w-[100px] px-4 py-3 bg-surface-2 border border-white/[0.08] rounded-xl text-xl sm:text-2xl font-bold text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-colors"
+                      placeholder="0"
+                      value={
+                        priceQuotePerToken0
+                          ? initialPriceStr
+                          : initialPrice > 0
+                            ? (1 / initialPrice).toFixed(6).replace(/\.?0+$/, "")
+                            : ""
+                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (priceQuotePerToken0) {
+                          setInitialPriceStr(v);
+                        } else {
+                          const n = parseFloat(v);
+                          if (Number.isFinite(n) && n > 0)
+                            setInitialPriceStr((1 / n).toFixed(10));
+                        }
+                      }}
+                      aria-label="Initial price"
+                    />
+                    <div className="flex rounded-full p-1 bg-surface-2 border border-white/[0.08] shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setPriceQuotePerToken0(true)}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-all cursor-pointer ${
+                          priceQuotePerToken0
+                            ? "bg-surface-1 text-text-primary shadow-sm border border-white/[0.06]"
+                            : "text-text-tertiary hover:text-text-secondary"
+                        }`}
+                      >
+                        <TokenIcon symbol={sym0} size={18} />
+                        {sym0}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPriceQuotePerToken0(false)}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-all cursor-pointer ${
+                          !priceQuotePerToken0
+                            ? "bg-surface-1 text-text-primary shadow-sm border border-white/[0.06]"
+                            : "text-text-tertiary hover:text-text-secondary"
+                        }`}
+                      >
+                        <TokenIcon symbol={sym1} size={18} />
+                        {sym1}
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-sm text-text-tertiary">
+                    {priceQuotePerToken0
+                      ? `${sym1} = 1 ${sym0}`
+                      : `${sym0} = 1 ${sym1}`}
+                  </p>
                 </div>
-                <p className="text-xs text-warning">
-                  Market price not found. Please do your own research to avoid
-                  loss of funds.
-                </p>
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-warning-muted/50 border border-warning/15">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="text-warning shrink-0 mt-0.5"
+                  >
+                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                  <p className="text-xs text-warning">
+                    Market price not found. Please do your own research to avoid
+                    loss of funds.
+                  </p>
+                </div>
               </div>
 
               {/* ---- Set Price Range ---- */}
-              <div className="bg-surface-1 border border-border rounded-[--radius-xl] p-6 space-y-5">
+              <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 p-4 sm:p-5 md:p-6 space-y-4 sm:space-y-5 shadow-inner">
                 <h3 className="text-base font-semibold text-text-primary">
                   Set price range
                 </h3>
 
                 {/* Full/Custom toggle */}
-                <div className="flex p-1 bg-surface-2 rounded-[--radius-full] w-fit">
+                <div className="flex p-1 bg-surface-2 rounded-full w-fit">
                   <button
                     type="button"
-                    className={`px-4 py-1.5 text-sm font-medium rounded-[--radius-full] transition-all cursor-pointer ${
+                    className={`px-4 py-2 text-sm font-medium rounded-full transition-all cursor-pointer ${
                       rangeMode === "full"
                         ? "bg-surface-1 text-text-primary shadow-sm"
                         : "text-text-tertiary hover:text-text-secondary"
@@ -1104,7 +1224,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                   </button>
                   <button
                     type="button"
-                    className={`px-4 py-1.5 text-sm font-medium rounded-[--radius-full] transition-all cursor-pointer ${
+                    className={`px-4 py-2 text-sm font-medium rounded-full transition-all cursor-pointer ${
                       rangeMode === "custom"
                         ? "bg-surface-1 text-text-primary shadow-sm"
                         : "text-text-tertiary hover:text-text-secondary"
@@ -1115,35 +1235,35 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                   </button>
                 </div>
 
-                <p className="text-sm text-text-tertiary">
+                <p className="text-sm text-text-tertiary leading-relaxed">
                   {rangeMode === "full"
-                    ? "Full range ensures continuous participation across all prices — simpler but with potential for higher impermanent loss."
+                    ? "Setting full range liquidity when creating a pool ensures continuous market participation across all possible prices, offering simplicity but with potential for higher impermanent loss."
                     : "Custom range concentrates liquidity within specific bounds, enhancing capital efficiency but needing more active management."}
                 </p>
 
-                {/* Min / Max price boxes */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-surface-2 border border-border rounded-[--radius-lg] p-4 space-y-2">
-                    <label className="text-xs font-medium text-text-secondary">
+                {/* Min / Max price boxes — responsive */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="bg-surface-2/80 border border-white/[0.06] rounded-xl p-4 space-y-2">
+                    <label className="text-xs font-medium text-text-secondary uppercase tracking-wider">
                       Min price
                     </label>
                     <div className="flex items-center gap-2">
                       {rangeMode === "full" ? (
-                        <span className="text-2xl font-bold text-text-primary">
+                        <span className="text-xl sm:text-2xl font-bold text-text-primary">
                           0
                         </span>
                       ) : (
                         <>
                           <button
                             type="button"
-                            className="w-7 h-7 flex items-center justify-center rounded-[--radius-sm] bg-surface-3 text-text-secondary hover:text-text-primary hover:bg-surface-1 transition-colors cursor-pointer text-sm font-bold"
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-surface-3 text-text-secondary hover:text-text-primary hover:bg-surface-1 transition-colors cursor-pointer text-sm font-bold shrink-0"
                             onClick={() => adjustMinPrice(-0.005)}
                           >
                             −
                           </button>
                           <input
                             type="text"
-                            className="flex-1 min-w-0 px-2 py-1 bg-transparent text-center text-lg font-bold text-text-primary focus:outline-none"
+                            className="flex-1 min-w-0 px-2 py-1.5 bg-transparent text-center text-lg font-bold text-text-primary focus:outline-none rounded"
                             value={minPriceStr}
                             onChange={(e) => {
                               setMinPriceStr(e.target.value);
@@ -1153,7 +1273,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                           />
                           <button
                             type="button"
-                            className="w-7 h-7 flex items-center justify-center rounded-[--radius-sm] bg-surface-3 text-text-secondary hover:text-text-primary hover:bg-surface-1 transition-colors cursor-pointer text-sm font-bold"
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-surface-3 text-text-secondary hover:text-text-primary hover:bg-surface-1 transition-colors cursor-pointer text-sm font-bold shrink-0"
                             onClick={() => adjustMinPrice(0.005)}
                           >
                             +
@@ -1171,27 +1291,27 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                     )}
                   </div>
 
-                  <div className="bg-surface-2 border border-border rounded-[--radius-lg] p-4 space-y-2">
-                    <label className="text-xs font-medium text-text-secondary">
+                  <div className="bg-surface-2/80 border border-white/[0.06] rounded-xl p-4 space-y-2">
+                    <label className="text-xs font-medium text-text-secondary uppercase tracking-wider">
                       Max price
                     </label>
                     <div className="flex items-center gap-2">
                       {rangeMode === "full" ? (
-                        <span className="text-2xl font-bold text-text-primary">
+                        <span className="text-xl sm:text-2xl font-bold text-text-primary">
                           ∞
                         </span>
                       ) : (
                         <>
                           <button
                             type="button"
-                            className="w-7 h-7 flex items-center justify-center rounded-[--radius-sm] bg-surface-3 text-text-secondary hover:text-text-primary hover:bg-surface-1 transition-colors cursor-pointer text-sm font-bold"
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-surface-3 text-text-secondary hover:text-text-primary hover:bg-surface-1 transition-colors cursor-pointer text-sm font-bold shrink-0"
                             onClick={() => adjustMaxPrice(-0.005)}
                           >
                             −
                           </button>
                           <input
                             type="text"
-                            className="flex-1 min-w-0 px-2 py-1 bg-transparent text-center text-lg font-bold text-text-primary focus:outline-none"
+                            className="flex-1 min-w-0 px-2 py-1.5 bg-transparent text-center text-lg font-bold text-text-primary focus:outline-none rounded"
                             value={maxPriceStr}
                             onChange={(e) => {
                               setMaxPriceStr(e.target.value);
@@ -1201,7 +1321,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                           />
                           <button
                             type="button"
-                            className="w-7 h-7 flex items-center justify-center rounded-[--radius-sm] bg-surface-3 text-text-secondary hover:text-text-primary hover:bg-surface-1 transition-colors cursor-pointer text-sm font-bold"
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-surface-3 text-text-secondary hover:text-text-primary hover:bg-surface-1 transition-colors cursor-pointer text-sm font-bold shrink-0"
                             onClick={() => adjustMaxPrice(0.005)}
                           >
                             +
@@ -1221,96 +1341,135 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                 </div>
               </div>
 
-              {/* ---- Deposit HTS tokens ---- */}
-              <div className="bg-surface-1 border border-border rounded-[--radius-xl] p-6 space-y-5">
+              {/* ---- Deposit tokens ---- */}
+              <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 p-4 sm:p-5 md:p-6 space-y-4 sm:space-y-5 shadow-inner">
                 <div>
                   <h3 className="text-base font-semibold text-text-primary mb-1">
-                    Deposit HTS tokens
+                    Deposit tokens
                   </h3>
                   <p className="text-sm text-text-tertiary">
-                    Specify the token amounts for your liquidity contribution.
+                    Enter the amount for one token — the other will be auto-calculated based on your price range.
                   </p>
                 </div>
 
                 {/* Token 0 deposit */}
-                <div className="bg-surface-2 border border-border rounded-[--radius-lg] p-4">
-                  <div className="flex items-center gap-3">
+                <div className={`rounded-xl p-4 transition-all ${
+                  depositMode === "token1Only"
+                    ? "bg-surface-2/40 border border-white/[0.04] opacity-50"
+                    : "bg-surface-2/80 border border-white/[0.06]"
+                }`}>
+                  {depositMode === "token1Only" && (
+                    <p className="text-xs text-warning mb-2">Current price is above your max price — only {sym1} is needed</p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <input
                       type="text"
-                      className="flex-1 min-w-0 bg-transparent text-2xl font-bold text-text-primary placeholder:text-text-tertiary focus:outline-none"
+                      className={`flex-1 min-w-[80px] bg-transparent text-xl sm:text-2xl font-bold placeholder:text-text-tertiary focus:outline-none ${
+                        depositMode === "token1Only" ? "text-text-tertiary cursor-not-allowed" : "text-text-primary"
+                      }`}
                       placeholder="0"
                       value={amount0}
+                      disabled={depositMode === "token1Only"}
                       onChange={(e) => {
-                        setAmount0(e.target.value);
+                        const v = e.target.value;
+                        setAmount0(v);
+                        setLastEditedToken(0);
                         setError(null);
+                        recalcPairedAmount(0, v);
                       }}
                     />
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-1 rounded-[--radius-full] shrink-0">
-                      <TokenIcon symbol={sym0} size={20} />
+                    <div className="flex items-center gap-2 px-3 py-2 bg-surface-3/80 rounded-full shrink-0 border border-white/[0.06]">
+                      <TokenIcon symbol={sym0} size={22} />
                       <span className="text-sm font-semibold text-text-primary">
                         {sym0}
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-xs text-text-tertiary">
-                      {amount0 && parseFloat(amount0) > 0
+                  <div className="flex flex-wrap items-center justify-between gap-1 mt-2 text-xs text-text-tertiary">
+                    <span>
+                      {depositMode !== "token1Only" && amount0 && parseFloat(amount0) > 0
                         ? `≈ ${amount1AtPrice(amount0)} ${sym1}`
                         : ""}
                     </span>
-                    <span className="text-xs text-text-tertiary">
-                      {balance0Loading ? "…" : balance0Formatted} {sym0}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span>
+                        Balance: {balance0Loading ? "…" : balance0Formatted} {sym0}
+                      </span>
+                      {isConnected && balance0Formatted && balance0Formatted !== "0" && depositMode !== "token1Only" && (
+                        <button
+                          type="button"
+                          className="px-1.5 py-0.5 text-[10px] font-bold text-accent bg-accent/10 hover:bg-accent/20 rounded transition-colors cursor-pointer"
+                          onClick={() => {
+                            setAmount0(balance0Formatted);
+                            setLastEditedToken(0);
+                            recalcPairedAmount(0, balance0Formatted);
+                          }}
+                        >
+                          MAX
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 {/* Token 1 deposit */}
-                <div className="bg-surface-2 border border-border rounded-[--radius-lg] p-4">
-                  <div className="flex items-center gap-3">
+                <div className={`rounded-xl p-4 transition-all ${
+                  depositMode === "token0Only"
+                    ? "bg-surface-2/40 border border-white/[0.04] opacity-50"
+                    : "bg-surface-2/80 border border-white/[0.06]"
+                }`}>
+                  {depositMode === "token0Only" && (
+                    <p className="text-xs text-warning mb-2">Current price is below your min price — only {sym0} is needed</p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <input
                       type="text"
-                      className="flex-1 min-w-0 bg-transparent text-2xl font-bold text-text-primary placeholder:text-text-tertiary focus:outline-none"
+                      className={`flex-1 min-w-[80px] bg-transparent text-xl sm:text-2xl font-bold placeholder:text-text-tertiary focus:outline-none ${
+                        depositMode === "token0Only" ? "text-text-tertiary cursor-not-allowed" : "text-text-primary"
+                      }`}
                       placeholder="0"
                       value={amount1}
+                      disabled={depositMode === "token0Only"}
                       onChange={(e) => {
-                        setAmount1(e.target.value);
+                        const v = e.target.value;
+                        setAmount1(v);
+                        setLastEditedToken(1);
                         setError(null);
+                        recalcPairedAmount(1, v);
                       }}
                     />
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-1 rounded-[--radius-full] shrink-0">
-                      <TokenIcon symbol={sym1} size={20} />
+                    <div className="flex items-center gap-2 px-3 py-2 bg-surface-3/80 rounded-full shrink-0 border border-white/[0.06]">
+                      <TokenIcon symbol={sym1} size={22} />
                       <span className="text-sm font-semibold text-text-primary">
                         {sym1}
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-xs text-text-tertiary">
-                      {amount1 && parseFloat(amount1) > 0
+                  <div className="flex flex-wrap items-center justify-between gap-1 mt-2 text-xs text-text-tertiary">
+                    <span>
+                      {depositMode !== "token0Only" && amount1 && parseFloat(amount1) > 0
                         ? `≈ ${amount0AtPrice(amount1)} ${sym0}`
                         : ""}
                     </span>
-                    <span className="text-xs text-text-tertiary">
-                      {balance1Loading ? "…" : balance1Formatted} {sym1}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span>
+                        Balance: {balance1Loading ? "…" : balance1Formatted} {sym1}
+                      </span>
+                      {isConnected && balance1Formatted && balance1Formatted !== "0" && depositMode !== "token0Only" && (
+                        <button
+                          type="button"
+                          className="px-1.5 py-0.5 text-[10px] font-bold text-accent bg-accent/10 hover:bg-accent/20 rounded transition-colors cursor-pointer"
+                          onClick={() => {
+                            setAmount1(balance1Formatted);
+                            setLastEditedToken(1);
+                            recalcPairedAmount(1, balance1Formatted);
+                          }}
+                        >
+                          MAX
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-
-                {/* Liquidity (L) */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-text-secondary">
-                    Liquidity (L)
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full px-3 py-2 bg-surface-2 border border-border rounded-[--radius-md] text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-border-focus transition-colors font-mono"
-                    value={liquidityAmount}
-                    onChange={(e) => {
-                      setLiquidityAmount(e.target.value);
-                      setError(null);
-                    }}
-                    placeholder="100000000"
-                  />
                 </div>
 
                 {/* Errors / success */}
@@ -1321,7 +1480,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                   />
                 )}
                 {txHash && (
-                  <div className="flex items-center gap-2 px-4 py-3 rounded-[--radius-md] bg-success-muted text-success text-sm">
+                  <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-success-muted text-success text-sm">
                     Transaction sent!{" "}
                     <a
                       href={`https://hashscan.io/testnet/transaction/${txHash}`}
@@ -1334,8 +1493,8 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                   </div>
                 )}
 
-                {/* Actions */}
-                <div className="flex flex-col sm:flex-row gap-3">
+                {/* Actions — responsive */}
+                <div className="flex flex-col-reverse sm:flex-row gap-3 pt-1">
                   {!positionManagerAddress && poolManagerAddress && (
                     <Button
                       variant="secondary"
@@ -1353,14 +1512,13 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                     disabled={
                       pending ||
                       (!amount0 && !amount1) ||
+                      (parseFloat(amount0 || "0") <= 0 && parseFloat(amount1 || "0") <= 0) ||
                       !positionManagerAddress
                     }
                     onClick={addLiquidity}
                     loading={pending}
                   >
-                    {poolInitialized === false
-                      ? "Create pool & add liquidity"
-                      : "Add liquidity"}
+                    Create pool & add liquidity
                   </Button>
                 </div>
 

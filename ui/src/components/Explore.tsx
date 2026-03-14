@@ -39,6 +39,8 @@ export function Explore({ onSelectPool }: ExploreProps) {
             tickSpacing: number;
             symbol0?: string;
             symbol1?: string;
+            decimals0?: number;
+            decimals1?: number;
           }>,
         ) => {
           if (cancelled) return;
@@ -56,6 +58,8 @@ export function Explore({ onSelectPool }: ExploreProps) {
               symbol1: p.symbol1 ?? "",
               currency0: p.currency0,
               currency1: p.currency1,
+              decimals0: p.decimals0,
+              decimals1: p.decimals1,
             })),
           );
         },

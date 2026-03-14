@@ -5,6 +5,9 @@ import { TokenIcon, TokenPairIcon } from "./TokenIcon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useTokens } from "@/hooks/useTokens";
+import { useTokenBalance } from "@/hooks/useTokenBalance";
+import { useHashPack } from "@/context/HashPackContext";
+import { getTokenDecimals } from "@/constants";
 
 export interface PoolInfo {
   poolId: string;
@@ -16,6 +19,8 @@ export interface PoolInfo {
   symbol1: string;
   currency0: string;
   currency1: string;
+  decimals0?: number;
+  decimals1?: number;
 }
 
 interface PoolPositionsProps {
@@ -26,6 +31,85 @@ interface PoolPositionsProps {
 function shortenAddr(addr: string): string {
   if (!addr || addr.length < 10) return addr;
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
+/** Individual pool card with real-time balance display */
+function PoolCard({
+  pool,
+  t0name,
+  t1name,
+  onClick,
+}: {
+  pool: PoolInfo;
+  t0name?: string;
+  t1name?: string;
+  onClick: () => void;
+}) {
+  const { accountId, isConnected } = useHashPack();
+  const decimals0 = pool.decimals0 ?? getTokenDecimals(pool.symbol0);
+  const decimals1 = pool.decimals1 ?? getTokenDecimals(pool.symbol1);
+  const { balanceFormatted: bal0 } = useTokenBalance(
+    pool.currency0,
+    accountId,
+    decimals0,
+  );
+  const { balanceFormatted: bal1 } = useTokenBalance(
+    pool.currency1,
+    accountId,
+    decimals1,
+  );
+
+  return (
+    <button
+      key={pool.poolId}
+      type="button"
+      className="w-full flex flex-col gap-2 p-4 rounded-xl bg-surface-2/50 border border-white/[0.06] hover:border-accent/20 hover:bg-surface-2/80 transition-all duration-200 cursor-pointer text-left shadow-sm hover:shadow-md"
+      onClick={onClick}
+    >
+      <div className="flex items-center gap-3 sm:gap-4">
+        <TokenPairIcon
+          symbol0={pool.symbol0 || "?"}
+          symbol1={pool.symbol1 || "?"}
+          size={32}
+        />
+        <div className="flex flex-col min-w-0 flex-1">
+          <span className="text-sm font-semibold text-text-primary">
+            {pool.pair}
+          </span>
+          <span className="text-xs text-text-tertiary truncate">
+            v4 · {pool.feeLabel}
+            {(t0name || t1name) && (
+              <>
+                {" · "}
+                {t0name || shortenAddr(pool.currency0)} /{" "}
+                {t1name || shortenAddr(pool.currency1)}
+              </>
+            )}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="w-2 h-2 rounded-full bg-success" />
+          <span className="text-xs text-success font-medium">In range</span>
+        </div>
+      </div>
+      {/* Balance row */}
+      {isConnected && (
+        <div className="flex items-center gap-3 ml-11 text-xs">
+          <span className="flex items-center gap-1.5 text-text-secondary">
+            <TokenIcon symbol={pool.symbol0 || "?"} size={14} />
+            <span className="font-medium text-text-primary">{bal0 || "0"}</span>
+            {pool.symbol0}
+          </span>
+          <span className="text-text-disabled">·</span>
+          <span className="flex items-center gap-1.5 text-text-secondary">
+            <TokenIcon symbol={pool.symbol1 || "?"} size={14} />
+            <span className="font-medium text-text-primary">{bal1 || "0"}</span>
+            {pool.symbol1}
+          </span>
+        </div>
+      )}
+    </button>
+  );
 }
 
 export function PoolPositions({
@@ -39,6 +123,17 @@ export function PoolPositions({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showLoadById, setShowLoadById] = useState(false);
   const [infoBoxDismissed, setInfoBoxDismissed] = useState(false);
+  const [poolFilter, setPoolFilter] = useState<"all" | "mine">("all");
+
+  const { accountId, isConnected } = useHashPack();
+
+  // Derive deployer EVM address from Hedera accountId for filtering
+  const deployerEvmAddress = (() => {
+    if (!accountId) return null;
+    const m = String(accountId).match(/^(\d+)\.(\d+)\.(\d+)$/);
+    if (!m) return null;
+    return "0x" + BigInt(m[3]!).toString(16).padStart(40, "0");
+  })();
 
   const { tokens: dynamicTokens } = useTokens();
   const tokenByAddr = new Map(
@@ -49,7 +144,13 @@ export function PoolPositions({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch("/api/pools")
+
+    const url =
+      poolFilter === "mine" && deployerEvmAddress
+        ? `/api/pools?deployedBy=${encodeURIComponent(deployerEvmAddress)}`
+        : "/api/pools";
+
+    fetch(url)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load pools");
         return res.json();
@@ -64,6 +165,10 @@ export function PoolPositions({
             tickSpacing: number;
             symbol0?: string;
             symbol1?: string;
+            deployedBy?: string;
+            initialPrice?: string;
+            decimals0?: number;
+            decimals1?: number;
           }>,
         ) => {
           if (cancelled) return;
@@ -81,6 +186,8 @@ export function PoolPositions({
               symbol1: p.symbol1 ?? "",
               currency0: p.currency0,
               currency1: p.currency1,
+              decimals0: p.decimals0,
+              decimals1: p.decimals1,
             })),
           );
         },
@@ -95,7 +202,7 @@ export function PoolPositions({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [poolFilter, deployerEvmAddress]);
 
   const handleLoadById = useCallback(async () => {
     const id = loadPoolId.trim();
@@ -118,6 +225,8 @@ export function PoolPositions({
         tickSpacing: number;
         symbol0?: string;
         symbol1?: string;
+        decimals0?: number;
+        decimals1?: number;
       };
       const pool: PoolInfo = {
         poolId: p.poolId,
@@ -132,6 +241,8 @@ export function PoolPositions({
         symbol1: p.symbol1 ?? "",
         currency0: p.currency0,
         currency1: p.currency1,
+        decimals0: p.decimals0,
+        decimals1: p.decimals1,
       };
       onSelectPool(pool);
     } catch (err) {
@@ -143,15 +254,15 @@ export function PoolPositions({
   const topPools = pools.slice(0, 8);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 animate-[fadeIn_0.3s_ease-out]">
-      <div className="flex flex-col lg:flex-row gap-6">
+    <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 py-6 sm:py-8 animate-[fadeIn_0.3s_ease-out]">
+      <div className="flex flex-col lg:flex-row gap-5 lg:gap-6">
         {/* Left column */}
-        <div className="flex-1 min-w-0 space-y-5">
-          {/* Rewards card */}
-          <div className="bg-surface-1 border border-border rounded-[--radius-xl] overflow-hidden">
-            <div className="h-1 bg-gradient-to-r from-accent to-purple-400" />
-            <div className="p-5">
-              <div className="flex items-center justify-between mb-3">
+        <div className="flex-1 min-w-0 space-y-4 sm:space-y-5">
+          {/* Rewards card — glass style */}
+          <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 overflow-hidden shadow-inner">
+            <div className="h-1 bg-gradient-to-r from-accent via-accent/80 to-purple-400" />
+            <div className="p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                 <div className="flex items-center gap-3">
                   <div className="flex flex-col">
                     <span className="text-2xl font-bold text-text-primary">
@@ -174,57 +285,45 @@ export function PoolPositions({
           </div>
 
           {/* Your positions header */}
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-text-primary">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base sm:text-lg font-semibold text-text-primary">
               Your positions
             </h2>
-            <div className="flex items-center gap-2">
-              <Button variant="primary" size="sm" onClick={onCreatePosition}>
-                + New position
-              </Button>
-            </div>
+            <Button variant="primary" size="sm" onClick={onCreatePosition}>
+              New position
+            </Button>
           </div>
 
-          {/* Filters */}
+          {/* Filters — pill style */}
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
-              className="px-3 py-1.5 text-xs font-medium rounded-[--radius-full] bg-surface-2 text-text-secondary border border-border hover:border-border-hover transition-colors cursor-pointer"
+              onClick={() => setPoolFilter("all")}
+              className={`px-3 py-2 text-xs font-medium rounded-full border transition-all cursor-pointer ${
+                poolFilter === "all"
+                  ? "bg-accent/15 text-accent border-accent/30"
+                  : "bg-surface-2/80 text-text-secondary border-white/[0.08] hover:border-accent/30 hover:text-text-primary"
+              }`}
             >
-              Status
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                className="inline ml-1"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
+              All pools
             </button>
-            <button
-              type="button"
-              className="px-3 py-1.5 text-xs font-medium rounded-[--radius-full] bg-surface-2 text-text-secondary border border-border hover:border-border-hover transition-colors cursor-pointer"
-            >
-              Protocol
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                className="inline ml-1"
+            {isConnected && (
+              <button
+                type="button"
+                onClick={() => setPoolFilter("mine")}
+                className={`px-3 py-2 text-xs font-medium rounded-full border transition-all cursor-pointer ${
+                  poolFilter === "mine"
+                    ? "bg-accent/15 text-accent border-accent/30"
+                    : "bg-surface-2/80 text-text-secondary border-white/[0.08] hover:border-accent/30 hover:text-text-primary"
+                }`}
               >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
+                My pools
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowLoadById(!showLoadById)}
-              className="px-3 py-1.5 text-xs font-medium rounded-[--radius-full] bg-surface-2 text-text-secondary border border-border hover:border-border-hover transition-colors cursor-pointer ml-auto"
+              className="px-3 py-2 text-xs font-medium rounded-full bg-surface-2/80 text-text-secondary border border-white/[0.08] hover:border-accent/30 hover:text-text-primary transition-all cursor-pointer ml-auto"
             >
               Load by ID
             </button>
@@ -232,11 +331,11 @@ export function PoolPositions({
 
           {/* Load by pool ID */}
           {showLoadById && (
-            <div className="bg-surface-1 border border-border rounded-[--radius-lg] p-4 animate-[fadeIn_0.15s_ease-out]">
+            <div className="rounded-xl border border-white/[0.06] bg-surface-2/50 p-4 animate-[fadeIn_0.15s_ease-out] shadow-inner">
               <div className="flex gap-2">
                 <input
                   type="text"
-                  className="flex-1 px-3 py-2 bg-surface-2 border border-border rounded-[--radius-md] text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-border-focus transition-colors"
+                  className="flex-1 min-w-0 px-3 py-2.5 bg-surface-2 border border-white/[0.08] rounded-xl text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-colors"
                   placeholder="Pool ID (0x...)"
                   value={loadPoolId}
                   onChange={(e) => {
@@ -257,7 +356,7 @@ export function PoolPositions({
 
           {/* Content */}
           {error && (
-            <div className="flex items-center gap-2 px-4 py-3 rounded-[--radius-md] bg-error-muted text-error text-sm">
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-error-muted text-error text-sm">
               {error}
             </div>
           )}
@@ -265,13 +364,13 @@ export function PoolPositions({
           {loading ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-20 skeleton rounded-[--radius-lg]" />
+                <div key={i} className="h-20 rounded-xl bg-surface-2/80 border border-white/[0.06] animate-pulse" />
               ))}
             </div>
           ) : !hasPositions ? (
             /* Empty state */
-            <div className="bg-surface-1 border border-border rounded-[--radius-xl] flex flex-col items-center justify-center py-16 px-6">
-              <div className="w-16 h-16 rounded-full bg-surface-2 flex items-center justify-center mb-4">
+            <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 flex flex-col items-center justify-center py-12 sm:py-16 px-4 sm:px-6 shadow-inner">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-surface-3/80 border border-white/[0.06] flex items-center justify-center mb-4">
                 <svg
                   width="28"
                   height="28"
@@ -293,7 +392,7 @@ export function PoolPositions({
                 You don&apos;t have any liquidity positions. Create a new
                 position to start earning fees and rewards.
               </p>
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3 justify-center">
                 <Button
                   variant="secondary"
                   onClick={() => setShowLoadById(!showLoadById)}
@@ -312,43 +411,13 @@ export function PoolPositions({
                 const t0info = tokenByAddr.get(pool.currency0.toLowerCase());
                 const t1info = tokenByAddr.get(pool.currency1.toLowerCase());
                 return (
-                  <button
+                  <PoolCard
                     key={pool.poolId}
-                    type="button"
-                    className="w-full flex items-center gap-4 p-4 bg-surface-1 border border-border rounded-[--radius-lg] hover:border-border-hover hover:bg-surface-2 transition-all duration-150 cursor-pointer text-left"
+                    pool={pool}
+                    t0name={t0info?.name}
+                    t1name={t1info?.name}
                     onClick={() => onSelectPool(pool)}
-                  >
-                    <TokenPairIcon
-                      symbol0={pool.symbol0 || "?"}
-                      symbol1={pool.symbol1 || "?"}
-                      size={32}
-                    />
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <span className="text-sm font-semibold text-text-primary">
-                        {pool.pair}
-                      </span>
-                      <span className="text-xs text-text-tertiary">
-                        v4 · {pool.feeLabel}
-                        {(t0info || t1info) && (
-                          <>
-                            {" "}
-                            ·{" "}
-                            {t0info
-                              ? t0info.name
-                              : shortenAddr(pool.currency0)}{" "}
-                            /{" "}
-                            {t1info ? t1info.name : shortenAddr(pool.currency1)}
-                          </>
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex flex-col items-end shrink-0">
-                      <span className="text-sm text-text-tertiary">— APR</span>
-                      <span className="text-xs text-text-disabled font-mono">
-                        {pool.poolId.slice(0, 10)}...
-                      </span>
-                    </div>
-                  </button>
+                  />
                 );
               })}
             </div>
@@ -356,8 +425,8 @@ export function PoolPositions({
 
           {/* Info box */}
           {!infoBoxDismissed && (
-            <div className="flex items-start gap-3 p-4 bg-surface-1 border border-border rounded-[--radius-lg]">
-              <span className="w-5 h-5 rounded-full bg-accent-muted text-accent flex items-center justify-center shrink-0 text-xs font-bold">
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-surface-2/50 border border-white/[0.06]">
+              <span className="w-6 h-6 rounded-full bg-accent/15 text-accent flex items-center justify-center shrink-0 text-xs font-bold">
                 i
               </span>
               <div className="flex-1 min-w-0">
@@ -371,17 +440,10 @@ export function PoolPositions({
               <button
                 type="button"
                 onClick={() => setInfoBoxDismissed(true)}
-                className="shrink-0 p-1 rounded-[--radius-sm] text-text-tertiary hover:text-text-primary hover:bg-surface-3 transition-colors cursor-pointer"
+                className="shrink-0 p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-3/80 transition-colors cursor-pointer"
                 aria-label="Dismiss"
               >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -390,7 +452,7 @@ export function PoolPositions({
           )}
 
           {/* Footer link */}
-          <p className="text-xs text-text-tertiary text-center">
+          <p className="text-xs text-text-tertiary text-center pt-1">
             Some v2 positions aren&apos;t displayed automatically.{" "}
             <button
               type="button"
@@ -403,19 +465,16 @@ export function PoolPositions({
         </div>
 
         {/* Right sidebar */}
-        <aside className="w-full lg:w-80 shrink-0 space-y-5">
+        <aside className="w-full lg:w-80 shrink-0 space-y-4 sm:space-y-5">
           {/* Top pools */}
-          <div className="bg-surface-1 border border-border rounded-[--radius-xl] p-5">
+          <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 p-4 sm:p-5 shadow-inner">
             <h3 className="text-sm font-semibold text-text-primary mb-4">
               Top pools by TVL
             </h3>
             {loading ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {[...Array(3)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-12 skeleton rounded-[--radius-md]"
-                  />
+                  <div key={i} className="h-12 rounded-xl bg-surface-2/80 animate-pulse" />
                 ))}
               </div>
             ) : topPools.length === 0 ? (
@@ -423,15 +482,15 @@ export function PoolPositions({
                 No pools yet
               </p>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {topPools.map((pool, idx) => (
                   <button
                     key={pool.poolId}
                     type="button"
-                    className="w-full flex items-center gap-3 p-2.5 rounded-[--radius-md] hover:bg-surface-2 transition-colors cursor-pointer"
+                    className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-surface-3/60 transition-colors cursor-pointer"
                     onClick={() => onSelectPool(pool)}
                   >
-                    <span className="text-xs text-text-disabled w-4 text-right">
+                    <span className="text-xs text-text-disabled w-4 text-right shrink-0">
                       {idx + 1}
                     </span>
                     <TokenPairIcon
@@ -454,22 +513,13 @@ export function PoolPositions({
           </div>
 
           {/* Learn card */}
-          <div className="bg-surface-1 border border-border rounded-[--radius-xl] p-5">
+          <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 p-4 sm:p-5 shadow-inner">
             <h3 className="text-sm font-semibold text-text-primary mb-3">
               Learn about liquidity
             </h3>
-            <div className="flex items-start gap-3 p-3 bg-surface-2 rounded-[--radius-md]">
-              <div className="w-8 h-8 rounded-[--radius-sm] bg-accent-muted text-accent flex items-center justify-center shrink-0">
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-surface-3/50 border border-white/[0.04]">
+              <div className="w-8 h-8 rounded-lg bg-accent/15 text-accent flex items-center justify-center shrink-0">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M7 17L17 7" />
                   <path d="M17 7H7V17" />
                 </svg>

@@ -40,21 +40,6 @@ export interface TokenOption {
   name?: string;
 }
 
-export const DEFAULT_TOKENS: TokenOption[] = [
-  { id: "tka", symbol: "TKA" },
-  { id: "tkb", symbol: "TKB" },
-  { id: "token0", symbol: "HBAR" },
-  { id: "token1", symbol: "USDC" },
-  { id: "token2", symbol: "FORGE" },
-  { id: "token3", symbol: "SWIRL" },
-  { id: "token4", symbol: "ORBIT" },
-  { id: "token5", symbol: "PULSE" },
-  { id: "token6", symbol: "FLUX" },
-  { id: "token7", symbol: "SPARK" },
-  { id: "token8", symbol: "NOVA" },
-  { id: "token9", symbol: "EMBER" },
-];
-
 /** Optional token logo URLs (symbol -> url). Add your own in constants or .env. */
 export const TOKEN_IMAGES: Record<string, string> = {
   HBAR: "https://assets.coingecko.com/coins/images/3688/small/hbar.png",
@@ -62,50 +47,9 @@ export const TOKEN_IMAGES: Record<string, string> = {
   // Add more: FORGE, SWIRL, etc. or leave blank for letter fallback
 };
 
-/**
- * HTS token symbol -> EVM address (long-form 0x0000...<id>).
- * We only work with HTS tokens. Pool key and Quoter use these addresses.
- */
-export const TOKEN_ADDRESSES: Record<string, string> = {
-  TKA: "0x00000000000000000000000000000000007c0638",
-  TKB: "0x00000000000000000000000000000000007c0639",
-  HBAR: "0x0000000000000000000000000000000000000408",
-  USDC: "0x00000000000000000000000000000000007b97e4",
-  FORGE: "0x00000000000000000000000000000000007b97D4",
-  SWIRL: "0x00000000000000000000000000000000007b8a82",
-  ORBIT: "0x00000000000000000000000000000000007b8a96",
-  PULSE: "0x00000000000000000000000000000000007B8AA3",
-  FLUX: "0x00000000000000000000000000000000007B8Ab7",
-  SPARK: "0x00000000000000000000000000000000007b8AC3",
-  NOVA: "0x00000000000000000000000000000000007B8Ad4",
-  EMBER: "0x00000000000000000000000000000000007B8aE3",
-};
-
-/** Token decimals (for parseUnits/formatUnits). Default 18 if not set. */
-export const TOKEN_DECIMALS: Record<string, number> = {
-  TKA: 4,
-  TKB: 4,
-  HBAR: 8,
-  USDC: 6,
-  FORGE: 4,
-  SWIRL: 4,
-  ORBIT: 4,
-  PULSE: 4,
-  FLUX: 4,
-  SPARK: 4,
-  NOVA: 4,
-  EMBER: 4,
-};
-
-/** Get token address by symbol; loads from TOKEN_ADDRESSES. */
-export function getTokenAddress(symbol: string): string {
-  return (TOKEN_ADDRESSES[symbol] ?? "").trim().toLowerCase();
-}
-
-/** Get token decimals by symbol; default 18. */
-export function getTokenDecimals(symbol: string): number {
-  return TOKEN_DECIMALS[symbol] ?? 18;
-}
+// Token address/decimals lookups are now backed by the dynamic registry
+// populated from DynamoDB via useTokens(). Import directly from tokenRegistry.
+export { getTokenAddress, getTokenDecimals } from "@/lib/tokenRegistry";
 
 // Default pool params for Quoter (must match an existing pool)
 export const DEFAULT_FEE = 3000;

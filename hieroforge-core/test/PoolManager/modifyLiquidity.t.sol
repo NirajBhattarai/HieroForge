@@ -28,6 +28,19 @@ import {IERC20} from "hedera-forking/IERC20.sol";
 ///   We also test EVM-native (address(0)) for cross-chain: Native-ERC20, Native-HTS, Native-Native (reverts).
 ///   Total: 1. HTS-HTS  2. ERC20-ERC20  3. ERC20-HTS  4. HTS-ERC20  5. Native-ERC20  6. Native-HTS  7. Native-Native (reverts)
 contract PoolManagerModifyLiquidityTest is Test, Deployers {
+    /// @notice Default initial sqrt price for the pool; set in a test then call initializeManagerRoutersAndPools() to re-init with it.
+    uint160 public initialSqrtPriceX96 = SQRT_PRICE_1_1;
+
+    function getInitialSqrtPriceX96() internal view override returns (uint160) {
+        return initialSqrtPriceX96;
+    }
+
+    /// @notice Option A: set custom sqrt price and re-init pool (deploy manager, currencies, init at given price). Use in tests that need a non-1:1 price.
+    function reinitPoolWithSqrtPrice(uint160 sqrtPriceX96) internal {
+        initialSqrtPriceX96 = sqrtPriceX96;
+        initializeManagerRoutersAndPools();
+    }
+
     function setUp() public {
         // HTS tokens via hedera-forking at 0x167. On Hedera, native (HBAR) is HTS-native. Run with --ffi
         initializeManagerRoutersAndPools();
@@ -633,5 +646,50 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         (BalanceDelta removeDelta,) = modifyLiquidityRouter.modifyLiquidity(key, removeAll, ZERO_BYTES);
         assertGt(int256(removeDelta.amount0()), 0);
         assertGt(int256(removeDelta.amount1()), 0);
+    }
+
+    /// @notice Add liquidity with 1:3 price (range [0.3, 0.4]); L chosen so required amounts fit HTS supply (5e9)
+    function test_modifyLiquidity_addLiqudityWith1_3Price_succeeds() public {
+        uint160 SQRT_PRICE_1_3 = 45746622930794429382959749662549926200;
+        reinitPoolWithSqrtPrice(SQRT_PRICE_1_3);
+
+        int24 tickLower = -12060;
+        int24 tickUpper = -9120;
+
+        // L large enough that amount0/amount1 are non-zero, but required amounts fit HTS supply (5e9)
+        int256 L = 1000;
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: tickLower, tickUpper: tickUpper, liquidityDelta: L, salt: bytes32(0)});
+
+        uint256 fundAmount = 5e9;
+        require(IERC20(Currency.unwrap(currency0)).transfer(address(modifyLiquidityRouter), fundAmount), "transfer0");
+        require(IERC20(Currency.unwrap(currency1)).transfer(address(modifyLiquidityRouter), fundAmount), "transfer1");
+
+        uint256 managerBal0Before = IERC20(Currency.unwrap(currency0)).balanceOf(address(manager));
+        uint256 managerBal1Before = IERC20(Currency.unwrap(currency1)).balanceOf(address(manager));
+
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(key, params, ZERO_BYTES);
+
+        // Adding liquidity: we pay at least one token (current tick can be below, inside, or above range)
+        assertTrue(delta.amount0() < 0 || delta.amount1() < 0, "should pay at least token0 or token1");
+
+        uint256 paid0 = delta.amount0() < 0 ? uint256(uint128(-delta.amount0())) : 0;
+        uint256 paid1 = delta.amount1() < 0 ? uint256(uint128(-delta.amount1())) : 0;
+
+        assertEq(
+            IERC20(Currency.unwrap(currency0)).balanceOf(address(manager)),
+            managerBal0Before + paid0,
+            "manager should have received token0"
+        );
+        assertEq(
+            IERC20(Currency.unwrap(currency1)).balanceOf(address(manager)),
+            managerBal1Before + paid1,
+            "manager should have received token1"
+        );
+
+        // When both tokens are required (tick inside range), ratio paid0:paid1 ~ 1000:196
+        if (paid0 > 0 && paid1 > 0) {
+            assertApproxEqRel(paid0 * 196, paid1 * 1000, 0.05e18, "paid0:paid1 ~ 1000:196");
+        }
     }
 }

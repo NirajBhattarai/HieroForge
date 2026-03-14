@@ -124,15 +124,27 @@ contract Deployers is Test {
         manager.initialize(_key, sqrtPriceX96);
     }
 
-    /// @notice Initialize manager, routers, two HTS currencies, one initialized pool. Requires ffi: forge test ... --ffi
-    function initializeManagerRoutersAndPools() internal {
-        deployFreshManagerAndRouters();
-        deployMintAndApprove2CurrenciesHTS();
-        _finishInitPools();
+    /// @notice Returns the default initial sqrt price for the pool; override in tests to use a custom price.
+    function getInitialSqrtPriceX96() internal virtual returns (uint160) {
+        return SQRT_PRICE_1_1;
     }
 
-    function _finishInitPools() internal {
-        (key,) = initPool(currency0, currency1, 3000, 60, SQRT_PRICE_1_1);
+    /// @notice Initialize manager, routers, two HTS currencies, one initialized pool. Requires ffi: forge test ... --ffi
+    /// Uses getInitialSqrtPriceX96() so tests can override to customize.
+    function initializeManagerRoutersAndPools() internal {
+        initializeManagerRoutersAndPools(getInitialSqrtPriceX96());
+    }
+
+    /// @notice Initialize manager, routers, two HTS currencies, one initialized pool with given sqrt price.
+    /// @param sqrtPriceX96 Initial sqrt price (Q64.96) for the pool, e.g. Constants.SQRT_PRICE_1_1
+    function initializeManagerRoutersAndPools(uint160 sqrtPriceX96) internal {
+        deployFreshManagerAndRouters();
+        deployMintAndApprove2CurrenciesHTS();
+        _finishInitPools(sqrtPriceX96);
+    }
+
+    function _finishInitPools(uint160 sqrtPriceX96) internal {
+        (key,) = initPool(currency0, currency1, 3000, 60, sqrtPriceX96);
         uninitializedKey =
             PoolKey({currency0: currency0, currency1: currency1, fee: 100, tickSpacing: 60, hooks: address(0)});
     }

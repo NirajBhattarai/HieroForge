@@ -15,6 +15,10 @@ export interface TokenRecord {
   logoUrl?: string;
   /** Whether this is an HTS (Hedera Token Service) token */
   isHts?: boolean;
+  /** Hedera native ID e.g. 0.0.XXXXX */
+  hederaId?: string;
+  /** Wallet address or Hedera account ID of the deployer */
+  deployedBy?: string;
   createdAt?: string;
 }
 

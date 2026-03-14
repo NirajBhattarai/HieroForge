@@ -5,10 +5,14 @@ interface BadgeProps {
 }
 
 const variants: Record<string, string> = {
-  default: "bg-surface-3 text-text-secondary",
-  accent: "bg-accent-muted text-accent",
-  success: "bg-success-muted text-success",
-  warning: "bg-warning-muted text-warning",
+  default:
+    "bg-surface-3/80 text-text-secondary border border-white/[0.06]",
+  accent:
+    "bg-accent/10 text-accent border border-accent/25 hover:border-accent/40",
+  success:
+    "bg-success-muted text-success border border-success/20",
+  warning:
+    "bg-warning-muted text-warning border border-warning/20",
 };
 
 export function Badge({
@@ -18,7 +22,7 @@ export function Badge({
 }: BadgeProps) {
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-[--radius-sm] ${variants[variant]} ${className}`}
+      className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full transition-colors ${variants[variant]} ${className}`}
     >
       {children}
     </span>

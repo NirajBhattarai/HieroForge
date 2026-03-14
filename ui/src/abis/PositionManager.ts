@@ -50,8 +50,11 @@ export const PositionManagerAbi = [
   },
 ] as Abi;
 
-// MINT_POSITION action byte
+// V4 PositionManager action bytes
+export const INCREASE_LIQUIDITY_ACTION = 0x00;
+export const DECREASE_LIQUIDITY_ACTION = 0x01;
 export const MINT_POSITION_ACTION = 0x02;
+export const BURN_POSITION_ACTION = 0x03;
 
 // sqrtPriceX96 for 1:1 (Q64.96)
 export const SQRT_PRICE_1_1 = 79228162514264337593543950336n;

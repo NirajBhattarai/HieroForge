@@ -41,6 +41,8 @@ const DEPLOYED_TOKENS = [
     name: 'HieroForge Token A',
     decimals: 8,
     isHts: true,
+    hederaId: '0.0.8144471',
+    deployedBy: '0x00000000000000000000000000000000007c4657', // update with real deployer
   },
   {
     address: '0x00000000000000000000000000000000007c4669',
@@ -48,19 +50,24 @@ const DEPLOYED_TOKENS = [
     name: 'HieroForge Token B',
     decimals: 8,
     isHts: true,
+    hederaId: '0.0.8144489',
+    deployedBy: '0x00000000000000000000000000000000007c4657', // update with real deployer
   },
 ]
 
 // Pool created with these two tokens, fee 3000, tickSpacing 60
 const DEPLOYED_POOL = {
-  // poolId is computed from the pool key — we'll compute it or paste the known value
-  // For now we use the sorted pair: TKA < TKB alphabetically + fee 3000 + tickSpacing 60
   currency0: '0x00000000000000000000000000000000007c4657',
   currency1: '0x00000000000000000000000000000000007c4669',
   fee: 3000,
   tickSpacing: 60,
   symbol0: 'TKA',
   symbol1: 'TKB',
+  deployedBy: '0x00000000000000000000000000000000007c4657', // update with real deployer
+  initialPrice: '1',
+  sqrtPriceX96: '79228162514264337593543950336',
+  decimals0: 8,
+  decimals1: 8,
 }
 
 // ───── Helpers ─────

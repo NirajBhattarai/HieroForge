@@ -14,6 +14,16 @@ export interface PoolRecord {
   tickSpacing: number;
   symbol0?: string;
   symbol1?: string;
+  /** Wallet address (EVM hex) or Hedera account ID of the deployer */
+  deployedBy?: string;
+  /** Human-readable initial price set at pool creation */
+  initialPrice?: string;
+  /** sqrtPriceX96 used for pool initialization */
+  sqrtPriceX96?: string;
+  /** Token0 decimals */
+  decimals0?: number;
+  /** Token1 decimals */
+  decimals1?: number;
   createdAt?: string;
 }
 
@@ -59,6 +69,29 @@ export async function getPoolById(poolId: string): Promise<PoolRecord | null> {
   return unmarshall(result.Item) as PoolRecord;
 }
 
+/** List pools deployed by a specific wallet/account. */
+export async function listPoolsByDeployer(
+  deployedBy: string,
+): Promise<PoolRecord[]> {
+  if (!isDynamoConfigured()) return [];
+  const client = getClient();
+  const result = await client.send(
+    new ScanCommand({
+      TableName: TABLE_NAME,
+      FilterExpression: "deployedBy = :d",
+      ExpressionAttributeValues: marshall({ ":d": deployedBy.toLowerCase().trim() }),
+    }),
+  );
+  const items = (result.Items ?? []).map(
+    (item) => unmarshall(item) as PoolRecord,
+  );
+  return items.sort(
+    (a, b) =>
+      new Date(b.createdAt ?? 0).getTime() -
+      new Date(a.createdAt ?? 0).getTime(),
+  );
+}
+
 export async function savePool(pool: PoolRecord): Promise<void> {
   if (!isDynamoConfigured()) {
     console.warn(
@@ -70,6 +103,7 @@ export async function savePool(pool: PoolRecord): Promise<void> {
   const record: PoolRecord = {
     ...pool,
     poolId: pool.poolId.toLowerCase().trim(),
+    deployedBy: pool.deployedBy?.toLowerCase().trim(),
     createdAt: pool.createdAt ?? new Date().toISOString(),
   };
   await client.send(

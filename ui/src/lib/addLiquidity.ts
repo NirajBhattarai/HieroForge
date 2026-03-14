@@ -1,5 +1,11 @@
 import { encodeAbiParameters, keccak256, getAddress, type Address } from "viem";
-import { MINT_POSITION_ACTION, SQRT_PRICE_1_1 } from "../abis/PositionManager";
+import {
+  MINT_POSITION_ACTION,
+  INCREASE_LIQUIDITY_ACTION,
+  DECREASE_LIQUIDITY_ACTION,
+  BURN_POSITION_ACTION,
+  SQRT_PRICE_1_1,
+} from "../abis/PositionManager";
 
 const HOOKS_ZERO = "0x0000000000000000000000000000000000000000" as const;
 
@@ -118,3 +124,66 @@ export function encodeUnlockDataMint(
 
 /** Default sqrtPriceX96 for new pools (1:1). */
 export { SQRT_PRICE_1_1 };
+
+/**
+ * Encode unlockData for DECREASE_LIQUIDITY action.
+ * Used to remove liquidity from an existing position by tokenId.
+ * actions = [DECREASE_LIQUIDITY], params = [abi.encode(tokenId, liquidity, amount0Min, amount1Min, hookData)]
+ */
+export function encodeUnlockDataDecrease(
+  tokenId: bigint,
+  liquidity: bigint,
+  amount0Min: bigint,
+  amount1Min: bigint,
+): `0x${string}` {
+  const decreaseParam = encodeAbiParameters(
+    [
+      { type: "uint256", name: "tokenId" },
+      { type: "uint256", name: "liquidity" },
+      { type: "uint128", name: "amount0Min" },
+      { type: "uint128", name: "amount1Min" },
+      { type: "bytes", name: "hookData" },
+    ],
+    [tokenId, liquidity, amount0Min, amount1Min, "0x"],
+  );
+
+  const actions =
+    `0x${DECREASE_LIQUIDITY_ACTION.toString(16).padStart(2, "0")}` as `0x${string}`;
+  return encodeAbiParameters(
+    [
+      { type: "bytes", name: "actions" },
+      { type: "bytes[]", name: "params" },
+    ],
+    [actions, [decreaseParam]],
+  ) as `0x${string}`;
+}
+
+/**
+ * Encode unlockData for BURN_POSITION action (full remove + burn NFT).
+ * actions = [BURN_POSITION], params = [abi.encode(tokenId, amount0Min, amount1Min, hookData)]
+ */
+export function encodeUnlockDataBurn(
+  tokenId: bigint,
+  amount0Min: bigint,
+  amount1Min: bigint,
+): `0x${string}` {
+  const burnParam = encodeAbiParameters(
+    [
+      { type: "uint256", name: "tokenId" },
+      { type: "uint128", name: "amount0Min" },
+      { type: "uint128", name: "amount1Min" },
+      { type: "bytes", name: "hookData" },
+    ],
+    [tokenId, amount0Min, amount1Min, "0x"],
+  );
+
+  const actions =
+    `0x${BURN_POSITION_ACTION.toString(16).padStart(2, "0")}` as `0x${string}`;
+  return encodeAbiParameters(
+    [
+      { type: "bytes", name: "actions" },
+      { type: "bytes[]", name: "params" },
+    ],
+    [actions, [burnParam]],
+  ) as `0x${string}`;
+}
