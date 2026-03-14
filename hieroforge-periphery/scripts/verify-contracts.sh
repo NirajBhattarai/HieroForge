@@ -97,17 +97,17 @@ prepare_manual_bundle() {
 }
 
 verify_quoter() {
-  echo "--- Verifying Quoter at $QUOTER_ADDRESS ---"
+  echo "--- Verifying V4Quoter at $QUOTER_ADDRESS ---"
   NEED_MANUAL=""
   if [[ -z "$VERIFY_MANUAL" ]]; then
     set +e
-    hashscan_api_verify "$REPO_ROOT" "Quoter" "$QUOTER_ADDRESS" "$CHAIN_ID" && r=0 || r=1
+    hashscan_api_verify "$REPO_ROOT" "V4Quoter" "$QUOTER_ADDRESS" "$CHAIN_ID" && r=0 || r=1
     if [[ $r -ne 0 ]]; then
       if [[ -n "$POOL_MANAGER_ADDRESS" ]]; then
         CONSTRUCTOR_ARGS=$(cast abi-encode "constructor(address)" "$POOL_MANAGER_ADDRESS")
         forge verify-contract \
           "$QUOTER_ADDRESS" \
-          src/Quoter.sol:Quoter \
+          src/V4Quoter.sol:V4Quoter \
           --chain-id "$CHAIN_ID" \
           --verifier sourcify \
           --verifier-url "$HEDERA_VERIFIER_URL" \
@@ -116,7 +116,7 @@ verify_quoter() {
       else
         forge verify-contract \
           "$QUOTER_ADDRESS" \
-          src/Quoter.sol:Quoter \
+          src/V4Quoter.sol:V4Quoter \
           --chain-id "$CHAIN_ID" \
           --verifier sourcify \
           --verifier-url "$HEDERA_VERIFIER_URL" \
@@ -126,14 +126,14 @@ verify_quoter() {
     fi
     set -e
     if [[ $r -ne 0 ]]; then
-      echo "Quoter programmatic verification failed; use manual verification below."
+      echo "V4Quoter programmatic verification failed; use manual verification below."
       NEED_MANUAL=1
     fi
   else
     NEED_MANUAL=1
   fi
   if [[ -n "$NEED_MANUAL" ]] || [[ -n "$VERIFY_MANUAL" ]]; then
-    prepare_manual_bundle "Quoter" "src/Quoter.sol" || true
+    prepare_manual_bundle "V4Quoter" "src/V4Quoter.sol" || true
   fi
   echo ""
 }

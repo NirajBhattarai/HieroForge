@@ -3,15 +3,17 @@
 # Same invocation style as verify-contracts.sh and modify.sh: run from repo, optional target.
 #
 # Usage:
-#   ./scripts/deploy.sh [pool-manager|tokens|position-manager|all]
+#   ./scripts/deploy.sh [pool-manager|tokens|position-manager|quoter|all]
 #   ./scripts/deploy.sh                    # same as 'all': full stack
 #   ./scripts/deploy.sh tokens             # deploy tokens only (USE_HTS=1 for HTS)
+#   ./scripts/deploy.sh quoter             # deploy Quoter only (requires POOL_MANAGER_ADDRESS)
 #   USE_HTS=1 ./scripts/deploy.sh          # full stack with HTS tokens
 #   RPC_URL=http://localhost:7546 ./scripts/deploy.sh
 #
 # Requires: PRIVATE_KEY (or LOCAL_NODE_OPERATOR_PRIVATE_KEY) in .env.
-# For position-manager: POOL_MANAGER_ADDRESS must be set (run pool-manager first).
+# For position-manager / quoter: POOL_MANAGER_ADDRESS must be set (run pool-manager first).
 # PositionManager exposes multicall (initializePool + modifyLiquidities); use modify.sh after deploy.
+# After deploy, verify with: ./scripts/verify-contracts.sh [Quoter|PositionManager|all]
 
 set -e
 
@@ -129,6 +131,28 @@ run_position_manager() {
   echo "  POSITION_MANAGER_ADDRESS=$POSITION_MANAGER_ADDRESS"
 }
 
+run_quoter() {
+  if [[ -z "$POOL_MANAGER_ADDRESS" ]]; then
+    echo "Error: POOL_MANAGER_ADDRESS not set. Run: ./scripts/deploy.sh pool-manager"
+    exit 1
+  fi
+  echo "[deploy] Deploying Quoter (V4Quoter)..."
+  forge build -q
+  OUT=$(forge script script/DeployQuoter.s.sol:DeployQuoterScript \
+    --rpc-url "$RPC" \
+    --private-key "$KEY" \
+    --broadcast 2>&1)
+  echo "$OUT"
+  QUOTER_ADDRESS=$(echo "$OUT" | grep -oE 'V4Quoter: 0x[a-fA-F0-9]{40}' | head -1 | sed 's/V4Quoter: //')
+  if [[ -z "$QUOTER_ADDRESS" ]]; then
+    echo "Failed to parse QUOTER_ADDRESS."
+    exit 1
+  fi
+  env_set "QUOTER_ADDRESS" "$QUOTER_ADDRESS"
+  echo "  QUOTER_ADDRESS=$QUOTER_ADDRESS"
+  echo "  Verify with: ./scripts/verify-contracts.sh Quoter"
+}
+
 export PRIVATE_KEY="$KEY"
 
 case "$TARGET" in
@@ -141,18 +165,24 @@ case "$TARGET" in
   position-manager)
     run_position_manager
     ;;
+  quoter)
+    run_quoter
+    ;;
   all)
     run_pool_manager
     run_tokens
     run_position_manager
+    run_quoter
     echo "[deploy] Done. Next: ./scripts/modify.sh to add liquidity."
+    echo "  Verify contracts: ./scripts/verify-contracts.sh all"
     ;;
   *)
-    echo "Usage: $0 [pool-manager|tokens|position-manager|all]"
+    echo "Usage: $0 [pool-manager|tokens|position-manager|quoter|all]"
     echo "  pool-manager     - deploy PoolManager (core)"
     echo "  tokens           - deploy mock ERC20 or HTS tokens (USE_HTS=1 for HTS)"
     echo "  position-manager - deploy PositionManager (requires POOL_MANAGER_ADDRESS)"
-    echo "  all              - deploy full stack (default)"
+    echo "  quoter           - deploy Quoter/V4Quoter (requires POOL_MANAGER_ADDRESS)"
+    echo "  all              - deploy full stack including Quoter (default)"
     exit 1
     ;;
 esac

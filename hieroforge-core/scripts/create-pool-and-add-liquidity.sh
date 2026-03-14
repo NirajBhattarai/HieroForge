@@ -36,3 +36,24 @@ forge script script/CreatePoolAndAddLiquidityTestnet.s.sol:CreatePoolAndAddLiqui
   --private-key "$PRIVATE_KEY" \
   --ffi \
   --skip-simulation
+
+# ── Auto-register pool in DynamoDB ──
+echo ""
+echo "=== Registering pool in DynamoDB ==="
+UI_DIR="$(cd "$REPO_ROOT/../ui" 2>/dev/null && pwd)" || UI_DIR=""
+if [[ -n "$UI_DIR" && -f "$UI_DIR/scripts/register-pool.cjs" ]]; then
+  POOL_FEE="${FEE:-3000}"
+  POOL_TICK_SPACING="${TICK_SPACING:-60}"
+  POOL_SYM0="${SYMBOL0:-}"
+  POOL_SYM1="${SYMBOL1:-}"
+  node "$UI_DIR/scripts/register-pool.cjs" \
+    --currency0 "$CURRENCY0_ADDRESS" \
+    --currency1 "$CURRENCY1_ADDRESS" \
+    --fee "$POOL_FEE" \
+    --tickSpacing "$POOL_TICK_SPACING" \
+    --symbol0 "$POOL_SYM0" \
+    --symbol1 "$POOL_SYM1"
+else
+  echo "[WARN] Could not find ui/scripts/register-pool.cjs — pool not registered in DynamoDB."
+  echo "Register manually: node ui/scripts/register-pool.cjs --currency0 $CURRENCY0_ADDRESS --currency1 $CURRENCY1_ADDRESS --fee 3000 --tickSpacing 60"
+fi

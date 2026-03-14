@@ -311,5 +311,4 @@ contract PositionManagerTest is Test {
         assertEq(lpm.ownerOf(1), alice, "owner of token 1");
         assertEq(lpm.balanceOf(alice), 1, "alice balance");
     }
-
 }

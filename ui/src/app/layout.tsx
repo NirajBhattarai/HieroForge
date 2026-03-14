@@ -1,24 +1,22 @@
-import type { Metadata } from 'next'
-import { HashPackProvider } from '@/context/HashPackContext'
-import './globals.css'
+import type { Metadata } from "next";
+import Providers from "./Providers";
+import "@/styles/globals.css";
 
 export const metadata: Metadata = {
-  title: 'HieroForge',
-  description: 'Concentrated liquidity AMM on Hedera',
-}
+  title: "HieroForge",
+  description: "Concentrated liquidity AMM on Hedera",
+};
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: React.ReactNode;
 }>) {
   return (
     <html lang="en">
       <body>
-        <HashPackProvider>
-          {children}
-        </HashPackProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
-  )
+  );
 }

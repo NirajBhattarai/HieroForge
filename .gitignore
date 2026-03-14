@@ -16,6 +16,7 @@ docs/
 .env
 .env.bak
 
-# UI (Vite / Node)
+# UI (Next.js / Node)
 ui/node_modules/
 ui/dist/
+ui/.next/

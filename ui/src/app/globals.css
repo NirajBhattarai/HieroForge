@@ -1,5 +1,5 @@
 :root {
-  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-family: "Plus Jakarta Sans", system-ui, sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color: #e2e8f0;
@@ -38,8 +38,17 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(56, 189, 248, 0.08), transparent),
-    radial-gradient(ellipse 80% 50% at 80% 50%, rgba(30, 41, 59, 0.4), transparent),
+  background:
+    radial-gradient(
+      ellipse 120% 80% at 50% -20%,
+      rgba(56, 189, 248, 0.08),
+      transparent
+    ),
+    radial-gradient(
+      ellipse 80% 50% at 80% 50%,
+      rgba(30, 41, 59, 0.4),
+      transparent
+    ),
     #0f1419;
 }
 
@@ -72,6 +81,16 @@ a {
 
 a:hover {
   color: var(--accent-hover);
+}
+
+/* WalletConnect modal: prevent invisible overlay from blocking page interactions */
+wcm-modal:not([open]) {
+  display: none !important;
+  pointer-events: none !important;
+}
+w3m-modal:not([open]) {
+  display: none !important;
+  pointer-events: none !important;
 }
 
 /* Layout */
@@ -117,7 +136,9 @@ a:hover {
   color: var(--muted);
   font-size: 0.9375rem;
   font-weight: 500;
-  transition: color 0.2s, background 0.2s;
+  transition:
+    color 0.2s,
+    background 0.2s;
 }
 
 .nav-btn:hover {
@@ -138,7 +159,10 @@ a:hover {
   color: #fff;
   font-size: 0.875rem;
   font-weight: 600;
-  transition: border-color 0.2s, background 0.2s, color 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    color 0.2s;
 }
 
 .connect-btn:hover:not(:disabled) {
@@ -235,12 +259,16 @@ a:hover {
   border-radius: var(--radius-xl);
   padding: 32px;
   box-shadow: var(--shadow-lg);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .card--error {
   border-color: rgba(248, 113, 113, 0.4);
-  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.15), var(--shadow-lg);
+  box-shadow:
+    0 0 0 1px rgba(248, 113, 113, 0.15),
+    var(--shadow-lg);
 }
 
 .card-title {
@@ -257,7 +285,9 @@ a:hover {
   border-radius: var(--radius);
   padding: 16px 20px;
   margin-bottom: 12px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .token-row:focus-within {
@@ -371,7 +401,11 @@ a:hover {
   align-items: center;
   justify-content: center;
   font-size: 1.1rem;
-  transition: border-color 0.2s, color 0.2s, background 0.2s, transform 0.15s;
+  transition:
+    border-color 0.2s,
+    color 0.2s,
+    background 0.2s,
+    transform 0.15s;
 }
 
 .flip-btn:hover {
@@ -391,7 +425,10 @@ a:hover {
   color: #0f1419;
   font-size: 1rem;
   font-weight: 700;
-  transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+  transition:
+    background 0.2s,
+    transform 0.1s,
+    box-shadow 0.2s;
 }
 
 .primary-btn:hover:not(:disabled) {
@@ -472,7 +509,10 @@ a:hover {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s, transform 0.1s;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    transform 0.1s;
 }
 
 .pool-card:hover {
@@ -560,7 +600,9 @@ a:hover {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 }
 
 .strategy-card:hover {
@@ -621,7 +663,9 @@ a:hover {
   color: var(--muted);
   font-size: 1.25rem;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 
 .price-adj-btn:hover {
@@ -766,7 +810,9 @@ a:hover {
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 
 .pool-save-btn:hover:not(:disabled) {

@@ -47,3 +47,28 @@ echo "  https://hashscan.io/testnet"
 echo ""
 echo "If you saw INVALID_FULL_PREFIX_SIGNATURE_FOR_PRECOMPILE: use an ECDSA (EVM) Hedera account for PRIVATE_KEY"
 echo "and see README 'Deploy / Create HTS token' troubleshooting."
+
+# ── Auto-register token in DynamoDB ──
+# Token address must be retrieved from HashScan (HTS assigns it on-chain).
+echo ""
+echo "=== Register token in DynamoDB ==="
+echo "Get the REAL token address from HashScan, then provide details below."
+echo "(Press Ctrl+C to skip registration)"
+read -rp "Token address (0x...): " REG_ADDRESS
+read -rp "Token symbol: " REG_SYMBOL
+read -rp "Token name: " REG_NAME
+read -rp "Decimals [4]: " REG_DECIMALS
+REG_DECIMALS="${REG_DECIMALS:-4}"
+
+if [[ -n "$REG_ADDRESS" && -n "$REG_SYMBOL" && -n "$REG_NAME" ]]; then
+  UI_DIR="$(cd "$REPO_ROOT/../ui" && pwd)"
+  node "$UI_DIR/scripts/register-token.cjs" \
+    --address "$REG_ADDRESS" \
+    --symbol "$REG_SYMBOL" \
+    --name "$REG_NAME" \
+    --decimals "$REG_DECIMALS" \
+    --hts
+else
+  echo "Skipped DynamoDB registration (missing fields)."
+  echo "Register manually: node ui/scripts/register-token.cjs --address 0x... --symbol SYM --name 'Name' --decimals 4 --hts"
+fi

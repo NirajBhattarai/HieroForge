@@ -1,11 +1,11 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App'
-import { HashPackProvider } from './context/HashPackContext'
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import "@/styles/globals.css";
+import App from "./App";
+import { HashPackProvider } from "./context/HashPackContext";
 
-const rootEl = document.getElementById('root')
-if (!rootEl) throw new Error('Root element #root not found')
+const rootEl = document.getElementById("root");
+if (!rootEl) throw new Error("Root element #root not found");
 
 createRoot(rootEl).render(
   <StrictMode>
@@ -13,4 +13,4 @@ createRoot(rootEl).render(
       <App />
     </HashPackProvider>
   </StrictMode>,
-)
+);

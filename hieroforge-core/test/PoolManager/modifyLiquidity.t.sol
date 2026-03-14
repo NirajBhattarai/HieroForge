@@ -28,6 +28,19 @@ import {IERC20} from "hedera-forking/IERC20.sol";
 ///   We also test EVM-native (address(0)) for cross-chain: Native-ERC20, Native-HTS, Native-Native (reverts).
 ///   Total: 1. HTS-HTS  2. ERC20-ERC20  3. ERC20-HTS  4. HTS-ERC20  5. Native-ERC20  6. Native-HTS  7. Native-Native (reverts)
 contract PoolManagerModifyLiquidityTest is Test, Deployers {
+    /// @notice Default initial sqrt price for the pool; set in a test then call initializeManagerRoutersAndPools() to re-init with it.
+    uint160 public initialSqrtPriceX96 = SQRT_PRICE_1_1;
+
+    function getInitialSqrtPriceX96() internal view override returns (uint160) {
+        return initialSqrtPriceX96;
+    }
+
+    /// @notice Option A: set custom sqrt price and re-init pool (deploy manager, currencies, init at given price). Use in tests that need a non-1:1 price.
+    function reinitPoolWithSqrtPrice(uint160 sqrtPriceX96) internal {
+        initialSqrtPriceX96 = sqrtPriceX96;
+        initializeManagerRoutersAndPools();
+    }
+
     function setUp() public {
         // HTS tokens via hedera-forking at 0x167. On Hedera, native (HBAR) is HTS-native. Run with --ffi
         initializeManagerRoutersAndPools();
@@ -391,12 +404,8 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         uint256 bal0Before = IERC20(Currency.unwrap(currency0)).balanceOf(address(modifyLiquidityRouter));
         uint256 bal1Before = IERC20(Currency.unwrap(currency1)).balanceOf(address(modifyLiquidityRouter));
 
-        ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: 0,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 0, salt: bytes32(0)});
         (BalanceDelta callerDelta, BalanceDelta feeDelta) =
             modifyLiquidityRouter.modifyLiquidity(key, params, ZERO_BYTES);
 
@@ -423,12 +432,8 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         require(IERC20(Currency.unwrap(currency1)).transfer(address(modifyLiquidityRouter), fundAmount), "t1");
 
         int256 L = 2000;
-        ModifyLiquidityParams memory addParams = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: L,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory addParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: L, salt: bytes32(0)});
         (BalanceDelta addDelta,) = modifyLiquidityRouter.modifyLiquidity(key, addParams, ZERO_BYTES);
         assertLt(int256(addDelta.amount0()), 0, "add: pay token0");
         assertLt(int256(addDelta.amount1()), 0, "add: pay token1");
@@ -436,12 +441,8 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         uint256 routerBal0AfterAdd = IERC20(Currency.unwrap(currency0)).balanceOf(address(modifyLiquidityRouter));
         uint256 routerBal1AfterAdd = IERC20(Currency.unwrap(currency1)).balanceOf(address(modifyLiquidityRouter));
 
-        ModifyLiquidityParams memory removeParams = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: -L,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory removeParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: -L, salt: bytes32(0)});
         (BalanceDelta removeDelta,) = modifyLiquidityRouter.modifyLiquidity(key, removeParams, ZERO_BYTES);
         assertGt(int256(removeDelta.amount0()), 0, "remove: receive token0");
         assertGt(int256(removeDelta.amount1()), 0, "remove: receive token1");
@@ -473,12 +474,8 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         require(IERC20(Currency.unwrap(currency1)).transfer(address(modifyLiquidityRouter), fundAmount), "t1");
 
         // Current tick -240; range [-120, 120] is entirely above current tick -> only token0
-        ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: 1000,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1000, salt: bytes32(0)});
         (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(poolKey, params, ZERO_BYTES);
 
         assertLt(int256(delta.amount0()), 0, "should pay token0");
@@ -495,12 +492,8 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         require(IERC20(Currency.unwrap(currency1)).transfer(address(modifyLiquidityRouter), fundAmount), "t1");
 
         // Current tick 120; range [-120, 0] is entirely below current tick -> only token1
-        ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 0,
-            liquidityDelta: 1000,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 0, liquidityDelta: 1000, salt: bytes32(0)});
         (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(poolKey, params, ZERO_BYTES);
 
         assertEq(delta.amount0(), 0, "should not pay token0");
@@ -513,33 +506,21 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         require(IERC20(Currency.unwrap(currency0)).transfer(address(modifyLiquidityRouter), fundAmount), "t0");
         require(IERC20(Currency.unwrap(currency1)).transfer(address(modifyLiquidityRouter), fundAmount), "t1");
 
-        ModifyLiquidityParams memory params0 = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: 500,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory params0 =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 500, salt: bytes32(0)});
         (BalanceDelta d0,) = modifyLiquidityRouter.modifyLiquidity(key, params0, ZERO_BYTES);
         assertLt(int256(d0.amount0()), 0);
         assertLt(int256(d0.amount1()), 0);
 
-        ModifyLiquidityParams memory params1 = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: 300,
-            salt: bytes32(uint256(1))
-        });
+        ModifyLiquidityParams memory params1 =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 300, salt: bytes32(uint256(1))});
         (BalanceDelta d1,) = modifyLiquidityRouter.modifyLiquidity(key, params1, ZERO_BYTES);
         assertLt(int256(d1.amount0()), 0);
         assertLt(int256(d1.amount1()), 0);
 
         // Remove first position only
-        ModifyLiquidityParams memory remove0 = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: -500,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory remove0 =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: -500, salt: bytes32(0)});
         (BalanceDelta r0,) = modifyLiquidityRouter.modifyLiquidity(key, remove0, ZERO_BYTES);
         assertGt(int256(r0.amount0()), 0);
         assertGt(int256(r0.amount1()), 0);
@@ -551,12 +532,8 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         require(IERC20(Currency.unwrap(currency0)).transfer(address(modifyLiquidityRouter), fundAmount), "t0");
         require(IERC20(Currency.unwrap(currency1)).transfer(address(modifyLiquidityRouter), fundAmount), "t1");
 
-        ModifyLiquidityParams memory addParams = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: 1000,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory addParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1000, salt: bytes32(0)});
         modifyLiquidityRouter.modifyLiquidity(key, addParams, ZERO_BYTES);
 
         ModifyLiquidityParams memory removeTooMuch = ModifyLiquidityParams({
@@ -574,10 +551,7 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         // maxLiquidityPerTick for tickSpacing 60 is ~type(uint128).max/29576; use L that fits int128 but exceeds that
         uint128 overflowL = type(uint128).max / 29576 + 1;
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: int256(uint256(overflowL)),
-            salt: bytes32(0)
+            tickLower: -120, tickUpper: 120, liquidityDelta: int256(uint256(overflowL)), salt: bytes32(0)
         });
         vm.expectRevert(abi.encodeWithSelector(TickLiquidityOverflow.selector, int24(-120)));
         modifyLiquidityRouter.modifyLiquidity(key, params, ZERO_BYTES);
@@ -589,21 +563,13 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         require(IERC20(Currency.unwrap(currency0)).transfer(address(modifyLiquidityRouter), fundAmount), "t0");
         require(IERC20(Currency.unwrap(currency1)).transfer(address(modifyLiquidityRouter), fundAmount), "t1");
 
-        ModifyLiquidityParams memory addParams = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: 1000,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory addParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 1000, salt: bytes32(0)});
         modifyLiquidityRouter.modifyLiquidity(key, addParams, ZERO_BYTES);
 
         // Modify with zero delta (e.g. "claim"): no swaps so fee growth unchanged, feeDelta should be 0
-        ModifyLiquidityParams memory claimParams = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: 0,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory claimParams =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 0, salt: bytes32(0)});
         (, BalanceDelta feeDelta) = modifyLiquidityRouter.modifyLiquidity(key, claimParams, ZERO_BYTES);
         assertEq(feeDelta.amount0(), 0, "fee0 zero when no swaps");
         assertEq(feeDelta.amount1(), 0, "fee1 zero when no swaps");
@@ -615,22 +581,14 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         require(IERC20(Currency.unwrap(currency0)).transfer(address(modifyLiquidityRouter), fundAmount), "t0");
         require(IERC20(Currency.unwrap(currency1)).transfer(address(modifyLiquidityRouter), fundAmount), "t1");
 
-        ModifyLiquidityParams memory narrow = ModifyLiquidityParams({
-            tickLower: -60,
-            tickUpper: 60,
-            liquidityDelta: 800,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory narrow =
+            ModifyLiquidityParams({tickLower: -60, tickUpper: 60, liquidityDelta: 800, salt: bytes32(0)});
         (BalanceDelta dNarrow,) = modifyLiquidityRouter.modifyLiquidity(key, narrow, ZERO_BYTES);
         assertLt(int256(dNarrow.amount0()), 0);
         assertLt(int256(dNarrow.amount1()), 0);
 
-        ModifyLiquidityParams memory wide = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: 500,
-            salt: bytes32(uint256(1))
-        });
+        ModifyLiquidityParams memory wide =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: 500, salt: bytes32(uint256(1))});
         (BalanceDelta dWide,) = modifyLiquidityRouter.modifyLiquidity(key, wide, ZERO_BYTES);
         assertLt(int256(dWide.amount0()), 0);
         assertLt(int256(dWide.amount1()), 0);
@@ -640,7 +598,7 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
     function test_modifyLiquidity_boundaryTicks_alignedSucceeds() public {
         int24 tickSpacing = 60;
         int24 tickLower = -887220; // -14787 * 60, aligned
-        int24 tickUpper = 887220;  // 14787 * 60, aligned
+        int24 tickUpper = 887220; // 14787 * 60, aligned
         uint160 sqrtPrice = SQRT_PRICE_1_1;
         (PoolKey memory poolKey,) = initPool(currency0, currency1, 2500, tickSpacing, sqrtPrice);
 
@@ -648,12 +606,8 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         require(IERC20(Currency.unwrap(currency0)).transfer(address(modifyLiquidityRouter), fundAmount), "t0");
         require(IERC20(Currency.unwrap(currency1)).transfer(address(modifyLiquidityRouter), fundAmount), "t1");
 
-        ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            tickLower: tickLower,
-            tickUpper: tickUpper,
-            liquidityDelta: 100,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: tickLower, tickUpper: tickUpper, liquidityDelta: 100, salt: bytes32(0)});
         (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(poolKey, params, ZERO_BYTES);
         assertLt(int256(delta.amount0()), 0);
         assertLt(int256(delta.amount1()), 0);
@@ -667,10 +621,7 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
 
         // Pool at tick 0 (price 1:1); range [-120, 120] contains current tick; use small L so router has enough
         ModifyLiquidityParams memory params = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: int256(uint256(1000)),
-            salt: bytes32(0)
+            tickLower: -120, tickUpper: 120, liquidityDelta: int256(uint256(1000)), salt: bytes32(0)
         });
         (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(key, params, ZERO_BYTES);
 
@@ -685,23 +636,60 @@ contract PoolManagerModifyLiquidityTest is Test, Deployers {
         require(IERC20(Currency.unwrap(currency1)).transfer(address(modifyLiquidityRouter), fundAmount), "t1");
 
         int256 L = 1000;
-        ModifyLiquidityParams memory add = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: L,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory add =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: L, salt: bytes32(0)});
         modifyLiquidityRouter.modifyLiquidity(key, add, ZERO_BYTES);
         modifyLiquidityRouter.modifyLiquidity(key, add, ZERO_BYTES);
 
-        ModifyLiquidityParams memory removeAll = ModifyLiquidityParams({
-            tickLower: -120,
-            tickUpper: 120,
-            liquidityDelta: -2 * L,
-            salt: bytes32(0)
-        });
+        ModifyLiquidityParams memory removeAll =
+            ModifyLiquidityParams({tickLower: -120, tickUpper: 120, liquidityDelta: -2 * L, salt: bytes32(0)});
         (BalanceDelta removeDelta,) = modifyLiquidityRouter.modifyLiquidity(key, removeAll, ZERO_BYTES);
         assertGt(int256(removeDelta.amount0()), 0);
         assertGt(int256(removeDelta.amount1()), 0);
+    }
+
+    /// @notice Add liquidity with 1:3 price (range [0.3, 0.4]); L chosen so required amounts fit HTS supply (5e9)
+    function test_modifyLiquidity_addLiqudityWith1_3Price_succeeds() public {
+        uint160 SQRT_PRICE_1_3 = 45746622930794429382959749662549926200;
+        reinitPoolWithSqrtPrice(SQRT_PRICE_1_3);
+
+        int24 tickLower = -12060;
+        int24 tickUpper = -9120;
+
+        // L large enough that amount0/amount1 are non-zero, but required amounts fit HTS supply (5e9)
+        int256 L = 1000;
+        ModifyLiquidityParams memory params =
+            ModifyLiquidityParams({tickLower: tickLower, tickUpper: tickUpper, liquidityDelta: L, salt: bytes32(0)});
+
+        uint256 fundAmount = 5e9;
+        require(IERC20(Currency.unwrap(currency0)).transfer(address(modifyLiquidityRouter), fundAmount), "transfer0");
+        require(IERC20(Currency.unwrap(currency1)).transfer(address(modifyLiquidityRouter), fundAmount), "transfer1");
+
+        uint256 managerBal0Before = IERC20(Currency.unwrap(currency0)).balanceOf(address(manager));
+        uint256 managerBal1Before = IERC20(Currency.unwrap(currency1)).balanceOf(address(manager));
+
+        (BalanceDelta delta,) = modifyLiquidityRouter.modifyLiquidity(key, params, ZERO_BYTES);
+
+        // Adding liquidity: we pay at least one token (current tick can be below, inside, or above range)
+        assertTrue(delta.amount0() < 0 || delta.amount1() < 0, "should pay at least token0 or token1");
+
+        uint256 paid0 = delta.amount0() < 0 ? uint256(uint128(-delta.amount0())) : 0;
+        uint256 paid1 = delta.amount1() < 0 ? uint256(uint128(-delta.amount1())) : 0;
+
+        assertEq(
+            IERC20(Currency.unwrap(currency0)).balanceOf(address(manager)),
+            managerBal0Before + paid0,
+            "manager should have received token0"
+        );
+        assertEq(
+            IERC20(Currency.unwrap(currency1)).balanceOf(address(manager)),
+            managerBal1Before + paid1,
+            "manager should have received token1"
+        );
+
+        // When both tokens are required (tick inside range), ratio paid0:paid1 ~ 1000:196
+        if (paid0 > 0 && paid1 > 0) {
+            assertApproxEqRel(paid0 * 196, paid1 * 1000, 0.05e18, "paid0:paid1 ~ 1000:196");
+        }
     }
 }

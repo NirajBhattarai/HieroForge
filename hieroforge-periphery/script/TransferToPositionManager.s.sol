@@ -36,15 +36,13 @@ contract TransferToPositionManagerScript is Script {
 
         if (amount0 > 0 && currency0 != address(0)) {
             require(
-                IERC20Minimal(currency0).transfer(positionManagerAddr, amount0),
-                "TransferToPM: transfer token0 failed"
+                IERC20Minimal(currency0).transfer(positionManagerAddr, amount0), "TransferToPM: transfer token0 failed"
             );
             console.log("Transferred token0 to PositionManager:", amount0);
         }
         if (amount1 > 0 && currency1 != address(0)) {
             require(
-                IERC20Minimal(currency1).transfer(positionManagerAddr, amount1),
-                "TransferToPM: transfer token1 failed"
+                IERC20Minimal(currency1).transfer(positionManagerAddr, amount1), "TransferToPM: transfer token1 failed"
             );
             console.log("Transferred token1 to PositionManager:", amount1);
         }
