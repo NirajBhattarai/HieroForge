@@ -105,6 +105,9 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
     useState<TokenOption | null>(null);
   const [multiHopEnabled, setMultiHopEnabled] = useState(false);
 
+  // Track whether a valid pool exists for the current token pair
+  const [hasPool, setHasPool] = useState(false);
+
   // Swap mode & slippage settings
   const [swapMode, setSwapMode] = useState<SwapMode>("exactIn");
   const [slippage, setSlippage] = useState(2);
@@ -126,11 +129,52 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
     resolveDecimals(tokenOut),
   );
 
+  // When a pool is selected, auto-set tokenIn/tokenOut to the pool's tokens
   useEffect(() => {
-    if (tokenOptions.length >= 2 && !tokenIn.symbol && !tokenOut.symbol) {
-      setTokenIn(tokenOptions[0]!);
-      setTokenOut(tokenOptions[1]!);
+    if (!selectedPool || tokenOptions.length === 0) {
+      if (!selectedPool) {
+        setHasPool(false);
+        setAmountIn("");
+        setAmountOut("");
+      }
+      return;
     }
+    const c0 = selectedPool.currency0.toLowerCase();
+    const c1 = selectedPool.currency1.toLowerCase();
+    const match0 = tokenOptions.find((t) => (t.address ?? "").toLowerCase() === c0);
+    const match1 = tokenOptions.find((t) => (t.address ?? "").toLowerCase() === c1);
+    if (match0 && match1) {
+      setTokenIn(match0);
+      setTokenOut(match1);
+      setSwapFee(selectedPool.fee);
+      setHasPool(true);
+    }
+  }, [selectedPool?.poolId, tokenOptions.length]);
+
+  // Fallback: when no pool is selected, fetch pools and pick tokens from the first pool
+  useEffect(() => {
+    if (tokenOptions.length < 2 || tokenIn.symbol || tokenOut.symbol || selectedPool) return;
+    let cancelled = false;
+    fetch("/api/pools")
+      .then((r) => r.json())
+      .then((pools: Array<{ currency0: string; currency1: string; fee: number }>) => {
+        if (cancelled || !pools.length) return;
+        const pool = pools[0]!;
+        const c0 = pool.currency0.toLowerCase();
+        const c1 = pool.currency1.toLowerCase();
+        const match0 = tokenOptions.find((t) => (t.address ?? "").toLowerCase() === c0);
+        const match1 = tokenOptions.find((t) => (t.address ?? "").toLowerCase() === c1);
+        if (match0 && match1) {
+          setTokenIn(match0);
+          setTokenOut(match1);
+          setSwapFee(pool.fee);
+          setHasPool(true);
+        }
+      })
+      .catch(() => {
+        // If fetching pools fails, don't set tokens without a valid pool
+      });
+    return () => { cancelled = true; };
   }, [tokenOptions.length]);
 
   const quoterAddress = getQuoterAddress();
@@ -150,8 +194,9 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
     });
   }
 
-  // Quote
+  // Quote — skip if no valid pool
   useEffect(() => {
+    if (!hasPool) return;
     const primaryAmount = swapMode === "exactIn" ? amountIn : amountOut;
     if (
       !quoterAddress ||
@@ -332,6 +377,7 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
     quoterAddress,
     selectedPool,
     swapFee,
+    hasPool,
   ]);
 
   const flipTokens = () => {
@@ -339,7 +385,6 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
     setTokenOut(tokenIn);
     setAmountIn(amountOut);
     setAmountOut(amountIn);
-    // Flip mode too (input becomes output and vice versa)
     setSwapMode(swapMode === "exactIn" ? "exactOut" : "exactIn");
   };
 
@@ -511,6 +556,7 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
   // Determine button state
   const getButtonState = () => {
     if (!isConnected) return { text: "Connect Wallet", disabled: true };
+    if (!hasPool) return { text: "Select a pool", disabled: true };
     if (!amountIn || parseFloat(amountIn) === 0)
       return { text: "Enter an amount", disabled: true };
     if (quoteLoading) return { text: "Fetching quote...", disabled: true };
@@ -543,37 +589,6 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
                   <h2 className="text-lg font-semibold text-text-primary tracking-tight">
                     Swap
                   </h2>
-                  {/* Mode toggle */}
-                  <div className="flex rounded-lg bg-surface-2/80 border border-white/[0.06] p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSwapMode("exactIn");
-                        setAmountOut("");
-                      }}
-                      className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all cursor-pointer ${
-                        swapMode === "exactIn"
-                          ? "bg-accent/20 text-accent"
-                          : "text-text-tertiary hover:text-text-secondary"
-                      }`}
-                    >
-                      Exact In
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSwapMode("exactOut");
-                        setAmountIn("");
-                      }}
-                      className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all cursor-pointer ${
-                        swapMode === "exactOut"
-                          ? "bg-accent/20 text-accent"
-                          : "text-text-tertiary hover:text-text-secondary"
-                      }`}
-                    >
-                      Exact Out
-                    </button>
-                  </div>
                 </div>
                 <button
                   type="button"
@@ -744,20 +759,26 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  {swapMode === "exactOut" && quoteLoading ? (
-                    <Skeleton className="h-9 w-40 flex-1 rounded-lg" />
-                  ) : (
+                  <div className="flex-1 min-w-0 relative">
                     <input
                       type="text"
                       inputMode="decimal"
-                      className="flex-1 bg-transparent text-3xl font-semibold text-text-primary placeholder:text-text-disabled outline-none min-w-0"
-                      placeholder="0"
-                      value={amountIn}
-                      readOnly={swapMode === "exactOut" && !!quoterAddress}
-                      onChange={(e) => setAmountIn(e.target.value)}
+                      className="w-full bg-transparent text-3xl font-semibold text-text-primary placeholder:text-text-disabled outline-none disabled:cursor-not-allowed"
+                      placeholder={hasPool ? "0" : ""}
+                      value={hasPool ? amountIn : ""}
+                      onChange={(e) => {
+                        setAmountIn(e.target.value);
+                        setSwapMode("exactIn");
+                      }}
+                      disabled={!hasPool}
                       aria-label="Amount to pay"
                     />
-                  )}
+                    {swapMode === "exactOut" && quoteLoading && (
+                      <div className="absolute inset-0 flex items-center">
+                        <Skeleton className="h-9 w-40 rounded-lg" />
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={() => setSelectorOpen("in")}
@@ -823,21 +844,27 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  {swapMode === "exactIn" && quoteLoading ? (
-                    <Skeleton className="h-9 w-40 flex-1 rounded-lg" />
-                  ) : (
+                  <div className="flex-1 min-w-0 relative">
                     <input
                       type="text"
                       inputMode="decimal"
-                      className="flex-1 bg-transparent text-3xl font-semibold text-text-primary placeholder:text-text-disabled outline-none min-w-0"
-                      placeholder="0"
-                      value={amountOut}
-                      readOnly={swapMode === "exactIn" && !!quoterAddress}
-                      onChange={(e) => setAmountOut(e.target.value)}
+                      className="w-full bg-transparent text-3xl font-semibold text-text-primary placeholder:text-text-disabled outline-none disabled:cursor-not-allowed"
+                      placeholder={hasPool ? "0" : ""}
+                      value={hasPool ? amountOut : ""}
+                      onChange={(e) => {
+                        setAmountOut(e.target.value);
+                        setSwapMode("exactOut");
+                      }}
+                      disabled={!hasPool}
                       aria-label="Amount to receive"
                       aria-invalid={!!quoteError}
                     />
-                  )}
+                    {swapMode === "exactIn" && quoteLoading && (
+                      <div className="absolute inset-0 flex items-center">
+                        <Skeleton className="h-9 w-40 rounded-lg" />
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={() => setSelectorOpen("out")}
@@ -870,8 +897,15 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
                 )}
               </div>
 
+              {/* No pool message */}
+              {!hasPool && (
+                <div className="px-1 py-3 mt-2 text-center">
+                  <span className="text-sm text-text-tertiary">Select a pool to start swapping</span>
+                </div>
+              )}
+
               {/* Route & rate info */}
-              {amountIn && amountOut && !quoteError && (
+              {hasPool && amountIn && amountOut && !quoteError && (
                 <div className="px-1 py-2 mt-2 space-y-1">
                   {/* Route display */}
                   {multiHopEnabled && intermediateToken && (

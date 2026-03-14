@@ -79,7 +79,11 @@ export async function hederaContractExecute(params: {
   // 6. Get the transaction ID for logging/UI
   const txId =
     txResponse?.transactionId?.toString() ?? `hedera-tx-${Date.now()}`;
-  console.log("[hederaContractExecute] tx completed:", txId);
+  console.log("[hederaContractExecute] tx submitted:", txId);
+
+  // 7. Poll mirror node to confirm the transaction actually succeeded
+  await waitForTransactionSuccess(txId);
+  console.log("[hederaContractExecute] tx confirmed SUCCESS:", txId);
 
   return txId;
 }
@@ -210,4 +214,72 @@ export async function hederaContractMulticall(params: {
     txResponse?.transactionId?.toString() ?? `hedera-tx-${Date.now()}`;
   console.log("[hederaContractMulticall] tx completed:", txId);
   return txId;
+}
+
+const MIRROR_NODE = "https://testnet.mirrornode.hedera.com";
+
+/**
+ * Poll the Hedera mirror node until the transaction reaches consensus,
+ * then check if it succeeded. Throws if the transaction failed or timed out.
+ *
+ * Hedera transaction IDs look like "0.0.12345@1234567890.123456789"
+ * Mirror node expects the format "0.0.12345-1234567890-123456789"
+ */
+async function waitForTransactionSuccess(
+  txId: string,
+  maxAttempts = 20,
+  intervalMs = 3000,
+): Promise<void> {
+  // Convert SDK txId format "0.0.X@seconds.nanos" → mirror node format "0.0.X-seconds-nanos"
+  const atIdx = txId.indexOf("@");
+  if (atIdx === -1) {
+    // Can't verify without a valid transaction ID format
+    console.warn("[waitForTransactionSuccess] Non-standard txId format, skipping verification:", txId);
+    return;
+  }
+  const accountPart = txId.substring(0, atIdx); // "0.0.X"
+  const timestampPart = txId.substring(atIdx + 1); // "seconds.nanos"
+  const mirrorTxId = `${accountPart}-${timestampPart.replace(".", "-")}`;
+
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const res = await fetch(
+        `${MIRROR_NODE}/api/v1/transactions/${mirrorTxId}`,
+      );
+      if (res.status === 404) {
+        // Transaction not yet indexed — wait and retry
+        await new Promise((r) => setTimeout(r, intervalMs));
+        continue;
+      }
+      if (!res.ok) {
+        await new Promise((r) => setTimeout(r, intervalMs));
+        continue;
+      }
+      const data = await res.json();
+      const transactions = data?.transactions;
+      if (!transactions || transactions.length === 0) {
+        await new Promise((r) => setTimeout(r, intervalMs));
+        continue;
+      }
+      const result = transactions[0].result;
+      if (result === "SUCCESS") {
+        return; // Transaction confirmed successful
+      }
+      // Transaction reached consensus but failed
+      throw new Error(
+        `Transaction failed on-chain: ${result}`,
+      );
+    } catch (err) {
+      // Re-throw our own errors (transaction failures)
+      if (err instanceof Error && err.message.startsWith("Transaction failed")) {
+        throw err;
+      }
+      // Network errors — wait and retry
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+  }
+  throw new Error(
+    "Transaction confirmation timed out — check HashScan for status",
+  );
 }

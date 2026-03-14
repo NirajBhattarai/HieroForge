@@ -85,33 +85,53 @@ const PATH_KEY_TUPLE = {
 };
 
 const EXACT_INPUT_SINGLE_PARAMS = [
-  POOL_KEY_TUPLE,
-  { type: "bool" as const, name: "zeroForOne" },
-  { type: "uint128" as const, name: "amountIn" },
-  { type: "uint128" as const, name: "amountOutMinimum" },
-  { type: "bytes" as const, name: "hookData" },
+  {
+    type: "tuple" as const,
+    components: [
+      POOL_KEY_TUPLE,
+      { type: "bool" as const, name: "zeroForOne" },
+      { type: "uint128" as const, name: "amountIn" },
+      { type: "uint128" as const, name: "amountOutMinimum" },
+      { type: "bytes" as const, name: "hookData" },
+    ],
+  },
 ];
 
 const EXACT_OUTPUT_SINGLE_PARAMS = [
-  POOL_KEY_TUPLE,
-  { type: "bool" as const, name: "zeroForOne" },
-  { type: "uint128" as const, name: "amountOut" },
-  { type: "uint128" as const, name: "amountInMaximum" },
-  { type: "bytes" as const, name: "hookData" },
+  {
+    type: "tuple" as const,
+    components: [
+      POOL_KEY_TUPLE,
+      { type: "bool" as const, name: "zeroForOne" },
+      { type: "uint128" as const, name: "amountOut" },
+      { type: "uint128" as const, name: "amountInMaximum" },
+      { type: "bytes" as const, name: "hookData" },
+    ],
+  },
 ];
 
 const EXACT_INPUT_PARAMS = [
-  { type: "address" as const, name: "currencyIn" },
-  PATH_KEY_TUPLE,
-  { type: "uint128" as const, name: "amountIn" },
-  { type: "uint128" as const, name: "amountOutMinimum" },
+  {
+    type: "tuple" as const,
+    components: [
+      { type: "address" as const, name: "currencyIn" },
+      PATH_KEY_TUPLE,
+      { type: "uint128" as const, name: "amountIn" },
+      { type: "uint128" as const, name: "amountOutMinimum" },
+    ],
+  },
 ];
 
 const EXACT_OUTPUT_PARAMS = [
-  { type: "address" as const, name: "currencyOut" },
-  PATH_KEY_TUPLE,
-  { type: "uint128" as const, name: "amountOut" },
-  { type: "uint128" as const, name: "amountInMaximum" },
+  {
+    type: "tuple" as const,
+    components: [
+      { type: "address" as const, name: "currencyOut" },
+      PATH_KEY_TUPLE,
+      { type: "uint128" as const, name: "amountOut" },
+      { type: "uint128" as const, name: "amountInMaximum" },
+    ],
+  },
 ];
 
 // --- Helper to pack action bytes ---
@@ -204,11 +224,13 @@ export function encodeSwapExactInSingle(params: {
   );
 
   const swapParam = encodeAbiParameters(EXACT_INPUT_SINGLE_PARAMS, [
-    poolKey,
-    zeroForOne,
-    amountIn,
-    amountOutMinimum,
-    "0x",
+    {
+      poolKey,
+      zeroForOne,
+      amountIn,
+      amountOutMinimum,
+      hookData: "0x",
+    },
   ]);
   const settleParam = encodeSettleAll(currencyIn, amountIn);
   const takeParam = encodeTakeAll(currencyOut, amountOutMinimum);
@@ -238,11 +260,13 @@ export function encodeSwapExactOutSingle(params: {
   );
 
   const swapParam = encodeAbiParameters(EXACT_OUTPUT_SINGLE_PARAMS, [
-    poolKey,
-    zeroForOne,
-    amountOut,
-    amountInMaximum,
-    "0x",
+    {
+      poolKey,
+      zeroForOne,
+      amountOut,
+      amountInMaximum,
+      hookData: "0x",
+    },
   ]);
   const settleParam = encodeSettleAll(currencyIn, amountInMaximum);
   const takeParam = encodeTakeAll(currencyOut, amountOut);
@@ -277,16 +301,18 @@ export function encodeSwapExactIn(params: {
   );
 
   const swapParam = encodeAbiParameters(EXACT_INPUT_PARAMS, [
-    currencyIn,
-    path.map((p) => ({
-      intermediateCurrency: p.intermediateCurrency,
-      fee: p.fee,
-      tickSpacing: p.tickSpacing,
-      hooks: p.hooks,
-      hookData: p.hookData,
-    })),
-    amountIn,
-    amountOutMinimum,
+    {
+      currencyIn,
+      path: path.map((p) => ({
+        intermediateCurrency: p.intermediateCurrency,
+        fee: p.fee,
+        tickSpacing: p.tickSpacing,
+        hooks: p.hooks,
+        hookData: p.hookData,
+      })),
+      amountIn,
+      amountOutMinimum,
+    },
   ]);
   const settleParam = encodeSettleAll(currencyIn, amountIn);
   const takeParam = encodeTakeAll(currencyOut, amountOutMinimum);
@@ -321,16 +347,18 @@ export function encodeSwapExactOut(params: {
   );
 
   const swapParam = encodeAbiParameters(EXACT_OUTPUT_PARAMS, [
-    currencyOut,
-    path.map((p) => ({
-      intermediateCurrency: p.intermediateCurrency,
-      fee: p.fee,
-      tickSpacing: p.tickSpacing,
-      hooks: p.hooks,
-      hookData: p.hookData,
-    })),
-    amountOut,
-    amountInMaximum,
+    {
+      currencyOut,
+      path: path.map((p) => ({
+        intermediateCurrency: p.intermediateCurrency,
+        fee: p.fee,
+        tickSpacing: p.tickSpacing,
+        hooks: p.hooks,
+        hookData: p.hookData,
+      })),
+      amountOut,
+      amountInMaximum,
+    },
   ]);
   const settleParam = encodeSettleAll(currencyIn, amountInMaximum);
   const takeParam = encodeTakeAll(currencyOut, amountOut);
