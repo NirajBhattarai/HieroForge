@@ -29,7 +29,14 @@ const HEDERA_GAS_ERC20 = 1_200_000;
 const HEDERA_GAS_MODIFY_LIQ = 5_000_000;
 const HEDERA_GAS_INITIALIZE = 3_000_000;
 
-import { tickToPrice, priceToTick, roundToTickSpacing, encodePriceSqrt, computeLiquidityFromAmount, liquidityToWei } from "@/lib/priceUtils";
+import {
+  tickToPrice,
+  priceToTick,
+  roundToTickSpacing,
+  encodePriceSqrt,
+  computeLiquidityFromAmount,
+  liquidityToWei,
+} from "@/lib/priceUtils";
 import { getFriendlyErrorMessage } from "@/lib/errors";
 import { PoolManagerAbi } from "@/abis/PoolManager";
 import { PositionManagerAbi } from "@/abis/PositionManager";
@@ -112,7 +119,12 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     tok.decimals ?? getTokenDecimals(tok.symbol);
 
   // Step 1: pair + fee
-  const EMPTY_TOKEN: TokenOption = { id: "", symbol: "", address: "", decimals: 18 };
+  const EMPTY_TOKEN: TokenOption = {
+    id: "",
+    symbol: "",
+    address: "",
+    decimals: 18,
+  };
   const [token0, setToken0] = useState<TokenOption>(EMPTY_TOKEN);
   const [token1, setToken1] = useState<TokenOption>(EMPTY_TOKEN);
 
@@ -359,7 +371,13 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
         return;
       }
 
-      const result = computeLiquidityFromAmount(initialPrice, priceLower, priceUpper, inputAmt, inputToken);
+      const result = computeLiquidityFromAmount(
+        initialPrice,
+        priceLower,
+        priceUpper,
+        inputAmt,
+        inputToken,
+      );
       const dec0 = resolveDecimals(token0);
       const dec1 = resolveDecimals(token1);
       const liqWei = liquidityToWei(result.liquidity, dec0, dec1);
@@ -369,18 +387,20 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
         if (depositMode === "token0Only") {
           setAmount1("");
         } else {
-          const newA1 = result.amount1 > 0
-            ? parseFloat(result.amount1.toFixed(Math.min(dec1, 8))).toString()
-            : "0";
+          const newA1 =
+            result.amount1 > 0
+              ? parseFloat(result.amount1.toFixed(Math.min(dec1, 8))).toString()
+              : "0";
           setAmount1(newA1);
         }
       } else {
         if (depositMode === "token1Only") {
           setAmount0("");
         } else {
-          const newA0 = result.amount0 > 0
-            ? parseFloat(result.amount0.toFixed(Math.min(dec0, 8))).toString()
-            : "0";
+          const newA0 =
+            result.amount0 > 0
+              ? parseFloat(result.amount0.toFixed(Math.min(dec0, 8))).toString()
+              : "0";
           setAmount0(newA0);
         }
       }
@@ -531,7 +551,9 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
       return;
     }
     if (liquidityWei === 0n) {
-      setError("Could not compute liquidity from the given amounts and price range. Adjust your inputs.");
+      setError(
+        "Could not compute liquidity from the given amounts and price range. Adjust your inputs.",
+      );
       return;
     }
 
@@ -745,9 +767,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
           symbol1: token1.symbol,
           deployedBy,
           initialPrice: initialPriceStr,
-          sqrtPriceX96: String(
-            encodePriceSqrt(initialPrice, dec0, dec1),
-          ),
+          sqrtPriceX96: String(encodePriceSqrt(initialPrice, dec0, dec1)),
           decimals0: dec0,
           decimals1: dec1,
         }),
@@ -759,7 +779,17 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     } finally {
       setSavePending(false);
     }
-  }, [token0Addr, token1Addr, token0, token1, fee, tickSpacing, accountId, initialPriceStr, initialPrice]);
+  }, [
+    token0Addr,
+    token1Addr,
+    token0,
+    token1,
+    fee,
+    tickSpacing,
+    accountId,
+    initialPriceStr,
+    initialPrice,
+  ]);
 
   const sym0 = resolved0?.symbol ?? token0.symbol;
   const sym1 = resolved1?.symbol ?? token1.symbol;
@@ -924,8 +954,16 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                   if (found) {
                     setToken0(found);
                     setToken0Addr(found.address ?? "");
-                  } else if (isAddressLike(t.address ?? ""))
+                  } else if (isAddressLike(t.address ?? "")) {
+                    setToken0({
+                      id: t.address ?? "",
+                      symbol: t.symbol,
+                      address: t.address,
+                      decimals: t.decimals,
+                      name: t.name,
+                    });
                     setToken0Addr(t.address ?? "");
+                  }
                   setToken0SelectorOpen(false);
                 }}
                 tokens={selectorTokens}
@@ -944,8 +982,16 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                   if (found) {
                     setToken1(found);
                     setToken1Addr(found.address ?? "");
-                  } else if (isAddressLike(t.address ?? ""))
+                  } else if (isAddressLike(t.address ?? "")) {
+                    setToken1({
+                      id: t.address ?? "",
+                      symbol: t.symbol,
+                      address: t.address,
+                      decimals: t.decimals,
+                      name: t.name,
+                    });
                     setToken1Addr(t.address ?? "");
+                  }
                   setToken1SelectorOpen(false);
                 }}
                 tokens={selectorTokens}
@@ -1088,10 +1134,6 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                 </div>
               )}
 
-              <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm bg-accent-muted text-accent">
-                ⚡ New position — pool will be initialized at {initialPriceStr} {sym1} per {sym0}
-              </div>
-
               <Button
                 variant="primary"
                 fullWidth
@@ -1116,9 +1158,9 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                     Set initial price
                   </h3>
                   <p className="text-sm text-text-tertiary">
-                    When creating a new pool, you must set the starting
-                    exchange rate for both tokens. This rate will reflect the
-                    initial market price.
+                    When creating a new pool, you must set the starting exchange
+                    rate for both tokens. This rate will reflect the initial
+                    market price.
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -1134,7 +1176,9 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                         priceQuotePerToken0
                           ? initialPriceStr
                           : initialPrice > 0
-                            ? (1 / initialPrice).toFixed(6).replace(/\.?0+$/, "")
+                            ? (1 / initialPrice)
+                                .toFixed(6)
+                                .replace(/\.?0+$/, "")
                             : ""
                       }
                       onChange={(e) => {
@@ -1348,24 +1392,32 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                     Deposit tokens
                   </h3>
                   <p className="text-sm text-text-tertiary">
-                    Enter the amount for one token — the other will be auto-calculated based on your price range.
+                    Enter the amount for one token — the other will be
+                    auto-calculated based on your price range.
                   </p>
                 </div>
 
                 {/* Token 0 deposit */}
-                <div className={`rounded-xl p-4 transition-all ${
-                  depositMode === "token1Only"
-                    ? "bg-surface-2/40 border border-white/[0.04] opacity-50"
-                    : "bg-surface-2/80 border border-white/[0.06]"
-                }`}>
+                <div
+                  className={`rounded-xl p-4 transition-all ${
+                    depositMode === "token1Only"
+                      ? "bg-surface-2/40 border border-white/[0.04] opacity-50"
+                      : "bg-surface-2/80 border border-white/[0.06]"
+                  }`}
+                >
                   {depositMode === "token1Only" && (
-                    <p className="text-xs text-warning mb-2">Current price is above your max price — only {sym1} is needed</p>
+                    <p className="text-xs text-warning mb-2">
+                      Current price is above your max price — only {sym1} is
+                      needed
+                    </p>
                   )}
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <input
                       type="text"
                       className={`flex-1 min-w-[80px] bg-transparent text-xl sm:text-2xl font-bold placeholder:text-text-tertiary focus:outline-none ${
-                        depositMode === "token1Only" ? "text-text-tertiary cursor-not-allowed" : "text-text-primary"
+                        depositMode === "token1Only"
+                          ? "text-text-tertiary cursor-not-allowed"
+                          : "text-text-primary"
                       }`}
                       placeholder="0"
                       value={amount0}
@@ -1387,45 +1439,58 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-1 mt-2 text-xs text-text-tertiary">
                     <span>
-                      {depositMode !== "token1Only" && amount0 && parseFloat(amount0) > 0
+                      {depositMode !== "token1Only" &&
+                      amount0 &&
+                      parseFloat(amount0) > 0
                         ? `≈ ${amount1AtPrice(amount0)} ${sym1}`
                         : ""}
                     </span>
                     <div className="flex items-center gap-2">
                       <span>
-                        Balance: {balance0Loading ? "…" : balance0Formatted} {sym0}
+                        Balance: {balance0Loading ? "…" : balance0Formatted}{" "}
+                        {sym0}
                       </span>
-                      {isConnected && balance0Formatted && balance0Formatted !== "0" && depositMode !== "token1Only" && (
-                        <button
-                          type="button"
-                          className="px-1.5 py-0.5 text-[10px] font-bold text-accent bg-accent/10 hover:bg-accent/20 rounded transition-colors cursor-pointer"
-                          onClick={() => {
-                            setAmount0(balance0Formatted);
-                            setLastEditedToken(0);
-                            recalcPairedAmount(0, balance0Formatted);
-                          }}
-                        >
-                          MAX
-                        </button>
-                      )}
+                      {isConnected &&
+                        balance0Formatted &&
+                        balance0Formatted !== "0" &&
+                        depositMode !== "token1Only" && (
+                          <button
+                            type="button"
+                            className="px-1.5 py-0.5 text-[10px] font-bold text-accent bg-accent/10 hover:bg-accent/20 rounded transition-colors cursor-pointer"
+                            onClick={() => {
+                              setAmount0(balance0Formatted);
+                              setLastEditedToken(0);
+                              recalcPairedAmount(0, balance0Formatted);
+                            }}
+                          >
+                            MAX
+                          </button>
+                        )}
                     </div>
                   </div>
                 </div>
 
                 {/* Token 1 deposit */}
-                <div className={`rounded-xl p-4 transition-all ${
-                  depositMode === "token0Only"
-                    ? "bg-surface-2/40 border border-white/[0.04] opacity-50"
-                    : "bg-surface-2/80 border border-white/[0.06]"
-                }`}>
+                <div
+                  className={`rounded-xl p-4 transition-all ${
+                    depositMode === "token0Only"
+                      ? "bg-surface-2/40 border border-white/[0.04] opacity-50"
+                      : "bg-surface-2/80 border border-white/[0.06]"
+                  }`}
+                >
                   {depositMode === "token0Only" && (
-                    <p className="text-xs text-warning mb-2">Current price is below your min price — only {sym0} is needed</p>
+                    <p className="text-xs text-warning mb-2">
+                      Current price is below your min price — only {sym0} is
+                      needed
+                    </p>
                   )}
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <input
                       type="text"
                       className={`flex-1 min-w-[80px] bg-transparent text-xl sm:text-2xl font-bold placeholder:text-text-tertiary focus:outline-none ${
-                        depositMode === "token0Only" ? "text-text-tertiary cursor-not-allowed" : "text-text-primary"
+                        depositMode === "token0Only"
+                          ? "text-text-tertiary cursor-not-allowed"
+                          : "text-text-primary"
                       }`}
                       placeholder="0"
                       value={amount1}
@@ -1447,27 +1512,33 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-1 mt-2 text-xs text-text-tertiary">
                     <span>
-                      {depositMode !== "token0Only" && amount1 && parseFloat(amount1) > 0
+                      {depositMode !== "token0Only" &&
+                      amount1 &&
+                      parseFloat(amount1) > 0
                         ? `≈ ${amount0AtPrice(amount1)} ${sym0}`
                         : ""}
                     </span>
                     <div className="flex items-center gap-2">
                       <span>
-                        Balance: {balance1Loading ? "…" : balance1Formatted} {sym1}
+                        Balance: {balance1Loading ? "…" : balance1Formatted}{" "}
+                        {sym1}
                       </span>
-                      {isConnected && balance1Formatted && balance1Formatted !== "0" && depositMode !== "token0Only" && (
-                        <button
-                          type="button"
-                          className="px-1.5 py-0.5 text-[10px] font-bold text-accent bg-accent/10 hover:bg-accent/20 rounded transition-colors cursor-pointer"
-                          onClick={() => {
-                            setAmount1(balance1Formatted);
-                            setLastEditedToken(1);
-                            recalcPairedAmount(1, balance1Formatted);
-                          }}
-                        >
-                          MAX
-                        </button>
-                      )}
+                      {isConnected &&
+                        balance1Formatted &&
+                        balance1Formatted !== "0" &&
+                        depositMode !== "token0Only" && (
+                          <button
+                            type="button"
+                            className="px-1.5 py-0.5 text-[10px] font-bold text-accent bg-accent/10 hover:bg-accent/20 rounded transition-colors cursor-pointer"
+                            onClick={() => {
+                              setAmount1(balance1Formatted);
+                              setLastEditedToken(1);
+                              recalcPairedAmount(1, balance1Formatted);
+                            }}
+                          >
+                            MAX
+                          </button>
+                        )}
                     </div>
                   </div>
                 </div>
@@ -1512,7 +1583,8 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                     disabled={
                       pending ||
                       (!amount0 && !amount1) ||
-                      (parseFloat(amount0 || "0") <= 0 && parseFloat(amount1 || "0") <= 0) ||
+                      (parseFloat(amount0 || "0") <= 0 &&
+                        parseFloat(amount1 || "0") <= 0) ||
                       !positionManagerAddress
                     }
                     onClick={addLiquidity}

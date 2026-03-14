@@ -7,18 +7,12 @@ import { Button } from "@/components/ui/Button";
 import { ErrorMessage } from "./ErrorMessage";
 import { useHashPack } from "@/context/HashPackContext";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
+import { getTokenDecimals, getPositionManagerAddress } from "@/constants";
 import {
-  getTokenDecimals,
-  getPositionManagerAddress,
-} from "@/constants";
-import {
-  buildPoolKey,
   encodeUnlockDataDecrease,
   encodeUnlockDataBurn,
 } from "@/lib/addLiquidity";
-import {
-  hederaContractMulticall,
-} from "@/lib/hederaContract";
+import { hederaContractMulticall } from "@/lib/hederaContract";
 import { PositionManagerAbi } from "@/abis/PositionManager";
 import { getFriendlyErrorMessage } from "@/lib/errors";
 import type { PoolInfo } from "./PoolPositions";
@@ -45,7 +39,7 @@ export function RemoveLiquidityModal({
   const { accountId, isConnected, hashConnectRef } = useHashPack();
   const [percent, setPercent] = useState(0);
   const [tokenId, setTokenId] = useState("");
-  const [liquidityAmount, setLiquidityAmount] = useState("");
+  const [positionLiquidity, setPositionLiquidity] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -66,11 +60,30 @@ export function RemoveLiquidityModal({
   const positionManagerAddress = getPositionManagerAddress();
   const hasSelection = percent > 0;
 
+  let liquidityAmount = "";
+  let liquidityWei: bigint = 0n;
+  try {
+    const total = BigInt(positionLiquidity.trim() || "0");
+    if (total > 0n && percent > 0) {
+      liquidityWei = (total * BigInt(percent)) / 100n;
+      liquidityAmount = liquidityWei.toString();
+    }
+  } catch {
+    liquidityWei = 0n;
+    liquidityAmount = "";
+  }
+
   // Estimate amounts to receive based on percent
   const bal0Num = parseFloat(balance0) || 0;
   const bal1Num = parseFloat(balance1) || 0;
-  const estimated0 = bal0Num > 0 ? ((bal0Num * percent) / 100).toFixed(decimals0 > 6 ? 6 : decimals0) : "0";
-  const estimated1 = bal1Num > 0 ? ((bal1Num * percent) / 100).toFixed(decimals1 > 6 ? 6 : decimals1) : "0";
+  const estimated0 =
+    bal0Num > 0
+      ? ((bal0Num * percent) / 100).toFixed(decimals0 > 6 ? 6 : decimals0)
+      : "0";
+  const estimated1 =
+    bal1Num > 0
+      ? ((bal1Num * percent) / 100).toFixed(decimals1 > 6 ? 6 : decimals1)
+      : "0";
 
   const removeLiquidity = useCallback(async () => {
     if (!positionManagerAddress) {
@@ -90,8 +103,12 @@ export function RemoveLiquidityModal({
       setError("Enter the position token ID.");
       return;
     }
-    if (!liquidityAmount.trim()) {
-      setError("Enter liquidity amount to remove.");
+    if (!positionLiquidity.trim()) {
+      setError("Enter your position total liquidity.");
+      return;
+    }
+    if (liquidityWei <= 0n) {
+      setError("Liquidity to remove must be greater than zero.");
       return;
     }
 
@@ -101,7 +118,6 @@ export function RemoveLiquidityModal({
 
     try {
       const posTokenId = BigInt(tokenId.trim());
-      const liquidityWei = BigInt(liquidityAmount.trim());
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
       let unlockData: `0x${string}`;
@@ -139,7 +155,8 @@ export function RemoveLiquidityModal({
     pool,
     percent,
     tokenId,
-    liquidityAmount,
+    positionLiquidity,
+    liquidityWei,
     isConnected,
     accountId,
     hashConnectRef,
@@ -151,22 +168,34 @@ export function RemoveLiquidityModal({
       ? "Select amount"
       : !tokenId.trim()
         ? "Enter position token ID"
-        : !liquidityAmount.trim()
-          ? "Enter liquidity amount"
-          : pending
-            ? "Removing…"
-            : percent === 100
-              ? "Remove all & burn position"
-              : `Remove ${percent}% liquidity`;
+        : !positionLiquidity.trim()
+          ? "Enter total position liquidity"
+          : liquidityWei <= 0n
+            ? "Liquidity to remove is too low"
+            : pending
+              ? "Removing…"
+              : percent === 100
+                ? "Remove all & burn position"
+                : `Remove ${percent}% liquidity`;
 
   const canSubmit =
-    isConnected && hasSelection && !!tokenId.trim() && !!liquidityAmount.trim() && !pending && !!positionManagerAddress;
+    isConnected &&
+    hasSelection &&
+    !!tokenId.trim() &&
+    !!positionLiquidity.trim() &&
+    liquidityWei > 0n &&
+    !pending &&
+    !!positionManagerAddress;
 
   return (
     <div className="space-y-4">
       {/* Pool info */}
       <div className="flex flex-wrap items-center gap-2 rounded-xl bg-surface-2/80 border border-white/[0.06] p-3">
-        <TokenPairIcon symbol0={pool.symbol0} symbol1={pool.symbol1} size={28} />
+        <TokenPairIcon
+          symbol0={pool.symbol0}
+          symbol1={pool.symbol1}
+          size={28}
+        />
         <span className="font-semibold text-text-primary">
           {pool.symbol0} / {pool.symbol1}
         </span>
@@ -250,14 +279,18 @@ export function RemoveLiquidityModal({
                 <TokenIcon symbol={pool.symbol0} size={20} />
                 {pool.symbol0}
               </span>
-              <span className="text-lg font-semibold text-text-primary">{estimated0}</span>
+              <span className="text-lg font-semibold text-text-primary">
+                {estimated0}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm text-text-secondary">
                 <TokenIcon symbol={pool.symbol1} size={20} />
                 {pool.symbol1}
               </span>
-              <span className="text-lg font-semibold text-text-primary">{estimated1}</span>
+              <span className="text-lg font-semibold text-text-primary">
+                {estimated1}
+              </span>
             </div>
           </div>
         </div>
@@ -286,24 +319,33 @@ export function RemoveLiquidityModal({
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-text-secondary uppercase tracking-wider">
-              Liquidity to remove
+              Position total liquidity
             </label>
             <input
               type="text"
               className="w-full px-3 py-2.5 bg-surface-2 border border-white/[0.08] rounded-xl text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-colors font-mono"
               placeholder="e.g. 100000000"
-              value={liquidityAmount}
+              value={positionLiquidity}
               onChange={(e) => {
-                setLiquidityAmount(e.target.value);
+                setPositionLiquidity(e.target.value);
                 setError(null);
               }}
             />
+            <p className="text-xs text-text-tertiary">
+              Multicall will remove{" "}
+              <span className="font-mono text-text-secondary">
+                {liquidityAmount || "0"}
+              </span>{" "}
+              liquidity ({percent}%).
+            </p>
           </div>
         </div>
       )}
 
       {/* Error / Success */}
-      {error && <ErrorMessage message={error} onDismiss={() => setError(null)} />}
+      {error && (
+        <ErrorMessage message={error} onDismiss={() => setError(null)} />
+      )}
       {txHash && (
         <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-success-muted text-success text-sm">
           Liquidity removed!{" "}

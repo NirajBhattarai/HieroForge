@@ -58,7 +58,12 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
   }));
 
   // Swap state (must be declared before addrIn/addrOut/useTokenBalance)
-  const EMPTY_TOKEN: TokenOption = { id: "", symbol: "", address: "", decimals: 18 };
+  const EMPTY_TOKEN: TokenOption = {
+    id: "",
+    symbol: "",
+    address: "",
+    decimals: 18,
+  };
   const [amountIn, setAmountIn] = useState("");
   const [amountOut, setAmountOut] = useState("");
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -490,12 +495,12 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
                 <div className="flex items-center justify-between px-1 py-2 mt-2">
                   <span className="text-xs text-text-tertiary">
                     1 {tokenIn.symbol} ={" "}
-                    {(parseFloat(amountOut) / parseFloat(amountIn)).toFixed(
-                      6,
-                    )}{" "}
+                    {(parseFloat(amountOut) / parseFloat(amountIn)).toFixed(6)}{" "}
                     {tokenOut.symbol}
                   </span>
-                  <span className="text-xs text-text-tertiary">~2% slippage</span>
+                  <span className="text-xs text-text-tertiary">
+                    ~2% slippage
+                  </span>
                 </div>
               )}
 
@@ -551,32 +556,32 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
                     }
                   `}
                 >
-              {swapLoading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg
-                    className="animate-spin h-5 w-5"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                  Swapping...
-                </span>
-              ) : (
-                btnState.text
-              )}
+                  {swapLoading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg
+                        className="animate-spin h-5 w-5"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                        />
+                      </svg>
+                      Swapping...
+                    </span>
+                  ) : (
+                    btnState.text
+                  )}
                 </button>
               </div>
             </div>

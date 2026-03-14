@@ -3,8 +3,10 @@ import {
   listPools,
   listPoolsByDeployer,
   savePool,
+  deletePoolById,
   type PoolRecord,
 } from "@/lib/dynamo-pools";
+import { validatePoolOnChain } from "@/lib/poolValidation";
 
 export async function GET(request: Request) {
   try {
@@ -14,7 +16,42 @@ export async function GET(request: Request) {
     const pools = deployedBy
       ? await listPoolsByDeployer(deployedBy)
       : await listPools();
-    return NextResponse.json(pools);
+
+    const checks = await Promise.all(
+      pools.map(async (pool) => {
+        const validation = await validatePoolOnChain(pool.poolId);
+        return { pool, validation };
+      }),
+    );
+
+    const validPools: PoolRecord[] = [];
+    const stalePoolIds: string[] = [];
+
+    for (const { pool, validation } of checks) {
+      if (validation.validated && !validation.exists) {
+        stalePoolIds.push(pool.poolId);
+        continue;
+      }
+      validPools.push(pool);
+    }
+
+    if (stalePoolIds.length > 0) {
+      await Promise.all(
+        stalePoolIds.map(async (poolId) => {
+          try {
+            await deletePoolById(poolId);
+          } catch (err) {
+            console.warn(
+              "Failed to delete stale pool from DynamoDB:",
+              poolId,
+              err,
+            );
+          }
+        }),
+      );
+    }
+
+    return NextResponse.json(validPools);
   } catch (err) {
     console.error("List pools error:", err);
     return NextResponse.json(
@@ -56,6 +93,24 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    const validation = await validatePoolOnChain(poolId);
+    if (!validation.validated) {
+      return NextResponse.json(
+        {
+          error:
+            `Unable to validate pool on-chain. Not saving to database. ${validation.reason ?? ""}`.trim(),
+        },
+        { status: 503 },
+      );
+    }
+    if (!validation.exists) {
+      return NextResponse.json(
+        { error: "Pool not initialized on-chain. Not saving to database." },
+        { status: 400 },
+      );
+    }
+
     await savePool({
       poolId,
       currency0: currency0.toLowerCase().trim(),

@@ -92,9 +92,15 @@ export async function GET(request: Request) {
         isHts: true,
         hederaId: mirror.tokenId,
       };
-      saveToken({ ...tokenData, createdAt: new Date().toISOString() }).catch(
-        () => {},
-      );
+      try {
+        await saveToken({ ...tokenData, createdAt: new Date().toISOString() });
+      } catch (err) {
+        console.warn(
+          "Failed to persist looked-up token:",
+          tokenData.address,
+          err,
+        );
+      }
       return NextResponse.json(tokenData);
     }
   }
@@ -145,9 +151,15 @@ export async function GET(request: Request) {
       isHts,
     };
 
-    saveToken({ ...tokenData, createdAt: new Date().toISOString() }).catch(
-      () => {},
-    );
+    try {
+      await saveToken({ ...tokenData, createdAt: new Date().toISOString() });
+    } catch (err) {
+      console.warn(
+        "Failed to persist looked-up token:",
+        tokenData.address,
+        err,
+      );
+    }
     return NextResponse.json(tokenData);
   } catch {
     return NextResponse.json(

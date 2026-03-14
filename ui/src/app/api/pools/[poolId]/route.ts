@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getPoolById } from "@/lib/dynamo-pools";
+import { deletePoolById, getPoolById } from "@/lib/dynamo-pools";
+import { validatePoolOnChain } from "@/lib/poolValidation";
 
 export async function GET(
   _request: Request,
@@ -14,6 +15,21 @@ export async function GET(
     if (!pool) {
       return NextResponse.json({ error: "Pool not found" }, { status: 404 });
     }
+
+    const validation = await validatePoolOnChain(pool.poolId);
+    if (validation.validated && !validation.exists) {
+      try {
+        await deletePoolById(pool.poolId);
+      } catch (err) {
+        console.warn(
+          "Failed to delete stale pool from DynamoDB:",
+          pool.poolId,
+          err,
+        );
+      }
+      return NextResponse.json({ error: "Pool not found" }, { status: 404 });
+    }
+
     return NextResponse.json(pool);
   } catch (err) {
     console.error("Get pool error:", err);

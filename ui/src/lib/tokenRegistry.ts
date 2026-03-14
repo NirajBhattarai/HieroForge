@@ -27,12 +27,16 @@ export function registerTokens(tokens: RegisteredToken[]) {
 }
 
 /** Look up a token by symbol. */
-export function getRegisteredToken(symbol: string): RegisteredToken | undefined {
+export function getRegisteredToken(
+  symbol: string,
+): RegisteredToken | undefined {
   return bySymbol.get(symbol.toUpperCase());
 }
 
 /** Look up a token by address. */
-export function getRegisteredTokenByAddress(address: string): RegisteredToken | undefined {
+export function getRegisteredTokenByAddress(
+  address: string,
+): RegisteredToken | undefined {
   return byAddress.get(address.toLowerCase());
 }
 

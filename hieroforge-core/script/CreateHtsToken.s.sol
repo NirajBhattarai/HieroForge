@@ -32,8 +32,8 @@ contract CreateHtsTokenScript is Script {
         keyValue.inheritAccountKey = true;
 
         IHederaTokenService.HederaToken memory token;
-        token.name = "FORGE";
-        token.symbol = "FORGE";
+        token.name = "Second";
+        token.symbol = "Second";
         token.treasury = signer;
         token.memo = "This HTS Token was created using forge script together with HTS emulation";
         token.tokenSupplyType = true;

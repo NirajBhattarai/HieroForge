@@ -25,11 +25,17 @@ export function TokenSelector({
   excludeToken,
 }: TokenSelectorProps) {
   const [search, setSearch] = useState("");
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastLookupQueryRef = useRef<string>("");
 
   useEffect(() => {
     if (open) {
       setSearch("");
+      setLookupError(null);
+      setLookupLoading(false);
+      lastLookupQueryRef.current = "";
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [open]);
@@ -56,6 +62,66 @@ export function TokenSelector({
     onSelect(token);
     onClose();
   };
+
+  const isAddressSearch = /^0x[0-9a-f]{40}$/i.test(q) || /^0\.0\.\d+$/i.test(q);
+
+  const handleLookupPastedAddress = async () => {
+    const raw = search.trim();
+    if (!raw) return;
+
+    try {
+      setLookupLoading(true);
+      setLookupError(null);
+      const res = await fetch(
+        `/api/tokens/lookup?address=${encodeURIComponent(raw)}`,
+      );
+      const body = (await res.json().catch(() => null)) as
+        | {
+            address: string;
+            symbol: string;
+            name: string;
+            decimals: number;
+          }
+        | { error?: string }
+        | null;
+
+      if (!res.ok || !body || !("address" in body)) {
+        throw new Error(
+          (body && "error" in body && body.error) || "Token lookup failed",
+        );
+      }
+
+      handleSelect({
+        id: body.address,
+        symbol: body.symbol,
+        name: body.name,
+        address: body.address,
+        decimals: body.decimals,
+      });
+    } catch (err) {
+      setLookupError(
+        err instanceof Error ? err.message : "Token lookup failed",
+      );
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    if (!isAddressSearch) return;
+    if (lookupLoading) return;
+
+    const normalizedQuery = q;
+    if (!normalizedQuery || normalizedQuery === lastLookupQueryRef.current) {
+      return;
+    }
+
+    lastLookupQueryRef.current = normalizedQuery;
+    void handleLookupPastedAddress();
+    // Intentionally depends on `q`/`isAddressSearch` to run immediately when user pastes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, q, isAddressSearch]);
 
   return (
     <Modal open={open} onClose={onClose} title="Select a token">
@@ -109,6 +175,19 @@ export function TokenSelector({
                 {t.symbol}
               </button>
             ))}
+          </div>
+        )}
+
+        {q && isAddressSearch && (
+          <div className="mb-3">
+            <div className="w-full px-3 py-2.5 rounded-[--radius-md] border border-accent/30 bg-accent/10 text-accent text-sm font-medium">
+              {lookupLoading
+                ? "Looking up token..."
+                : "Detected address. Resolving token automatically..."}
+            </div>
+            {lookupError && (
+              <p className="mt-1.5 text-xs text-error">{lookupError}</p>
+            )}
           </div>
         )}
 

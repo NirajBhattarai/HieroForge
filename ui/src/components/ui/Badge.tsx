@@ -5,14 +5,11 @@ interface BadgeProps {
 }
 
 const variants: Record<string, string> = {
-  default:
-    "bg-surface-3/80 text-text-secondary border border-white/[0.06]",
+  default: "bg-surface-3/80 text-text-secondary border border-white/[0.06]",
   accent:
     "bg-accent/10 text-accent border border-accent/25 hover:border-accent/40",
-  success:
-    "bg-success-muted text-success border border-success/20",
-  warning:
-    "bg-warning-muted text-warning border border-warning/20",
+  success: "bg-success-muted text-success border border-success/20",
+  warning: "bg-warning-muted text-warning border border-warning/20",
 };
 
 export function Badge({

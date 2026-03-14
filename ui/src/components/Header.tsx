@@ -39,7 +39,13 @@ export function Header({
         {/* Logo */}
         <div className="flex items-center gap-4 sm:gap-6">
           <span className="text-lg sm:text-xl font-bold tracking-tight text-text-primary flex items-center gap-2">
-            <svg width="26" height="26" className="sm:w-7 sm:h-7" viewBox="0 0 32 32" fill="none">
+            <svg
+              width="26"
+              height="26"
+              className="sm:w-7 sm:h-7"
+              viewBox="0 0 32 32"
+              fill="none"
+            >
               <rect width="32" height="32" rx="8" fill="url(#logo-grad)" />
               <path
                 d="M10 22V10l6 4 6-4v12l-6-4-6 4z"
@@ -87,7 +93,10 @@ export function Header({
 
         {/* Right side */}
         <div className="flex items-center gap-2 sm:gap-3">
-          <Badge variant="accent" className="hidden sm:inline-flex cursor-default">
+          <Badge
+            variant="accent"
+            className="hidden sm:inline-flex cursor-default"
+          >
             Testnet
           </Badge>
 

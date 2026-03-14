@@ -141,7 +141,9 @@ export function PositionDetail({
             </h3>
             {isConnected ? (
               <>
-                <p className="text-xs text-text-tertiary mb-3">Your token balances</p>
+                <p className="text-xs text-text-tertiary mb-3">
+                  Your token balances
+                </p>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-2 text-sm text-text-secondary">

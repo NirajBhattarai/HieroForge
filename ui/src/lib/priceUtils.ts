@@ -79,7 +79,13 @@ export function computeLiquidityFromAmount(
   amount: number,
   inputToken: 0 | 1,
 ): { liquidity: number; amount0: number; amount1: number } {
-  if (currentPrice <= 0 || minPrice < 0 || maxPrice <= 0 || maxPrice <= minPrice || amount <= 0) {
+  if (
+    currentPrice <= 0 ||
+    minPrice < 0 ||
+    maxPrice <= 0 ||
+    maxPrice <= minPrice ||
+    amount <= 0
+  ) {
     return { liquidity: 0, amount0: 0, amount1: 0 };
   }
 
@@ -92,7 +98,7 @@ export function computeLiquidityFromAmount(
   if (currentPrice <= minPrice) {
     // Below range: only token0 required
     if (inputToken === 1) return { liquidity: 0, amount0: 0, amount1: amount };
-    L = amount * (sqrtPa * sqrtPb) / (sqrtPb - sqrtPa);
+    L = (amount * (sqrtPa * sqrtPb)) / (sqrtPb - sqrtPa);
     return { liquidity: L, amount0: amount, amount1: 0 };
   }
 
@@ -105,12 +111,12 @@ export function computeLiquidityFromAmount(
 
   // In range: both tokens needed
   if (inputToken === 0) {
-    L = amount * (sqrtP * sqrtPb) / (sqrtPb - sqrtP);
+    L = (amount * (sqrtP * sqrtPb)) / (sqrtPb - sqrtP);
     const amount1Calc = L * (sqrtP - sqrtPa);
     return { liquidity: L, amount0: amount, amount1: amount1Calc };
   } else {
     L = amount / (sqrtP - sqrtPa);
-    const amount0Calc = L * (sqrtPb - sqrtP) / (sqrtP * sqrtPb);
+    const amount0Calc = (L * (sqrtPb - sqrtP)) / (sqrtP * sqrtPb);
     return { liquidity: L, amount0: amount0Calc, amount1: amount };
   }
 }
@@ -129,7 +135,9 @@ export function liquidityToWei(
   const scale = (decimals0 + decimals1) / 2;
   const scaled = liquidityHuman * Math.pow(10, scale);
   // Use string conversion to avoid BigInt precision loss
-  return BigInt(Math.floor(scaled).toLocaleString("fullwide", { useGrouping: false }));
+  return BigInt(
+    Math.floor(scaled).toLocaleString("fullwide", { useGrouping: false }),
+  );
 }
 
 /** Price strategy presets (minPct, maxPct) relative to current price. e.g. (-0.5, 1) = -50% to +100% */

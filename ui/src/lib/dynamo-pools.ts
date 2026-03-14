@@ -3,6 +3,7 @@ import {
   ScanCommand,
   GetItemCommand,
   PutItemCommand,
+  DeleteItemCommand,
 } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 
@@ -79,7 +80,9 @@ export async function listPoolsByDeployer(
     new ScanCommand({
       TableName: TABLE_NAME,
       FilterExpression: "deployedBy = :d",
-      ExpressionAttributeValues: marshall({ ":d": deployedBy.toLowerCase().trim() }),
+      ExpressionAttributeValues: marshall({
+        ":d": deployedBy.toLowerCase().trim(),
+      }),
     }),
   );
   const items = (result.Items ?? []).map(
@@ -110,6 +113,17 @@ export async function savePool(pool: PoolRecord): Promise<void> {
     new PutItemCommand({
       TableName: TABLE_NAME,
       Item: marshall(record, { removeUndefinedValues: true }),
+    }),
+  );
+}
+
+export async function deletePoolById(poolId: string): Promise<void> {
+  if (!isDynamoConfigured()) return;
+  const client = getClient();
+  await client.send(
+    new DeleteItemCommand({
+      TableName: TABLE_NAME,
+      Key: marshall({ poolId: poolId.toLowerCase().trim() }),
     }),
   );
 }

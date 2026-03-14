@@ -21,6 +21,7 @@ export interface PoolInfo {
   currency1: string;
   decimals0?: number;
   decimals1?: number;
+  initialPrice?: string;
 }
 
 interface PoolPositionsProps {
@@ -188,6 +189,7 @@ export function PoolPositions({
               currency1: p.currency1,
               decimals0: p.decimals0,
               decimals1: p.decimals1,
+              initialPrice: p.initialPrice,
             })),
           );
         },
@@ -227,6 +229,7 @@ export function PoolPositions({
         symbol1?: string;
         decimals0?: number;
         decimals1?: number;
+        initialPrice?: string;
       };
       const pool: PoolInfo = {
         poolId: p.poolId,
@@ -243,6 +246,7 @@ export function PoolPositions({
         currency1: p.currency1,
         decimals0: p.decimals0,
         decimals1: p.decimals1,
+        initialPrice: p.initialPrice,
       };
       onSelectPool(pool);
     } catch (err) {
@@ -364,7 +368,10 @@ export function PoolPositions({
           {loading ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-20 rounded-xl bg-surface-2/80 border border-white/[0.06] animate-pulse" />
+                <div
+                  key={i}
+                  className="h-20 rounded-xl bg-surface-2/80 border border-white/[0.06] animate-pulse"
+                />
               ))}
             </div>
           ) : !hasPositions ? (
@@ -443,7 +450,14 @@ export function PoolPositions({
                 className="shrink-0 p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-3/80 transition-colors cursor-pointer"
                 aria-label="Dismiss"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -474,7 +488,10 @@ export function PoolPositions({
             {loading ? (
               <div className="space-y-2">
                 {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-12 rounded-xl bg-surface-2/80 animate-pulse" />
+                  <div
+                    key={i}
+                    className="h-12 rounded-xl bg-surface-2/80 animate-pulse"
+                  />
                 ))}
               </div>
             ) : topPools.length === 0 ? (
@@ -519,7 +536,16 @@ export function PoolPositions({
             </h3>
             <div className="flex items-start gap-3 p-3 rounded-xl bg-surface-3/50 border border-white/[0.04]">
               <div className="w-8 h-8 rounded-lg bg-accent/15 text-accent flex items-center justify-center shrink-0">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M7 17L17 7" />
                   <path d="M17 7H7V17" />
                 </svg>
