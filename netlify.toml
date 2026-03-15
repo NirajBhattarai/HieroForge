@@ -6,6 +6,10 @@
   command = "npm run build"
   publish = ".next"
 
+  # Omit these from secrets scan so build doesn't fail when they appear in server bundle or scripts (values only in server-side code)
+  [build.environment]
+    SECRETS_SCAN_OMIT_KEYS = "HF_AWS_REGION,HF_AWS_ACCESS_KEY_ID,HF_AWS_SECRET_ACCESS_KEY"
+
 # Use Netlify's Essential Next.js plugin so Next runs correctly and static assets get proper MIME types
 [[plugins]]
   package = "@netlify/plugin-nextjs"
