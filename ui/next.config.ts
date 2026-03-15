@@ -10,22 +10,23 @@ const nextConfig: NextConfig = {
   webpack(config, { isServer }) {
     config.resolve = config.resolve ?? {}
 
-    // Force a single copy of these packages so webpack never bundles them twice.
-    // Duplicate copies cause the minified "Identifier 'n' already declared" SyntaxError.
-    config.resolve.dedupe = [
-      ...((config.resolve.dedupe as string[] | undefined) ?? []),
-      '@hashgraph/sdk',
-      'hashconnect',
-    ]
-
-    // Use the pre-built browser bundle only on the client side.
-    // Applying the alias on the server side would break server routes that legitimately
-    // use the Node build (e.g. API routes calling mirror-node).
+    // Pin every import of these packages to a single resolved path so webpack
+    // never bundles two copies (which causes "Identifier 'n' already declared"
+    // after minification).  On the client we point to the pre-built browser
+    // bundle; on the server we pin to the package root so Node-native code works.
+    const sdkRoot = path.dirname(require.resolve('@hashgraph/sdk/package.json'))
+    const hcRoot  = path.dirname(require.resolve('hashconnect/package.json'))
     if (!isServer) {
-      const sdkRoot = path.dirname(require.resolve('@hashgraph/sdk/package.json'))
       config.resolve.alias = {
         ...config.resolve.alias,
         '@hashgraph/sdk': path.join(sdkRoot, 'lib', 'browser.js'),
+        'hashconnect': hcRoot,
+      }
+    } else {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        '@hashgraph/sdk': sdkRoot,
+        'hashconnect': hcRoot,
       }
     }
 
