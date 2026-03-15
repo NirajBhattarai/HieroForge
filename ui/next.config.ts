@@ -6,32 +6,26 @@ const require = createRequire(import.meta.url)
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['hashconnect'],
   webpack(config, { isServer }) {
     config.resolve = config.resolve ?? {}
 
-    // Pin every import of these packages to a single resolved path so webpack
-    // never bundles two copies (which causes "Identifier 'n' already declared"
-    // after minification).  On the client we point to the pre-built browser
-    // bundle; on the server we pin to the package root so Node-native code works.
+    // Use the pre-built browser bundle of @hashgraph/sdk on the client
+    // so we don't pull Node/gRPC deps (fs, net, tls) into the browser.
+    // The npm "overrides" in package.json ensures there is only ONE copy
+    // of the SDK in node_modules (no nested duplicate under hashconnect).
     const sdkRoot = path.dirname(require.resolve('@hashgraph/sdk/package.json'))
-    const hcRoot  = path.dirname(require.resolve('hashconnect/package.json'))
-    if (!isServer) {
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        '@hashgraph/sdk': path.join(sdkRoot, 'lib', 'browser.js'),
-        'hashconnect': hcRoot,
-      }
-    } else {
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        '@hashgraph/sdk': sdkRoot,
-        'hashconnect': hcRoot,
-      }
+
+    // hashconnect imports '@hashgraph/proto' (the old package name).
+    // In SDK >=2.80 this was renamed to '@hiero-ledger/proto' and lives
+    // inside the SDK's own node_modules.
+    const protoPath = path.join(sdkRoot, 'node_modules', '@hiero-ledger', 'proto')
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@hashgraph/proto': protoPath,
     }
 
-    // Stub Node built-ins for client bundle when SDK or deps reference them
     if (!isServer) {
+      config.resolve.alias['@hashgraph/sdk'] = path.join(sdkRoot, 'lib', 'browser.js')
       config.resolve.fallback = {
         ...config.resolve.fallback,
         fs: false,
@@ -39,6 +33,7 @@ const nextConfig: NextConfig = {
         tls: false,
       }
     }
+
     // Suppress "Critical dependency" warnings from hashconnect / hedera-wallet-connect
     config.ignoreWarnings = [
       ...(config.ignoreWarnings ?? []),

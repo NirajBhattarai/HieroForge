@@ -35,5 +35,10 @@
     "tailwindcss": "^4.2.1",
     "tsx": "^4.21.0",
     "typescript": "~5.7.2"
+  },
+  "overrides": {
+    "hashconnect": {
+      "@hashgraph/sdk": "$@hashgraph/sdk"
+    }
   }
 }
