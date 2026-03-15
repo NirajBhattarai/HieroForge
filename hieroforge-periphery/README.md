@@ -1,6 +1,6 @@
-# HieroForge Periphery
+# HieroForge Periphery — User-Facing Contracts
 
-Periphery contracts for **HieroForge**: they help users **swap tokens** by calling the core AMM (**hieroforge-core**).
+Periphery contracts for **HieroForge**: they help users **swap tokens** and **manage liquidity positions** by calling the core AMM (**hieroforge-core**).
 
 ## Role
 
@@ -11,7 +11,136 @@ Periphery contracts for **HieroForge**: they help users **swap tokens** by calli
 
 Position NFTs use standard `approve` / `setApprovalForAll` only. EIP-712 has been removed (not supported on Hedera).
 
-Deploy **hieroforge-core** first (PoolManager and any pools). Then deploy periphery contracts that point at the core’s PoolManager address. The UI or scripts should use periphery to perform token swaps.
+Deploy **hieroforge-core** first (PoolManager and any pools). Then deploy periphery contracts that point at the core's PoolManager address. The UI or scripts should use periphery to perform token swaps.
+
+## Folder Structure
+
+```
+hieroforge-periphery/
+├── src/                                    # Solidity source contracts
+│   ├── UniversalRouter.sol                 #   User-facing entry — command dispatcher
+│   │                                       #     V4_SWAP (0x10) → swap via V4Router
+│   │                                       #     V4_POSITION_CALL (0x11) → PositionManager
+│   │                                       #     SWEEP (0x12) → sweep leftover tokens
+│   ├── V4Router.sol                        #   Abstract swap router — single & multi-hop swaps
+│   │                                       #     _swapExactInputSingle, _swapExactInput (multi-hop)
+│   │                                       #     _swapExactOutputSingle, _swapExactOutput (multi-hop)
+│   │                                       #     _pay() — ERC-20 transferFrom to PoolManager
+│   ├── PositionManager.sol                 #   NFT-based liquidity positions (ERC-721)
+│   │                                       #     MINT_POSITION, INCREASE_LIQUIDITY,
+│   │                                       #     DECREASE_LIQUIDITY, BURN_POSITION
+│   │                                       #     Inherits Multicall_v4 for atomic batching
+│   ├── V4Quoter.sol                        #   Off-chain quoter (revert-and-parse pattern)
+│   │                                       #     quoteExactInputSingle, quoteExactOutputSingle
+│   │                                       #     quoteExactInput, quoteExactOutput (multi-hop)
+│   ├── Quoter.sol                          #   Simpler quoter (revert-only, no return)
+│   ├── base/                               #   Abstract base contracts
+│   │   ├── BaseActionsRouter.sol           #     Action dispatch: unlock → loop _handleAction()
+│   │   ├── DeltaResolver.sol               #     Settlement helper (settle, take, mapAmounts)
+│   │   ├── SafeCallback.sol                #     Ensures only PoolManager calls unlockCallback
+│   │   ├── ImmutableState.sol              #     Stores immutable poolManager reference
+│   │   ├── ERC721Permit_v4.sol             #     Position NFT (Solmate ERC-721, no EIP-712)
+│   │   ├── ERC721Positions.sol             #     Pure ERC-721 implementation (fallback)
+│   │   ├── PoolInitializer_v4.sol          #     Pool init helper (no-op if already initialized)
+│   │   ├── Multicall_v4.sol                #     Batch delegatecalls for atomic multi-step ops
+│   │   ├── BaseQuoter.sol                  #     Base for simple Quoter
+│   │   └── BaseV4Quoter.sol                #     Base for V4Quoter (SafeCallback-based)
+│   ├── libraries/                          #   Utility libraries
+│   │   ├── Actions.sol                     #     Action type constants (0x00–0x18)
+│   │   ├── Commands.sol                    #     UniversalRouter command types + flags
+│   │   ├── CalldataDecoder.sol             #     Gas-efficient assembly calldata parsing
+│   │   ├── PathKey.sol                     #     Multi-hop path segment struct
+│   │   ├── ActionConstants.sol             #     Magic values (OPEN_DELTA, MSG_SENDER, etc.)
+│   │   ├── QuoterRevert.sol               #     Quote revert encoding/parsing
+│   │   └── Locker.sol                      #     Transient storage msg.sender tracking
+│   ├── interfaces/                         #   Contract interfaces
+│   │   ├── IV4Router.sol                   #     Swap param structs + slippage errors
+│   │   ├── IUniversalRouter.sol            #     execute(commands, inputs, deadline)
+│   │   ├── IPositionManager.sol            #     modifyLiquidities(unlockData, deadline)
+│   │   ├── IV4Quoter.sol                   #     Quote functions returning (amount, gasEstimate)
+│   │   ├── IQuoter.sol                     #     Simpler quote interface
+│   │   ├── IERC721Permit_v4.sol            #     NFT authorization error
+│   │   ├── IImmutableState.sol             #     poolManager() getter
+│   │   ├── IMsgSender.sol                  #     msgSender() view
+│   │   ├── IMulticall_v4.sol               #     multicall(bytes[])
+│   │   └── IPoolInitializer_v4.sol         #     initializePool(key, sqrtPriceX96)
+│   └── types/
+│       └── PositionInfo.sol                #   Bit-packed position: poolId + ticks + subscriber
+├── test/                                   # Foundry test suite
+│   ├── Quoter.t.sol                        #   V4Quoter: single-hop quotes, edge cases
+│   ├── V4RouterSwapTest.sol                #   UniversalRouter: exact-in/out single-hop swaps
+│   ├── V4RouterMultiHopTest.sol            #   Multi-hop swaps (A→B→C), settlement actions
+│   ├── position-managers/
+│   │   ├── PositionManager.t.sol           #   Mint, increase, decrease, burn positions
+│   │   └── PositionManagerFromDeltas.t.sol #   FROM_DELTAS variants + explicit settlement
+│   ├── utils/
+│   │   ├── QuoterTestDeployers.sol         #   HTS-based test setup (PoolManager + tokens + pool)
+│   │   ├── QuoterTestDeployersMock.sol     #   MockERC20-based setup (no HTS node needed)
+│   │   └── MockERC20.sol                   #   Minimal ERC-20 mock
+│   └── mocks/
+│       └── MockHTS.sol                     #   Mock HTS precompile (etched at 0x167)
+├── script/                                 # Foundry deploy/setup scripts
+│   ├── DeployPositionManager.s.sol         #   Deploy PositionManager(poolManager)
+│   ├── DeployUniversalRouter.s.sol         #   Deploy UniversalRouter(poolManager, positionManager)
+│   ├── DeployQuoter.s.sol                  #   Deploy V4Quoter(poolManager)
+│   ├── AddLiquidityPositionManager.s.sol   #   Multicall: initializePool + modifyLiquidities
+│   ├── TransferToPositionManager.s.sol     #   Transfer tokens to PositionManager
+│   ├── TransferHts.s.sol                   #   Generic HTS token transfer
+│   ├── CreateTwoHtsTokens.s.sol            #   Create 2 HTS fungible tokens
+│   ├── CreateHtsNftToken.s.sol             #   Create HTS NFT for PositionManager
+│   ├── DeployMockTokens.s.sol              #   Deploy 2 MockERC20 (local/test)
+│   └── DeployAndAddLiquidityLocal.s.sol    #   One-shot local: deploy all + mint position
+├── scripts/                                # Shell script wrappers
+│   ├── deploy.sh                           #   Full-stack deploy (pool-manager, tokens, PM, etc.)
+│   ├── modify.sh                           #   Multicall: initializePool + modifyLiquidities
+│   ├── transfer-to-position-manager.sh     #   Transfer tokens to PositionManager
+│   ├── transfer-hts.sh                     #   Transfer HTS tokens to any recipient
+│   ├── associate-hts.sh                    #   Associate signer with HTS token
+│   ├── create-pool-cast.sh                 #   Create pool + liquidity via cast send
+│   └── verify-contracts.sh                 #   Verify contracts on HashScan
+├── foundry.toml                            # Build config (Cancun EVM, via_ir, remappings)
+└── lib/                                    # Git submodules
+    ├── forge-std/                          #   Foundry standard library
+    ├── hedera-smart-contracts/             #   HTS precompile interfaces
+    ├── hedera-forking/                     #   HTS emulation for local testing
+    ├── solmate/                            #   Solmate (ERC-721 base)
+    └── permit2/                            #   Uniswap Permit2 (not used on Hedera)
+```
+
+## Key Architecture
+
+### Contract Interaction Flow
+
+```
+User (UI / Script)
+  │
+  ├── UniversalRouter.execute(commands, inputs, deadline)
+  │     ├── V4_SWAP (0x10) → V4Router._executeV4Swap()
+  │     │     └── poolManager.unlock(actionsData)
+  │     │           └── unlockCallback() → loop _handleAction():
+  │     │                 SWAP_EXACT_IN_SINGLE → poolManager.swap()
+  │     │                 SETTLE_ALL → transferFrom(user → PM) + settle()
+  │     │                 TAKE_ALL → poolManager.take() → user
+  │     │
+  │     ├── V4_POSITION_CALL (0x11) → positionManager.modifyLiquidities()
+  │     │     └── poolManager.unlock() → MINT/INCREASE/DECREASE/BURN
+  │     │
+  │     └── SWEEP (0x12) → sweep leftover tokens to recipient
+  │
+  ├── PositionManager.modifyLiquidities(unlockData, deadline)
+  │     └── (same unlock → action dispatch pattern)
+  │
+  └── V4Quoter.quoteExactInputSingle(params)   [off-chain / eth_call]
+        └── try poolManager.unlock() → swap → revert QuoteSwap(amount)
+        └── catch → parseQuoteAmount() → return (amount, gasEstimate)
+```
+
+### Key Patterns
+
+- **Actions Encoding**: `abi.encode(bytes actions, bytes[] params)` — each byte in `actions` is an action ID, `params[i]` is ABI-encoded args for that action
+- **FROM_DELTAS**: `MINT_POSITION_FROM_DELTAS` skips auto-settlement; caller must follow with `SETTLE_PAIR`/`CLOSE_CURRENCY`
+- **Position NFTs**: ERC-721 with incrementing tokenId. Position data bit-packed in `PositionInfo`
+- **Quoter Revert Pattern**: V4Quoter simulates swaps inside unlock then reverts with `QuoteSwap(amount)`; outer function catches and parses
 
 ## Setup
 

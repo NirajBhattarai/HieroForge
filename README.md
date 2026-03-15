@@ -1,103 +1,342 @@
 # HieroForge
 
-**HieroForge** is a concentrated liquidity AMM on Hedera: smart contracts (Foundry/Solidity) and a React frontend with HashPack wallet integration.
+**HieroForge** is a full-stack concentrated liquidity AMM (Automated Market Maker) built natively for the **Hedera** network. It brings Uniswap V4-style architecture — singleton PoolManager, transient storage delta accounting, tick-based concentrated liquidity, and NFT positions — to Hedera with first-class support for **Hedera Token Service (HTS)** tokens alongside standard ERC-20 tokens.
 
-## Project structure
+## Key Features
+
+- **Concentrated Liquidity** — Liquidity providers (LPs) deposit tokens into custom price ranges (tick intervals), maximizing capital efficiency.
+- **Singleton PoolManager** — All pools live inside a single `PoolManager` contract. No factory deployment per pool.
+- **Flash Accounting (Lock/Unlock)** — Token transfers happen once per currency per operation batch via transient storage deltas, reducing gas costs.
+- **HTS-Native** — Full support for Hedera Token Service tokens (detection, creation, transfers) via the `0x167` precompile, while remaining fully compatible with standard ERC-20 tokens.
+- **NFT Positions** — Each liquidity position is represented as an ERC-721 NFT managed by `PositionManager`.
+- **UniversalRouter** — A single user-facing contract for both swaps (`V4_SWAP`) and liquidity operations (`V4_POSITION_CALL`), with command-based dispatch.
+- **Off-Chain Quoter** — `V4Quoter` simulates swaps via the revert-and-parse pattern for accurate price quotes without on-chain state changes.
+- **React Frontend** — Next.js 15 app with HashPack wallet integration, DynamoDB-backed pool/token registry, and Hedera Mirror Node for real-time balances.
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        User (Browser)                           │
+│  Next.js 15 + React 19 UI                                      │
+│  ├── SwapCard (trade tokens)                                    │
+│  ├── NewPosition (create pool + add liquidity)                  │
+│  ├── PoolPositions (view positions)                             │
+│  └── Explore (browse pools)                                     │
+└───────────────┬─────────────────────────────────────────────────┘
+                │  WalletConnect / HashConnect
+                ▼
+┌───────────────────────────────┐    ┌────────────────────────────┐
+│  HashPack Wallet              │    │  Hedera Mirror Node        │
+│  (signs & submits txs)        │    │  (balances, tx status)     │
+└───────────────┬───────────────┘    └────────────────────────────┘
+                │
+                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   Hedera Testnet (Chain 296)                    │
+│                                                                 │
+│  ┌─────────────────┐   ┌──────────────────┐                    │
+│  │  hieroforge-core│   │hieroforge-periph │                    │
+│  │                 │   │                  │                    │
+│  │  PoolManager    │◄──│  UniversalRouter │  (swaps)           │
+│  │  (all pools,    │◄──│  PositionManager │  (liquidity NFTs)  │
+│  │   swap logic,   │◄──│  V4Quoter       │  (price quotes)    │
+│  │   liquidity)    │   │  V4Router       │  (swap encoding)   │
+│  │                 │   │                  │                    │
+│  └─────────────────┘   └──────────────────┘                    │
+│                                                                 │
+│  HTS Precompile (0x167) — native token creation & management    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Project Structure
 
 ```
 HieroForge/
-├── hieroforge-core/       # Core AMM (PoolManager, pools, swap logic)
+├── hieroforge-core/          # Core AMM engine (PoolManager, pool state, swap/liquidity math)
+│   ├── src/                  #   Solidity source
+│   │   ├── PoolManager.sol   #     Singleton — holds all pools, orchestrates operations
+│   │   ├── constants.sol     #     Tick bounds, spacing limits
+│   │   ├── NoDelegateCall.sol#     Delegatecall guard
+│   │   ├── TokenClassifier.sol#    ERC-20 vs HTS token detection
+│   │   ├── libraries/        #     Math & utility libs (TickMath, SqrtPriceMath, SwapMath,
+│   │   │                     #       TickBitmap, BitMath, FullMath, Lock, SafeCast, etc.)
+│   │   ├── types/            #     Data structures (PoolState, PoolKey, PoolId, Slot0,
+│   │   │                     #       Currency, BalanceDelta, TickInfo, PositionState, etc.)
+│   │   ├── interfaces/       #     IPoolManager, IERC20Minimal
+│   │   └── callback/         #     IUnlockCallback
+│   ├── test/                 #   Foundry tests (initialize, swap, modifyLiquidity, libraries)
+│   ├── script/               #   Deploy scripts (PoolManager, Router, HTS tokens, pools)
+│   └── scripts/              #   Shell wrappers for deploy/test
+│
+├── hieroforge-periphery/     # Periphery contracts (user-facing routing & position mgmt)
+│   ├── src/                  #   Solidity source
+│   │   ├── UniversalRouter.sol#    Command dispatcher (V4_SWAP, V4_POSITION_CALL, SWEEP)
+│   │   ├── V4Router.sol      #     Abstract swap router (single-hop & multi-hop)
+│   │   ├── PositionManager.sol#    NFT-based liquidity positions (mint/increase/decrease/burn)
+│   │   ├── V4Quoter.sol      #     Off-chain swap quoter (revert-and-parse pattern)
+│   │   ├── base/             #     Base contracts (BaseActionsRouter, DeltaResolver,
+│   │   │                     #       SafeCallback, ERC721Permit_v4, Multicall_v4, etc.)
+│   │   ├── libraries/        #     Actions, Commands, CalldataDecoder, PathKey, Locker
+│   │   ├── interfaces/       #     IV4Router, IUniversalRouter, IPositionManager, IV4Quoter
+│   │   └── types/            #     PositionInfo (bit-packed NFT position data)
+│   ├── test/                 #   Tests (Quoter, V4Router swaps, multi-hop, PositionManager)
+│   ├── script/               #   Deploy scripts (PositionManager, Router, Quoter, tokens)
+│   └── scripts/              #   Shell wrappers (deploy.sh, modify.sh, transfer, verify)
+│
+├── ui/                       # Frontend (Next.js 15 + React 19)
 │   ├── src/
-│   ├── test/
-│   ├── script/
-│   └── lib/
-├── hieroforge-periphery/  # Periphery contracts to swap tokens via hieroforge-core
-│   ├── src/
-│   ├── test/
-│   ├── script/
-│   └── lib/               # Same as core: forge-std, hedera-smart-contracts, hedera-forking
-├── ui/                    # Vite + React frontend
-│   ├── src/
-│   │   ├── context/       # HashPackContext (wallet connect)
-│   │   └── App.tsx
-│   └── package.json
-├── .env.example           # Root env (e.g. deploy keys)
-└── README.md
+│   │   ├── app/              #     Next.js App Router (layout, page, API routes)
+│   │   │   └── api/          #       /api/pools, /api/tokens, /api/tokens/lookup
+│   │   ├── components/       #     SwapCard, Explore, PoolPositions, PositionDetail,
+│   │   │                     #       NewPosition, AddLiquidity/Remove/Burn modals, Header
+│   │   ├── lib/              #     swap.ts, addLiquidity.ts, quote.ts, hederaContract.ts,
+│   │   │                     #       priceUtils.ts, poolValidation.ts, dynamo-*.ts, errors.ts
+│   │   ├── hooks/            #     useTokens, useTokenBalance, useTokenLookup
+│   │   ├── context/          #     HashPackContext (wallet connection)
+│   │   ├── abis/             #     Contract ABIs (PoolManager, PositionManager, Quoter, etc.)
+│   │   └── constants/        #     Chain config, token defaults, fee tiers
+│   ├── scripts/              #   DynamoDB seed/register scripts
+│   └── public/               #   Static assets
+│
+├── docs/                     # Documentation
+│   ├── architecture.md       #   System architecture & smart contract diagrams
+│   ├── hts-token-foundry.md  #   HTS token creation guide
+│   └── v4-periphery-overview.md # Uniswap V4 periphery reference
+│
+├── .env.example              # Root env template (PRIVATE_KEY, RPC, etc.)
+└── .gitmodules               # Git submodules (hedera-smart-contracts, hedera-forking,
+                              #   forge-std, solmate, permit2)
 ```
 
-- **hieroforge-core** — Holds pool state and implements initialize, swap, and modify liquidity. Deploy this first.
-- **hieroforge-periphery** — User-facing contracts (e.g. swap router) that call the core `PoolManager` to execute token swaps. Use periphery in the UI or scripts to perform swaps against pools created by the core.
+---
+
+## How It Works
+
+### Core Concepts
+
+#### 1. Singleton PoolManager (hieroforge-core)
+All pools exist as entries in a single `PoolManager` contract — a `mapping(PoolId => PoolState)`. Pools are created by calling `initialize(PoolKey, sqrtPriceX96)` where `PoolKey = {currency0, currency1, fee, tickSpacing, hooks}`.
+
+#### 2. Lock/Unlock + Flash Accounting
+All state-mutating operations require the unlock pattern:
+1. Caller invokes `poolManager.unlock(data)`
+2. PoolManager sets a transient storage lock flag and calls `unlockCallback(data)` on `msg.sender`
+3. Inside the callback, the caller performs `modifyLiquidity()` / `swap()` — these accumulate **deltas** in transient storage per-address per-currency
+4. The caller **settles** negative deltas (`sync` → transfer tokens → `settle`) and **takes** positive deltas (`take`)
+5. After the callback returns, PoolManager asserts all deltas are zero, then re-locks
+
+This means tokens only move once per currency per operation batch.
+
+#### 3. Concentrated Liquidity
+LPs provide liquidity in discrete tick ranges. The full Uniswap V4 math stack is implemented: `TickMath` (tick ↔ sqrtPrice), `SqrtPriceMath` (price-liquidity relationships), `SwapMath` (per-step swap computation), `TickBitmap` (initialized tick tracking).
+
+#### 4. HTS Token Support
+Hedera Token Service tokens are detected via the `0x167` precompile (`isToken()` check). HTS tokens also expose ERC-20-compatible interfaces, so the PoolManager treats them uniformly through `CurrencyLibrary`. Token creation uses `IHederaTokenService.createFungibleToken()` from the hedera-smart-contracts library.
+
+### Swap Flow
+```
+User (UI)
+  → approve(router, amount)
+  → UniversalRouter.execute(commands=[V4_SWAP], inputs, deadline)
+    → dispatch(V4_SWAP) → self-call executeV4Swap()
+      → poolManager.unlock(actionsData)
+        → unlockCallback()
+          → SWAP_EXACT_IN_SINGLE → poolManager.swap(poolKey, params)
+          → SETTLE_ALL → transferFrom(user → poolManager) + settle()
+          → TAKE_ALL → poolManager.take(currency, user, amount)
+        ← all deltas zero ✓
+```
+
+### Liquidity Flow
+```
+User (UI)
+  → transfer tokens to PositionManager
+  → PositionManager.multicall([initializePool(...), modifyLiquidities(...)])
+    → poolManager.unlock(actionsData)
+      → unlockCallback()
+        → MINT_POSITION → poolManager.modifyLiquidity(key, params)
+        → ERC-721 NFT minted to user
+        → SETTLE_PAIR / CLOSE_CURRENCY
+      ← all deltas zero ✓
+```
+
+### Quote Flow
+```
+User (UI)
+  → V4Quoter.quoteExactInputSingle(params)
+    → try poolManager.unlock(quoteData)
+      → unlockCallback()
+        → poolManager.swap(key, params)
+        → revert QuoteSwap(amountOut)
+    → catch → parseQuoteAmount(revertData)
+    → return (amountOut, gasEstimate)
+```
+
+---
 
 ## Prerequisites
 
-- **Smart contract:** [Foundry](https://getfoundry.sh/) (Forge, Cast, Anvil)
-- **UI:** Node.js 18+, npm
+- **Foundry** — [Install](https://getfoundry.sh/) (`forge`, `cast`, `anvil`)
+- **Node.js 18+** and npm — for the UI
+- **Hedera testnet account** with HBAR — get from [Hedera Portal](https://portal.hedera.com/faucet)
+- **HashPack wallet** — [Install](https://www.hashpack.app/) browser extension
+- **WalletConnect project ID** — [Get one](https://cloud.walletconnect.com/)
+- **AWS credentials** — for DynamoDB pool/token storage (or run locally with DynamoDB Local)
 
-## Quick start
+---
 
-### Smart contracts
+## Quick Start
 
-From repo root, init submodules once (for both core and periphery):
+### 1. Clone & init submodules
 
 ```bash
+git clone <repo-url>
+cd HieroForge
 git submodule update --init --recursive
 ```
 
-**Core (AMM):**
+### 2. Environment setup
 
+```bash
+cp .env.example .env
+# Edit .env — set PRIVATE_KEY (Hedera testnet EOA with HBAR)
+```
+
+### 3. Build & test smart contracts
+
+**Core (AMM engine):**
 ```bash
 cd hieroforge-core
 forge build
-forge test
+forge test          # Local tests with HTS emulation
 ```
 
-**Periphery (swap helpers):** Build after core is deployed. Periphery contracts talk to the core `PoolManager` to execute swaps.
-
+**Periphery (swap router, position manager):**
 ```bash
 cd hieroforge-periphery
 forge build
-forge test
+forge test --ffi    # Requires --ffi for HTS emulation
 ```
 
-### UI (frontend + HashPack)
+### 4. Deploy to Hedera testnet
+
+**Deploy core (PoolManager):**
+```bash
+cd hieroforge-core
+./scripts/deploy-pool-manager.sh
+```
+
+**Deploy periphery (PositionManager + UniversalRouter + Quoter):**
+```bash
+cd hieroforge-periphery
+./scripts/deploy.sh all
+```
+
+### 5. Run the UI
 
 ```bash
 cd ui
-cp .env.example .env
-# Edit .env: set VITE_WALLETCONNECT_PROJECT_ID (get one at cloud.walletconnect.com)
+cp .env.example .env.local
+# Edit .env.local — set:
+#   NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...
+#   NEXT_PUBLIC_POOL_MANAGER_ADDRESS=0x...
+#   NEXT_PUBLIC_QUOTER_ADDRESS=0x...
+#   NEXT_PUBLIC_POSITION_MANAGER_ADDRESS=0x...
+#   AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+#   DYNAMODB_TABLE_POOLS=hieroforge-pools
+#   DYNAMODB_TABLE_TOKENS=hieroforge-tokens
+
 npm install
 npm run dev
 ```
 
-Then install the [HashPack](https://www.hashpack.app/) browser extension and click **Connect HashPack** in the app. See [ui/README.md](ui/README.md) for HashPack and env details.
+Open [http://localhost:3000](http://localhost:3000) and connect HashPack.
 
-## Configuration
+---
 
-- **Root:** Copy `.env.example` to `.env` for deploy keys (e.g. `PRIVATE_KEY`) if you run deploy scripts from the repo root.
-- **UI:** Copy `ui/.env.example` to `ui/.env` and set:
-  - `VITE_WALLETCONNECT_PROJECT_ID` (required for HashPack)
-  - `VITE_HEDERA_NETWORK` (optional: `testnet` | `mainnet` | `previewnet`, default `testnet`)
+## Commands Reference
 
-## Commands
+### Smart Contracts
 
-| What        | Command |
-|------------|--------|
+| Action | Command |
+|--------|---------|
 | Build core | `cd hieroforge-core && forge build` |
-| Build periphery (swap helpers) | `cd hieroforge-periphery && forge build` |
-| Test core (HTS token creation) | `cd hieroforge-core && forge test` |
-| Test periphery | `cd hieroforge-periphery && forge test` |
-| Test periphery V4Router swaps (HTS) | `cd hieroforge-periphery && forge test --match-contract V4RouterSwapTest --ffi` |
-| HTS tests on forked testnet | `cd hieroforge-core && forge test --match-contract CreateHtsTokenTest --fork-url https://testnet.hashio.io/api` |
-| **Create HTS token** (testnet or local) | `cd hieroforge-core && source ../.env 2>/dev/null; forge script script/CreateHtsToken.s.sol:CreateHtsTokenScript --rpc-url ${HEDERA_RPC_URL:-https://testnet.hashio.io/api} --broadcast --private-key $PRIVATE_KEY` |
-| Run UI dev server | `cd ui && npm run dev` |
-| Build UI for production | `cd ui && npm run build` |
+| Build periphery | `cd hieroforge-periphery && forge build` |
+| Test core | `cd hieroforge-core && forge test` |
+| Test periphery | `cd hieroforge-periphery && forge test --ffi` |
+| Test swap routing (HTS) | `cd hieroforge-periphery && forge test --match-contract V4RouterSwapTest --ffi` |
+| Test multi-hop swaps | `cd hieroforge-periphery && forge test --match-contract V4RouterMultiHopTest --ffi` |
+| Test quoter | `cd hieroforge-periphery && forge test --match-contract QuoterTest --ffi` |
+| Test PositionManager | `cd hieroforge-periphery && forge test --match-contract PositionManager --ffi` |
+| Deploy PoolManager | `cd hieroforge-core && ./scripts/deploy-pool-manager.sh` |
+| Create HTS token | `cd hieroforge-core && ./scripts/deploy-token.sh` |
+| Deploy full periphery stack | `cd hieroforge-periphery && ./scripts/deploy.sh all` |
+| Verify on HashScan | `cd hieroforge-periphery && ./scripts/verify-contracts.sh` |
 
-### HTS token (Foundry)
+### Frontend
 
-The project uses [Hedera Token Service](https://docs.hedera.com/hedera/sdks-and-apis/sdks/smart-contracts/hedera-service-solidity-libraries) via the HTS precompile. To create a fungible token on **Hedera testnet** or a **local Hedera node**:
+| Action | Command |
+|--------|---------|
+| Install deps | `cd ui && npm install` |
+| Dev server | `cd ui && npm run dev` |
+| Production build | `cd ui && npm run build` |
+| Start production | `cd ui && npm run start` |
+| Seed DynamoDB | `cd ui && npx tsx scripts/seed-dynamo.ts` |
+| Register pool | `cd ui && node scripts/register-pool.cjs <args>` |
+| Register token | `cd ui && node scripts/register-token.cjs <args>` |
 
-1. Set `PRIVATE_KEY` in `.env` (account must have HBAR for fees).
-2. Optional: set `TREASURY` (EVM address) or it defaults to the signer.
+---
+
+## Deployed Contracts (Hedera Testnet)
+
+| Contract | Address |
+|----------|---------|
+| PoolManager | `0xc96474B027344d486a0963B3Da45F9a6c34AA96B` |
+| PositionManager | `0x21ADCD6DE84afE088CD322B9ebdF7dfDF33f0B5A` |
+| UniversalRouter | `0x993027e4e258310DD872c132db5e9DEbF9578631` |
+| V4Quoter | `0xb0649244102C565653994bAd0F7473914037d459` |
+| TKA (HTS token) | `0x00000000000000000000000000000000007d6d03` |
+| TKB (HTS token) | `0x00000000000000000000000000000000007d6d06` |
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [docs/architecture.md](docs/architecture.md) | System architecture, smart contract diagrams, Mermaid flowcharts |
+| [docs/hts-token-foundry.md](docs/hts-token-foundry.md) | How to create HTS tokens using Foundry scripts |
+| [docs/v4-periphery-overview.md](docs/v4-periphery-overview.md) | Uniswap V4 periphery reference (IV4Router, V4Router, PathKey, Actions) |
+| [hieroforge-core/README.md](hieroforge-core/README.md) | Core contracts — build, test, deploy, troubleshooting |
+| [hieroforge-periphery/README.md](hieroforge-periphery/README.md) | Periphery contracts — deploy, scripts, HTS compatibility |
+| [ui/README.md](ui/README.md) | Frontend — setup, environment, DynamoDB, HashPack |
+
+---
+
+## Technology Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Smart Contracts | Solidity ^0.8.13, Foundry (Forge/Cast), EVM Cancun (tstore/tload) |
+| Blockchain | Hedera Testnet (Chain 296), HTS Precompile (0x167) |
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS v4 |
+| Wallet | HashConnect 3.0, WalletConnect, HashPack |
+| ABI Encoding | viem 2.46.3 |
+| Contract Execution | @hashgraph/sdk 2.80 (ContractExecuteTransaction) |
+| Storage | AWS DynamoDB (pools + tokens) |
+| Balance/Status | Hedera Mirror Node REST API |
+| Dependencies | hedera-smart-contracts, hedera-forking, forge-std, solmate, permit2 |
+
+---
+
+## License
+
+See individual package files for license information.
 3. Optional: set `HEDERA_RPC_URL` (default: testnet hashio).
 4. From repo root: `cd hieroforge-core && forge script script/CreateHtsToken.s.sol:CreateHtsTokenScript --rpc-url $HEDERA_RPC_URL --broadcast --private-key $PRIVATE_KEY`
 

@@ -1,6 +1,109 @@
-# HieroForge Smart Contracts
+# HieroForge Core — AMM Engine
 
 Uniswap v4–style concentrated liquidity AMM (PoolManager + ModifyLiquidityRouter) and HTS token creation for **Hedera Testnet**. Built with [Foundry](https://book.getfoundry.sh/).
+
+## Folder Structure
+
+```
+hieroforge-core/
+├── src/                              # Solidity source contracts
+│   ├── PoolManager.sol               #   Singleton AMM core — all pool state, swap, liquidity
+│   ├── constants.sol                 #   MIN/MAX tick bounds, tick spacing limits
+│   ├── NoDelegateCall.sol            #   Guard against delegatecall (immutable address check)
+│   ├── TokenClassifier.sol           #   Classify token addresses as ERC-20 / HTS / Unknown
+│   ├── Counter.sol                   #   Minimal test contract for deploy verification
+│   ├── interfaces/                   #   Contract interfaces
+│   │   ├── IPoolManager.sol          #     Full PoolManager interface (init, swap, liquidity, etc.)
+│   │   └── IERC20Minimal.sol         #     Minimal ERC-20 (balanceOf, transfer, transferFrom)
+│   ├── callback/
+│   │   └── IUnlockCallback.sol       #   Callback interface for the lock/unlock pattern
+│   ├── libraries/                    #   Math & utility libraries
+│   │   ├── Lock.sol                  #     Transient storage lock flag (tstore/tload)
+│   │   ├── NonzeroDeltaCount.sol     #     Transient counter for unsettled currency deltas
+│   │   ├── TokenTypeDetector.sol     #     HTS precompile (0x167) detection + ERC-20 probing
+│   │   ├── TickMath.sol              #     Tick ↔ sqrtPriceX96 conversion (Q64.96 format)
+│   │   ├── SqrtPriceMath.sol         #     Price-liquidity math (amounts from price ranges)
+│   │   ├── SwapMath.sol              #     Per-tick swap step computation (price, fees, amounts)
+│   │   ├── TickBitmap.sol            #     Packed bitmap for initialized tick tracking
+│   │   ├── FullMath.sol              #     512-bit safe mulDiv (phantom overflow protection)
+│   │   ├── BitMath.sol               #     MSB/LSB via De Bruijn sequences
+│   │   ├── FixedPoint96.sol          #     Q64.96 constants (RESOLUTION, Q96)
+│   │   ├── LiquidityMath.sol         #     Signed delta + unsigned liquidity addition
+│   │   ├── SafeCast.sol              #     Safe downcasting (uint256→uint160, int256→int128, etc.)
+│   │   ├── UnsafeMath.sol            #     Unchecked divRoundingUp
+│   │   └── CustomRevert.sol          #     Gas-efficient custom error reverting (assembly)
+│   └── types/                        #   Data structures
+│       ├── PoolState.sol             #     Pool state + swap()/modifyLiquidity() implementations
+│       ├── PoolKey.sol               #     Pool identifier (currency0, currency1, fee, tickSpacing, hooks)
+│       ├── PoolId.sol                #     bytes32 pool hash (keccak256 of PoolKey)
+│       ├── Slot0.sol                 #     Packed bytes32: sqrtPriceX96 + tick + fees
+│       ├── Currency.sol              #     Token address wrapper + CurrencyDelta transient storage
+│       ├── BalanceDelta.sol          #     Packed int256: amount0 (upper) + amount1 (lower)
+│       ├── TickInfo.sol              #     Per-tick: liquidityGross, liquidityNet, feeGrowth
+│       ├── PositionState.sol         #     Per-position: liquidity, fee growth snapshots
+│       ├── SwapParams.sol            #     Swap input parameters
+│       ├── SwapResult.sol            #     Swap output (final price, tick, liquidity)
+│       ├── StepComputations.sol      #     Per-step intermediate state during swap loop
+│       ├── ModifyLiquidityParams.sol #     External liquidity operation parameters
+│       ├── PoolOperation.sol         #     Internal operation struct with resolved fields
+│       └── BeforeSwapDelta.sol       #     Hook return type for beforeSwap
+├── test/                             # Foundry test suite
+│   ├── PoolManager/                  #   Integration tests
+│   │   ├── initialize.t.sol         #     Pool initialization (prices, tick spacing, reverts)
+│   │   ├── modifyLiquidity.t.sol    #     Add/remove liquidity, tick updates, fee accrual
+│   │   ├── swap.t.sol               #     Swap flows (exact input, both directions)
+│   │   └── core.t.sol               #     Consolidated core tests (events, hooks)
+│   ├── libraries/                    #   Unit tests for library functions
+│   │   ├── BitMath.t.sol            #     MSB/LSB edge cases
+│   │   ├── Lock.t.sol               #     Transient lock toggle behavior
+│   │   ├── NonzeroDeltaCount.t.sol  #     Increment/decrement/underflow
+│   │   └── TokenTypeDetector.t.sol  #     ERC-20/HTS classification
+│   ├── types/                        #   Unit tests for type libraries
+│   │   ├── PoolKey.t.sol            #     Validation (sorted, spacing bounds)
+│   │   └── PoolState.t.sol          #     Direct state function tests
+│   ├── CreateHtsToken.t.sol          #   HTS token creation via emulation
+│   ├── TickBitmap.t.sol              #   TickBitmap search (boundary conditions)
+│   ├── TokenClassifier.t.sol         #   TokenClassifier facade tests
+│   └── utils/                        #   Test helpers
+│       ├── Deployers.sol             #     Shared setup: deploy PoolManager+Router, HTS tokens
+│       ├── Router.sol                #     Unlock-callback router for test operations
+│       ├── MockERC20.sol             #     Minimal ERC-20 mock with mint
+│       └── Constants.sol             #     Pre-computed sqrt prices and fee tiers
+├── script/                           # Foundry deploy/setup scripts
+│   ├── DeployPoolManager.s.sol       #   Deploy PoolManager + Router together
+│   ├── DeployPoolManagerOnly.s.sol   #   Deploy PoolManager only
+│   ├── DeployModifyLiquidityRouterOnly.s.sol  # Deploy Router only
+│   ├── CreateHtsToken.s.sol          #   Create HTS fungible token via precompile
+│   ├── MintHtsToken.s.sol            #   Mint additional HTS supply
+│   ├── CreatePoolAndAddLiquidityTestnet.s.sol  # Init pool + add liquidity
+│   ├── ModifyLiquidityTestnet.s.sol  #   Add liquidity across multiple tick ranges
+│   └── DeployCounter.s.sol           #   Deploy Counter (verification smoke test)
+├── scripts/                          # Shell script wrappers
+│   ├── deploy-pool-manager.sh        #   Deploy PoolManager to testnet
+│   ├── deploy-router.sh              #   Deploy Router (needs POOL_MANAGER_ADDRESS)
+│   ├── deploy-token.sh               #   Create HTS token on testnet
+│   ├── mint-token.sh                 #   Mint more HTS tokens
+│   ├── create-pool-and-add-liquidity.sh  # Create pool + add liquidity
+│   ├── run-modify-liquidity.sh       #   Add/remove liquidity
+│   ├── deploy-counter.sh             #   Deploy Counter contract
+│   ├── run-initialize-tests.sh       #   Run initialize tests only
+│   ├── verify-contracts.sh           #   Verify on HashScan (Sourcify)
+│   ├── verify-counter.sh             #   Verify Counter on HashScan
+│   └── hashscan-verify-api.sh        #   Direct HashScan API helper
+├── foundry.toml                      # Build config (Cancun EVM, via_ir, optimizer, RPC)
+├── lib/                              # Git submodules
+│   ├── forge-std/                    #   Foundry standard library
+│   ├── hedera-smart-contracts/       #   HTS precompile interfaces
+│   └── hedera-forking/               #   HTS emulation for local testing
+└── README.md                         # This file
+```
+
+## Key Architecture
+
+- **Singleton PoolManager** — All pools live in one contract (`mapping(PoolId => PoolState)`). No factory; pools are created via `initialize()`.
+- **Lock/Unlock Flash Accounting** — Operations (`swap`, `modifyLiquidity`) require `unlock()` → `unlockCallback()`. Deltas tracked in transient storage (`tstore`/`tload`); tokens move once per currency via `sync`/`settle`/`take`.
+- **HTS Token Support** — `TokenTypeDetector` probes `0x167` precompile for HTS tokens. `CurrencyLibrary` handles transfers uniformly for both ERC-20 and HTS. Local tests use `htsSetup()` from hedera-forking.
+- **Concentrated Liquidity Math** — Full Uniswap V4 math: `TickMath`, `SqrtPriceMath`, `SwapMath`, `TickBitmap`, `FullMath`. Packed storage (`Slot0` = sqrtPrice+tick+fees in one `bytes32`).
 
 ### Hedera forking (HTS emulation)
 
