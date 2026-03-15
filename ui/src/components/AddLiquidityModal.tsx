@@ -8,23 +8,31 @@ import { Button } from "@/components/ui/Button";
 import { ErrorMessage } from "./ErrorMessage";
 import { useHashPack } from "@/context/HashPackContext";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
-import { getTokenDecimals, getPositionManagerAddress } from "@/constants";
+import {
+  getTokenDecimals,
+  getPositionManagerAddress,
+  getPoolManagerAddress,
+  getRpcUrl,
+  HEDERA_TESTNET,
+} from "@/constants";
 import {
   buildPoolKey,
+  getPoolId,
   encodeUnlockDataMint,
   encodeUnlockDataMintFromDeltas,
 } from "@/lib/addLiquidity";
+import { encodePriceSqrt } from "@/lib/priceUtils";
 import {
-  encodePriceSqrt,
-  computeLiquidityFromAmount,
-  liquidityToWei,
-  tickToPrice,
-} from "@/lib/priceUtils";
+  getSqrtPriceAtTick,
+  maxLiquidityForAmounts,
+  amountsForLiquidity,
+} from "@/lib/sqrtPriceMath";
 import {
   hederaTokenTransfer,
   hederaContractMulticall,
 } from "@/lib/hederaContract";
 import { PositionManagerAbi } from "@/abis/PositionManager";
+import { PoolManagerAbi } from "@/abis/PoolManager";
 import { getFriendlyErrorMessage } from "@/lib/errors";
 import type { PoolInfo } from "./PoolPositions";
 
@@ -153,42 +161,8 @@ export function AddLiquidityModal({
       return;
     }
 
-    const priceLower = tickToPrice(tickLower);
-    const priceUpper = tickToPrice(tickUpper);
-    const liqFrom0 =
-      amount0Num > 0
-        ? computeLiquidityFromAmount(
-            referencePrice,
-            priceLower,
-            priceUpper,
-            amount0Num,
-            0,
-          ).liquidity
-        : 0;
-    const liqFrom1 =
-      amount1Num > 0
-        ? computeLiquidityFromAmount(
-            referencePrice,
-            priceLower,
-            priceUpper,
-            amount1Num,
-            1,
-          ).liquidity
-        : 0;
-    const liquidityHuman =
-      liqFrom0 > 0 && liqFrom1 > 0
-        ? Math.min(liqFrom0, liqFrom1)
-        : liqFrom0 > 0
-          ? liqFrom0
-          : liqFrom1;
-    const liquidityWei = liquidityToWei(liquidityHuman, decimals0, decimals1);
-
     if (amount0Wei === 0n && amount1Wei === 0n) {
       setError("Enter amount for at least one token.");
-      return;
-    }
-    if (liquidityWei === 0n) {
-      setError("Unable to compute liquidity from provided amounts.");
       return;
     }
 
@@ -212,11 +186,84 @@ export function AddLiquidityModal({
       );
 
       const pmAddr = positionManagerAddress;
+      const poolManagerAddress = getPoolManagerAddress();
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
-      const sqrtPriceX96 = encodePriceSqrt(
+
+      // Read on-chain sqrtPriceX96
+      let onChainSqrtPrice: bigint | null = null;
+      if (poolManagerAddress) {
+        try {
+          const { createPublicClient, http } = await import("viem");
+          const pc = createPublicClient({
+            chain: HEDERA_TESTNET,
+            transport: http(getRpcUrl()),
+          });
+          const poolId = getPoolId(poolKey);
+          const state = (await pc.readContract({
+            address: poolManagerAddress as `0x${string}`,
+            abi: PoolManagerAbi,
+            functionName: "getPoolState",
+            args: [poolId],
+          })) as [boolean, bigint, number];
+          if (state[0] && state[1] > 0n) {
+            onChainSqrtPrice = state[1];
+          }
+          console.log(
+            "[AddLiq modal] on-chain sqrtPriceX96:",
+            onChainSqrtPrice?.toString(),
+          );
+        } catch (e) {
+          console.warn("[AddLiq modal] getPoolState failed:", e);
+        }
+      }
+
+      const sqrtPriceX96ForInit = encodePriceSqrt(
         referencePrice,
         decimals0,
         decimals1,
+      );
+      const sqrtPriceX96 = onChainSqrtPrice ?? sqrtPriceX96ForInit;
+
+      // BigInt liquidity computation
+      const sqrtPA = getSqrtPriceAtTick(tickLower);
+      const sqrtPB = getSqrtPriceAtTick(tickUpper);
+
+      const liquidityBigInt = maxLiquidityForAmounts(
+        sqrtPriceX96,
+        sqrtPA,
+        sqrtPB,
+        amount0Wei,
+        amount1Wei,
+      );
+
+      if (liquidityBigInt === 0n) {
+        setError("Computed liquidity is zero. Adjust amounts.");
+        setPending(false);
+        return;
+      }
+
+      // Compute exact amounts + 1% slippage buffer
+      const exact = amountsForLiquidity(
+        sqrtPriceX96,
+        sqrtPA,
+        sqrtPB,
+        liquidityBigInt,
+      );
+      const amount0Max = exact.amount0 + exact.amount0 / 100n + 1n;
+      const amount1Max = exact.amount1 + exact.amount1 / 100n + 1n;
+
+      console.log(
+        "[AddLiq modal] BigInt math:",
+        "L:",
+        liquidityBigInt.toString(),
+        "exact0:",
+        exact.amount0.toString(),
+        "exact1:",
+        exact.amount1.toString(),
+        "max0:",
+        amount0Max.toString(),
+        "max1:",
+        amount1Max.toString(),
       );
 
       const unlockData = useFromDeltas
@@ -224,33 +271,33 @@ export function AddLiquidityModal({
             poolKey,
             tickLower,
             tickUpper,
-            liquidityWei,
-            amount0Wei,
-            amount1Wei,
+            liquidityBigInt,
+            amount0Max,
+            amount1Max,
             ownerEvmAddress as `0x${string}`,
           )
         : encodeUnlockDataMint(
             poolKey,
             tickLower,
             tickUpper,
-            liquidityWei,
-            amount0Wei,
-            amount1Wei,
+            liquidityBigInt,
+            amount0Max,
+            amount1Max,
             ownerEvmAddress as `0x${string}`,
           );
 
-      // Transfer tokens to PositionManager
-      for (const [currency, amountWei] of [
-        [poolKey.currency0, amount0Wei],
-        [poolKey.currency1, amount1Wei],
+      // Transfer tokens to PositionManager (use buffered amounts)
+      for (const [currency, amtWei] of [
+        [poolKey.currency0, amount0Max],
+        [poolKey.currency1, amount1Max],
       ] as const) {
-        if (amountWei > 0n) {
+        if (amtWei > 0n) {
           await hederaTokenTransfer({
             hashConnect: hc,
             accountId,
             tokenAddress: currency,
             to: pmAddr,
-            amount: amountWei,
+            amount: amtWei,
             gas: HEDERA_GAS_ERC20,
           });
         }
@@ -261,7 +308,7 @@ export function AddLiquidityModal({
       const initializeCalldata = encFn({
         abi: PositionManagerAbi,
         functionName: "initializePool",
-        args: [poolKey, sqrtPriceX96],
+        args: [poolKey, sqrtPriceX96ForInit],
       }) as `0x${string}`;
       const modifyCalldata = encFn({
         abi: PositionManagerAbi,
@@ -288,8 +335,6 @@ export function AddLiquidityModal({
     pool,
     amount0,
     amount1,
-    amount0Num,
-    amount1Num,
     decimals0,
     decimals1,
     referencePrice,

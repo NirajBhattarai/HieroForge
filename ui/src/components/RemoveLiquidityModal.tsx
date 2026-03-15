@@ -38,8 +38,12 @@ export function RemoveLiquidityModal({
 }: RemoveLiquidityModalProps) {
   const { accountId, isConnected, hashConnectRef } = useHashPack();
   const [percent, setPercent] = useState(0);
-  const [tokenId, setTokenId] = useState("");
-  const [positionLiquidity, setPositionLiquidity] = useState("");
+  const [tokenId, setTokenId] = useState(
+    pool.tokenId != null ? String(pool.tokenId) : "",
+  );
+  const [positionLiquidity, setPositionLiquidity] = useState(
+    pool.liquidity ?? "",
+  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -145,6 +149,21 @@ export function RemoveLiquidityModal({
       });
 
       setTxHash(txId);
+
+      // If 100% removal (burn), delete position record from DynamoDB
+      if (percent === 100 && pool.tokenId != null) {
+        try {
+          const positionId = `${pool.currency0}-${pool.currency1}-${pool.fee}-${pool.tickSpacing}-${pool.hooks ?? "0x0000000000000000000000000000000000000000"}-${pool.tokenId}`;
+          await fetch(
+            `/api/positions?positionId=${encodeURIComponent(positionId)}`,
+            {
+              method: "DELETE",
+            },
+          );
+        } catch {
+          // Non-critical – position was burned on-chain regardless
+        }
+      }
     } catch (err: unknown) {
       setError(getFriendlyErrorMessage(err, "transaction"));
     } finally {

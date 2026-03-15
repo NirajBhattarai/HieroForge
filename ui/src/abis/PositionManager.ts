@@ -48,6 +48,20 @@ export const PositionManagerAbi = [
     outputs: [],
     stateMutability: "payable",
   },
+  {
+    type: "function",
+    name: "nextTokenId",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256", internalType: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "positionLiquidity",
+    inputs: [{ name: "tokenId", type: "uint256", internalType: "uint256" }],
+    outputs: [{ name: "", type: "uint128", internalType: "uint128" }],
+    stateMutability: "view",
+  },
 ] as Abi;
 
 // V4 PositionManager action bytes

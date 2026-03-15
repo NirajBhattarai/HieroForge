@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
-import { deletePoolById, getPoolById } from "@/lib/dynamo-pools";
-import { validatePoolOnChain } from "@/lib/poolValidation";
+import { deletePoolById, getPoolById, savePool } from "@/lib/dynamo-pools";
+import {
+  validatePoolOnChain,
+  discoverPoolFromChain,
+} from "@/lib/poolValidation";
 
 export async function GET(
   _request: Request,
@@ -11,11 +14,25 @@ export async function GET(
     if (!poolId) {
       return NextResponse.json({ error: "Missing poolId" }, { status: 400 });
     }
-    const pool = await getPoolById(poolId);
+
+    // 1. Check DynamoDB first
+    let pool = await getPoolById(poolId);
+
+    // 2. If not in DynamoDB, try discovering from on-chain Initialize event
     if (!pool) {
-      return NextResponse.json({ error: "Pool not found" }, { status: 404 });
+      const discovered = await discoverPoolFromChain(poolId);
+      if (!discovered) {
+        return NextResponse.json(
+          { error: "Pool not found on-chain" },
+          { status: 404 },
+        );
+      }
+      // Save discovered pool to DynamoDB for future lookups
+      await savePool(discovered);
+      return NextResponse.json(discovered);
     }
 
+    // 3. Validate the DynamoDB record is still live on-chain
     const validation = await validatePoolOnChain(pool.poolId);
     if (validation.validated && !validation.exists) {
       try {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { formatUnits } from "viem";
 
 /**
@@ -45,10 +45,13 @@ export function useTokenBalance(
   balanceWei: bigint;
   loading: boolean;
   error: string | null;
+  refetch: () => void;
 } {
   const [balanceWei, setBalanceWei] = useState<bigint>(0n);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshCounter, setRefreshCounter] = useState(0);
+  const refetch = useCallback(() => setRefreshCounter((c) => c + 1), []);
 
   const isTokenValid =
     !!tokenAddress && /^0x[0-9a-f]{40}$/i.test(tokenAddress.trim());
@@ -180,7 +183,14 @@ export function useTokenBalance(
     return () => {
       cancelled = true;
     };
-  }, [tokenAddress, ownerAddress, isTokenValid, isOwnerValid, decimals]);
+  }, [
+    tokenAddress,
+    ownerAddress,
+    isTokenValid,
+    isOwnerValid,
+    decimals,
+    refreshCounter,
+  ]);
 
   const balanceFormatted =
     loading || error
@@ -195,5 +205,5 @@ export function useTokenBalance(
           }
         })();
 
-  return { balanceFormatted, balanceWei, loading, error };
+  return { balanceFormatted, balanceWei, loading, error, refetch };
 }

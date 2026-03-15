@@ -11,7 +11,7 @@ import {
   SQRT_PRICE_1_1,
 } from "../abis/PositionManager";
 
-const HOOKS_ZERO = "0x0000000000000000000000000000000000000000" as const;
+import { HOOKS_ZERO } from "@/constants";
 
 /** Convert Hedera native ID (0.0.XXXXX) to EVM address if needed. */
 function normalizeAddress(addr: string): string {
@@ -34,6 +34,7 @@ export function buildPoolKey(
   token1: Address,
   fee: number,
   tickSpacing: number,
+  hooks: Address = HOOKS_ZERO as Address,
 ): PoolKey {
   // Checksummed addresses required by viem's encodeAbiParameters
   const a = getAddress(normalizeAddress(token0));
@@ -45,7 +46,7 @@ export function buildPoolKey(
     currency1: currency1 as Address,
     fee,
     tickSpacing,
-    hooks: HOOKS_ZERO,
+    hooks: getAddress(hooks),
   };
 }
 

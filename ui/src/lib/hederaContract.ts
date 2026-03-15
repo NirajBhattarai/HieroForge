@@ -148,10 +148,14 @@ export async function hederaTokenTransfer(params: {
   // Freeze → execute via signer (proper WalletConnect lifecycle)
   const frozenTx = await tx.freezeWithSigner(signer as any);
   const txResponse = await frozenTx.executeWithSigner(signer as any);
-  console.log(
-    "[hederaTokenTransfer] tx completed:",
-    txResponse?.transactionId?.toString(),
-  );
+
+  const txId =
+    txResponse?.transactionId?.toString() ?? `hedera-tx-${Date.now()}`;
+  console.log("[hederaTokenTransfer] tx submitted:", txId);
+
+  // Verify the transfer actually succeeded on-chain (detect CONTRACT_REVERT_EXECUTED)
+  await waitForTransactionSuccess(txId);
+  console.log("[hederaTokenTransfer] tx confirmed SUCCESS:", txId);
 }
 
 /**
@@ -212,7 +216,12 @@ export async function hederaContractMulticall(params: {
 
   const txId =
     txResponse?.transactionId?.toString() ?? `hedera-tx-${Date.now()}`;
-  console.log("[hederaContractMulticall] tx completed:", txId);
+  console.log("[hederaContractMulticall] tx submitted:", txId);
+
+  // Verify the multicall actually succeeded on-chain
+  await waitForTransactionSuccess(txId);
+  console.log("[hederaContractMulticall] tx confirmed SUCCESS:", txId);
+
   return txId;
 }
 
@@ -234,13 +243,15 @@ async function waitForTransactionSuccess(
   const atIdx = txId.indexOf("@");
   if (atIdx === -1) {
     // Can't verify without a valid transaction ID format
-    console.warn("[waitForTransactionSuccess] Non-standard txId format, skipping verification:", txId);
+    console.warn(
+      "[waitForTransactionSuccess] Non-standard txId format, skipping verification:",
+      txId,
+    );
     return;
   }
   const accountPart = txId.substring(0, atIdx); // "0.0.X"
   const timestampPart = txId.substring(atIdx + 1); // "seconds.nanos"
   const mirrorTxId = `${accountPart}-${timestampPart.replace(".", "-")}`;
-
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -267,12 +278,13 @@ async function waitForTransactionSuccess(
         return; // Transaction confirmed successful
       }
       // Transaction reached consensus but failed
-      throw new Error(
-        `Transaction failed on-chain: ${result}`,
-      );
+      throw new Error(`Transaction failed on-chain: ${result}`);
     } catch (err) {
       // Re-throw our own errors (transaction failures)
-      if (err instanceof Error && err.message.startsWith("Transaction failed")) {
+      if (
+        err instanceof Error &&
+        err.message.startsWith("Transaction failed")
+      ) {
         throw err;
       }
       // Network errors — wait and retry

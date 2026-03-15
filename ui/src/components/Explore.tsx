@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { TokenPairIcon } from "./TokenIcon";
 import { Badge } from "@/components/ui/Badge";
+import { HookBadge } from "@/components/TWAPOracleCard";
+import { HOOKS_ZERO } from "@/constants";
 import type { PoolInfo } from "./PoolPositions";
 
 function shortenAddr(addr: string): string {
@@ -41,6 +43,8 @@ export function Explore({ onSelectPool }: ExploreProps) {
             symbol1?: string;
             decimals0?: number;
             decimals1?: number;
+            hooks?: string;
+            hookName?: string;
           }>,
         ) => {
           if (cancelled) return;
@@ -60,6 +64,8 @@ export function Explore({ onSelectPool }: ExploreProps) {
               currency1: p.currency1,
               decimals0: p.decimals0,
               decimals1: p.decimals1,
+              hooks: p.hooks,
+              hookName: p.hookName,
             })),
           );
         },
@@ -167,9 +173,10 @@ export function Explore({ onSelectPool }: ExploreProps) {
         /* Table */
         <div className="bg-surface-1 border border-border rounded-[--radius-lg] overflow-hidden">
           {/* Table header */}
-          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-4 px-5 py-3 text-xs font-medium text-text-tertiary border-b border-border">
+          <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-5 py-3 text-xs font-medium text-text-tertiary border-b border-border">
             <span>Pool</span>
             <span className="w-20 text-right">Fee</span>
+            <span className="w-20 text-center hidden sm:block">Hook</span>
             <span className="w-20 text-right hidden sm:block">TVL</span>
             <span className="w-20 text-right hidden sm:block">APR</span>
           </div>
@@ -179,7 +186,7 @@ export function Explore({ onSelectPool }: ExploreProps) {
             <button
               key={pool.poolId}
               type="button"
-              className="w-full grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-5 py-3.5 text-left hover:bg-surface-2 transition-colors duration-150 border-b border-border last:border-b-0 cursor-pointer"
+              className="w-full grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center px-5 py-3.5 text-left hover:bg-surface-2 transition-colors duration-150 border-b border-border last:border-b-0 cursor-pointer"
               onClick={() => onSelectPool(pool)}
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -197,6 +204,9 @@ export function Explore({ onSelectPool }: ExploreProps) {
               </div>
               <div className="w-20 text-right">
                 <Badge>{pool.feeLabel}</Badge>
+              </div>
+              <div className="w-20 text-center hidden sm:block">
+                <HookBadge hookAddress={pool.hooks} hookName={pool.hookName} />
               </div>
               <span className="w-20 text-right text-sm text-text-tertiary hidden sm:block">
                 —

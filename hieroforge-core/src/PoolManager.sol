@@ -17,6 +17,8 @@ import {NonzeroDeltaCount} from "./libraries/NonzeroDeltaCount.sol";
 import {CustomRevert} from "./libraries/CustomRevert.sol";
 import {IUnlockCallback} from "./callback/IUnlockCallback.sol";
 import {NoDelegateCall} from "./NoDelegateCall.sol";
+import {Hooks} from "./libraries/Hooks.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "./types/BeforeSwapDelta.sol";
 
 using CustomRevert for bytes4;
 using CurrencyDelta for Currency;
@@ -27,7 +29,9 @@ using SafeCast for uint256;
 error NonzeroNativeValue();
 
 /// @title PoolManager
-/// @notice Holds pool state and implements initialize and swap (Uniswap v4-style)
+/// @notice Holds pool state and implements initialize, modifyLiquidity, and swap (Uniswap v4-style) with hook support.
+/// @dev Hook callbacks are invoked before/after each operation when the pool's hook address has the corresponding permission flag.
+///      Adapted for Hedera — no EIP-712 permit dependency.
 contract PoolManager is IPoolManager, NoDelegateCall {
     mapping(PoolId id => PoolState) internal _pools;
 
@@ -48,15 +52,22 @@ contract PoolManager is IPoolManager, NoDelegateCall {
         noDelegateCall
         returns (int24 tick)
     {
-        // Validate that the currencies are sorted in ascending order, ensuring that currency0 is less than currency1.
-        // This maintains consistency for all pool identifiers, preventing duplicates with reversed keys.
-        // Also, check that the provided tickSpacing in the PoolKey is within the allowed range,
-        // which helps to manage pool granularity and ensure protocol safety.
         key.validate();
+
+        // Validate hook address has code if permission flags are set
+        Hooks.validateHookPermissions(key.hooks);
+
+        // beforeInitialize hook
+        Hooks.callBeforeInitialize(key.hooks, msg.sender, key, sqrtPriceX96, msg.data[msg.data.length:]);
+
         PoolId id = key.toId();
         PoolState storage state = _getPool(id);
         tick = state.initialize(sqrtPriceX96, key.fee);
+
         emit Initialize(id, key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks, sqrtPriceX96, tick);
+
+        // afterInitialize hook
+        Hooks.callAfterInitialize(key.hooks, msg.sender, key, sqrtPriceX96, tick, msg.data[msg.data.length:]);
     }
 
     /// @inheritdoc IPoolManager
@@ -67,12 +78,12 @@ contract PoolManager is IPoolManager, NoDelegateCall {
         noDelegateCall
         returns (BalanceDelta callerDelta, BalanceDelta feesAccrued)
     {
-        // Validate:
-        // - currencies are sorted in ascending order (currency0 < currency1) to prevent duplicates with reversed keys
-        // - tickSpacing in PoolKey is within the allowed range for safety and granularity of pools
         key.validate();
         PoolId id = key.toId();
         PoolState storage state = _getPool(id);
+
+        // beforeModifyLiquidity hook
+        Hooks.callBeforeModifyLiquidity(key.hooks, msg.sender, key, params, hookData);
 
         ModifyLiquidityOperation memory op = ModifyLiquidityOperation({
             owner: msg.sender,
@@ -85,7 +96,6 @@ contract PoolManager is IPoolManager, NoDelegateCall {
         BalanceDelta principalDelta;
         (principalDelta, feesAccrued) = state.modifyLiquidity(op, hookData);
 
-        // Fee delta and principal delta are both accrued to the caller
         callerDelta = toBalanceDelta(
             principalDelta.amount0() + feesAccrued.amount0(), principalDelta.amount1() + feesAccrued.amount1()
         );
@@ -99,6 +109,9 @@ contract PoolManager is IPoolManager, NoDelegateCall {
             callerDelta.amount0(),
             callerDelta.amount1()
         );
+
+        // afterModifyLiquidity hook
+        Hooks.callAfterModifyLiquidity(key.hooks, msg.sender, key, params, callerDelta, feesAccrued, hookData);
 
         _accountPoolBalanceDelta(key, callerDelta, msg.sender);
     }
@@ -122,14 +135,14 @@ contract PoolManager is IPoolManager, NoDelegateCall {
         _accountDelta(key.currency1, delta.amount1(), target);
     }
 
-    function _swap(PoolState storage poolState, PoolId id, SwapParams memory params, Currency inputCurrency)
+    /// @dev Execute the core swap and emit event. Isolated to limit stack depth.
+    function _executeSwap(PoolState storage poolState, PoolId id, SwapParams memory params)
         internal
-        returns (BalanceDelta)
+        returns (BalanceDelta delta)
     {
-        (BalanceDelta delta, uint256 amountToProtocol, uint24 swapFee, SwapResult memory result) =
-            poolState.swap(params);
-
-        // event is emitted before the afterSwap call to ensure events are always emitted in order
+        uint24 swapFee;
+        SwapResult memory result;
+        (delta,, swapFee, result) = poolState.swap(params);
         emit Swap(
             id,
             msg.sender,
@@ -140,7 +153,12 @@ contract PoolManager is IPoolManager, NoDelegateCall {
             result.tick,
             swapFee
         );
-        return delta;
+    }
+
+    /// @dev Apply hook-provided fee override before swap execution.
+    function _applyBeforeSwapHook(PoolKey memory key, SwapParams memory params, bytes calldata hookData) internal {
+        (, uint24 lpFeeOverride) = Hooks.callBeforeSwap(key.hooks, msg.sender, key, params, hookData);
+        if (lpFeeOverride > 0) params.lpFeeOverride = lpFeeOverride;
     }
 
     /// @inheritdoc IPoolManager
@@ -154,10 +172,13 @@ contract PoolManager is IPoolManager, NoDelegateCall {
         if (params.amountSpecified == 0) revert IPoolManager.SwapAmountCannotBeZero();
         key.validate();
         PoolId id = key.toId();
-        PoolState storage state = _getPool(id);
 
-        Currency inputCurrency = params.zeroForOne ? key.currency0 : key.currency1;
-        swapDelta = _swap(state, id, params, inputCurrency);
+        _applyBeforeSwapHook(key, params, hookData);
+
+        swapDelta = _executeSwap(_getPool(id), id, params);
+
+        Hooks.callAfterSwap(key.hooks, msg.sender, key, params, swapDelta, hookData);
+
         _accountPoolBalanceDelta(key, swapDelta, msg.sender);
     }
 

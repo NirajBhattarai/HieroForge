@@ -25,18 +25,30 @@ export interface PoolRecord {
   decimals0?: number;
   /** Token1 decimals */
   decimals1?: number;
+  /** Hook contract address (0x0 for no hook) */
+  hooks?: string;
+  /** Hook name label (e.g. "TWAP Oracle") */
+  hookName?: string;
   createdAt?: string;
 }
 
 const TABLE_NAME = process.env.DYNAMODB_TABLE_POOLS ?? "hieroforge-pools";
 
 function isDynamoConfigured(): boolean {
-  return !!(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
+  return !!(
+    process.env.HF_AWS_ACCESS_KEY_ID && process.env.HF_AWS_SECRET_ACCESS_KEY
+  );
 }
 
 function getClient(): DynamoDBClient {
-  const region = process.env.AWS_REGION ?? "us-east-1";
-  return new DynamoDBClient({ region });
+  const region = process.env.HF_AWS_REGION ?? "us-east-1";
+  return new DynamoDBClient({
+    region,
+    credentials: {
+      accessKeyId: process.env.HF_AWS_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.HF_AWS_SECRET_ACCESS_KEY!,
+    },
+  });
 }
 
 export async function listPools(): Promise<PoolRecord[]> {
@@ -98,7 +110,7 @@ export async function listPoolsByDeployer(
 export async function savePool(pool: PoolRecord): Promise<void> {
   if (!isDynamoConfigured()) {
     console.warn(
-      "DynamoDB not configured – pool not persisted. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.",
+      "DynamoDB not configured – pool not persisted. Set HF_AWS_ACCESS_KEY_ID and HF_AWS_SECRET_ACCESS_KEY.",
     );
     return;
   }

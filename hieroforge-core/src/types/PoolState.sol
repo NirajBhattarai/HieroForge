@@ -21,7 +21,6 @@ import {MIN_TICK, MAX_TICK} from "../constants.sol";
 import {CustomRevert} from "../libraries/CustomRevert.sol";
 import {SafeCast} from "../libraries/SafeCast.sol";
 import {StepComputations} from "./StepComputations.sol";
-import {console} from "forge-std/console.sol";
 
 using CustomRevert for bytes4;
 using SafeCast for uint256;
@@ -258,10 +257,6 @@ function swap(PoolState storage self, SwapParams memory params)
     while (!(amountSpecifiedRemaining == 0 || result.sqrtPriceX96 == params.sqrtPriceLimitX96)) {
         step.sqrtPriceStartX96 = result.sqrtPriceX96;
 
-        console.log("result.tick", result.tick);
-        console.log("params.tickSpacing", params.tickSpacing);
-        console.log("zeroForOne", zeroForOne);
-
         (step.tickNext, step.initialized) =
             self.tickBitmap.nextInitializedTickWithinOneWord(result.tick, params.tickSpacing, zeroForOne);
 
@@ -276,9 +271,6 @@ function swap(PoolState storage self, SwapParams memory params)
         // get the price for the next tick
         step.sqrtPriceNextX96 = TickMath.getSqrtPriceAtTick(step.tickNext);
 
-        console.log("step.tickNext---->", step.tickNext);
-        console.log("step.sqrtPriceNextX96---->", step.sqrtPriceNextX96);
-
         // When we start exactly ON an initialized tick (e.g. tick 120), nextInitializedTickWithinOneWord(lte=true)
         // returns that same tick (120). So sqrtPriceTarget == current price → no price movement in this step →
         // amountIn=0, amountOut=0, feeAmount=0. We then cross the tick (120 → 119) and continue; the next
@@ -292,11 +284,6 @@ function swap(PoolState storage self, SwapParams memory params)
             amountSpecifiedRemaining,
             swapFee
         );
-
-        console.log("result.sqrtPriceX96---->", result.sqrtPriceX96);
-        console.log("step.amountIn---->", step.amountIn);
-        console.log("step.amountOut---->", step.amountOut);
-        console.log("step.feeAmount---->", step.feeAmount);
 
         // Update global fee tracker (Uniswap v4-style)
         if (result.liquidity > 0) {

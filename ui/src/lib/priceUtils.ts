@@ -59,6 +59,18 @@ export function roundToTickSpacing(tick: number, tickSpacing: number): number {
   return Math.round(tick / tickSpacing) * tickSpacing;
 }
 
+/**
+ * Clamp a tick to [MIN_TICK, MAX_TICK] range, aligned to tickSpacing.
+ */
+export const MAX_TICK = 887272;
+export const MIN_TICK = -887272;
+
+export function clampTick(tick: number, tickSpacing: number): number {
+  const maxAligned = Math.floor(MAX_TICK / tickSpacing) * tickSpacing;
+  const minAligned = Math.ceil(MIN_TICK / tickSpacing) * tickSpacing;
+  return Math.max(minAligned, Math.min(maxAligned, tick));
+}
+
 // ---------------------------------------------------------------------------
 // Uniswap V3/V4 concentrated liquidity math (floating-point for UI display)
 // ---------------------------------------------------------------------------

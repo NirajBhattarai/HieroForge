@@ -92,3 +92,77 @@ export function getRouterAddress(): string {
 export function getChainId(): number {
   return Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? "296");
 }
+
+// ─── Hooks ─────────────────────────────────────────────────────────────────
+export const HOOKS_ZERO = "0x0000000000000000000000000000000000000000" as const;
+
+/** Hook permission bit flags (lower 6 bits of hook address). */
+export const HOOK_FLAGS = {
+  BEFORE_INITIALIZE: 1 << 0,
+  AFTER_INITIALIZE: 1 << 1,
+  BEFORE_MODIFY_LIQUIDITY: 1 << 2,
+  AFTER_MODIFY_LIQUIDITY: 1 << 3,
+  BEFORE_SWAP: 1 << 4,
+  AFTER_SWAP: 1 << 5,
+} as const;
+
+export interface HookOption {
+  id: string;
+  name: string;
+  description: string;
+  address: string;
+  /** Which callbacks this hook implements (for display). */
+  permissions: string[];
+  /** CSS badge color class */
+  color: string;
+}
+
+/** Available hooks on the current deployment. */
+export const AVAILABLE_HOOKS: HookOption[] = [
+  {
+    id: "none",
+    name: "No Hook",
+    description: "Standard pool with no custom logic",
+    address: HOOKS_ZERO,
+    permissions: [],
+    color: "text-text-tertiary",
+  },
+  {
+    id: "twap",
+    name: "TWAP Oracle",
+    description:
+      "Time-weighted average price oracle — records tick history after each swap",
+    address:
+      (process.env.NEXT_PUBLIC_TWAP_HOOK_ADDRESS ?? "").trim() || HOOKS_ZERO,
+    permissions: ["afterInitialize", "afterSwap"],
+    color: "text-blue-400",
+  },
+];
+
+/** Resolve hook address given a hook option ID. */
+export function getHookAddress(hookId: string): string {
+  return AVAILABLE_HOOKS.find((h) => h.id === hookId)?.address ?? HOOKS_ZERO;
+}
+
+/** Identify hook from address. */
+export function getHookById(address: string): HookOption | undefined {
+  const lc = address.toLowerCase();
+  return AVAILABLE_HOOKS.find((h) => h.address.toLowerCase() === lc);
+}
+
+/** Detect hook permissions from last byte of address. */
+export function getHookPermissionsFromAddress(address: string): string[] {
+  const addr = address.toLowerCase();
+  if (addr === HOOKS_ZERO) return [];
+  const lastByte = parseInt(addr.slice(-2), 16);
+  const perms: string[] = [];
+  if (lastByte & HOOK_FLAGS.BEFORE_INITIALIZE) perms.push("beforeInitialize");
+  if (lastByte & HOOK_FLAGS.AFTER_INITIALIZE) perms.push("afterInitialize");
+  if (lastByte & HOOK_FLAGS.BEFORE_MODIFY_LIQUIDITY)
+    perms.push("beforeModifyLiquidity");
+  if (lastByte & HOOK_FLAGS.AFTER_MODIFY_LIQUIDITY)
+    perms.push("afterModifyLiquidity");
+  if (lastByte & HOOK_FLAGS.BEFORE_SWAP) perms.push("beforeSwap");
+  if (lastByte & HOOK_FLAGS.AFTER_SWAP) perms.push("afterSwap");
+  return perms;
+}

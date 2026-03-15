@@ -104,7 +104,8 @@ contract PoolManagerInitializeTest is Test {
 
     function test_Initialize_Succeeds_WithNonZeroHooks() public {
         PoolKey memory key = _makeKey(address(0x1), address(0x2), 500, 10);
-        key.hooks = address(0xBeef);
+        // Use an address with no permission bits (lower 6 bits = 0) to avoid code-size check
+        key.hooks = address(0xBE00);
         poolManager.initialize(key, SQRT_PRICE_1_1);
         (bool init,,) = poolManager.getPoolState(key.toId());
         assertTrue(init);

@@ -5,8 +5,10 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useHashPack } from "@/context/HashPackContext";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
-import { getTokenDecimals } from "@/constants";
+import { getTokenDecimals, HOOKS_ZERO } from "@/constants";
+import { tickToPrice } from "@/lib/priceUtils";
 import type { PoolInfo } from "./PoolPositions";
+import { TWAPOracleCard, HookBadge } from "./TWAPOracleCard";
 
 interface PositionDetailProps {
   pool: PoolInfo;
@@ -88,6 +90,9 @@ export function PositionDetail({
           </span>
           <Badge variant="accent">v4</Badge>
           <Badge>{formatFee(fee)}</Badge>
+          {pool.hooks && pool.hooks !== HOOKS_ZERO && (
+            <HookBadge hookName={pool.hookName} />
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs text-text-tertiary">
           <span>Testnet</span>
@@ -102,6 +107,18 @@ export function PositionDetail({
       <div className="text-sm text-text-secondary mb-5">
         — {symbol1} = 1 {symbol0} (rate from pool)
       </div>
+
+      {/* TWAP Oracle (if hook is attached) */}
+      {pool.hooks && pool.hooks !== HOOKS_ZERO && (
+        <div className="mb-5">
+          <TWAPOracleCard
+            poolId={pool.poolId}
+            hookAddress={pool.hooks}
+            symbol0={symbol0}
+            symbol1={symbol1}
+          />
+        </div>
+      )}
 
       <div className="flex flex-col lg:flex-row gap-5 lg:gap-6">
         {/* Chart area */}
@@ -141,9 +158,54 @@ export function PositionDetail({
         {/* Position + Fees panel */}
         <aside className="w-full lg:w-80 shrink-0 space-y-4">
           <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 p-4 sm:p-5 shadow-inner">
-            <h3 className="text-sm font-semibold text-text-primary mb-4">
+            <h3 className="text-sm font-semibold text-text-primary mb-4 flex items-center gap-2">
               Position
+              {pool.tokenId != null && (
+                <Badge className="bg-accent/15 text-accent text-[10px] px-1.5 py-0.5">
+                  #{pool.tokenId}
+                </Badge>
+              )}
             </h3>
+
+            {/* Position-specific: tick range + liquidity */}
+            {pool.tokenId != null && (
+              <div className="space-y-3 mb-4 pb-4 border-b border-white/[0.06]">
+                <div>
+                  <p className="text-xs text-text-tertiary mb-1">Price range</p>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-text-primary font-semibold">
+                      {pool.tickLower != null
+                        ? tickToPrice(pool.tickLower).toFixed(6)
+                        : "—"}
+                    </span>
+                    <span className="text-text-tertiary">↔</span>
+                    <span className="text-text-primary font-semibold">
+                      {pool.tickUpper != null
+                        ? tickToPrice(pool.tickUpper).toFixed(6)
+                        : "—"}
+                    </span>
+                    <span className="text-xs text-text-tertiary">
+                      {symbol1}/{symbol0}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-text-tertiary mb-1">Tick range</p>
+                  <p className="text-sm text-text-secondary">
+                    [{pool.tickLower ?? "—"}, {pool.tickUpper ?? "—"}]
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-text-tertiary mb-1">Liquidity</p>
+                  <p className="text-sm font-semibold text-text-primary">
+                    {pool.liquidity
+                      ? BigInt(pool.liquidity).toLocaleString()
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {isConnected ? (
               <>
                 <p className="text-xs text-text-tertiary mb-3">

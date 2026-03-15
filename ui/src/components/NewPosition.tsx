@@ -36,7 +36,13 @@ import {
   encodePriceSqrt,
   computeLiquidityFromAmount,
   liquidityToWei,
+  clampTick,
 } from "@/lib/priceUtils";
+import {
+  getSqrtPriceAtTick,
+  maxLiquidityForAmounts,
+  amountsForLiquidity,
+} from "@/lib/sqrtPriceMath";
 import { getFriendlyErrorMessage } from "@/lib/errors";
 import { PoolManagerAbi } from "@/abis/PoolManager";
 import { PositionManagerAbi } from "@/abis/PositionManager";
@@ -51,6 +57,8 @@ import {
   DEFAULT_TICK_SPACING,
   FEE_TIERS,
   feeTierToTickSpacing,
+  AVAILABLE_HOOKS,
+  getHookAddress,
   type TokenOption,
 } from "@/constants";
 import { useTokens, type DynamicToken } from "@/hooks/useTokens";
@@ -130,6 +138,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
   const [fee, setFee] = useState(DEFAULT_FEE);
   const [tickSpacing, setTickSpacing] = useState(DEFAULT_TICK_SPACING);
   const [showMoreFees, setShowMoreFees] = useState(false);
+  const [selectedHook, setSelectedHook] = useState("none");
 
   // Token address auto-lookup
   const {
@@ -271,8 +280,18 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     const minP = parseFloat(minPriceStr);
     const maxP = parseFloat(maxPriceStr);
     if (!Number.isFinite(minP) || !Number.isFinite(maxP)) return;
-    setTickLower(roundToTickSpacing(priceToTick(minP), tickSpacing));
-    setTickUpper(roundToTickSpacing(priceToTick(maxP), tickSpacing));
+    setTickLower(
+      clampTick(
+        roundToTickSpacing(priceToTick(minP), tickSpacing),
+        tickSpacing,
+      ),
+    );
+    setTickUpper(
+      clampTick(
+        roundToTickSpacing(priceToTick(maxP), tickSpacing),
+        tickSpacing,
+      ),
+    );
   }, [minPriceStr, maxPriceStr, tickSpacing, rangeMode]);
 
   const setFullRange = () => {
@@ -290,8 +309,18 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     const maxP = ref * 1.05;
     setMinPriceStr(minP.toFixed(4));
     setMaxPriceStr(maxP.toFixed(4));
-    setTickLower(roundToTickSpacing(priceToTick(minP), tickSpacing));
-    setTickUpper(roundToTickSpacing(priceToTick(maxP), tickSpacing));
+    setTickLower(
+      clampTick(
+        roundToTickSpacing(priceToTick(minP), tickSpacing),
+        tickSpacing,
+      ),
+    );
+    setTickUpper(
+      clampTick(
+        roundToTickSpacing(priceToTick(maxP), tickSpacing),
+        tickSpacing,
+      ),
+    );
   };
 
   const adjustMinPrice = (delta: number) => {
@@ -299,14 +328,24 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     const p = parseFloat(minPriceStr) || initialPrice;
     const newP = Math.max(0, p * (1 + delta));
     setMinPriceStr(newP.toFixed(4));
-    setTickLower(roundToTickSpacing(priceToTick(newP), tickSpacing));
+    setTickLower(
+      clampTick(
+        roundToTickSpacing(priceToTick(newP), tickSpacing),
+        tickSpacing,
+      ),
+    );
   };
   const adjustMaxPrice = (delta: number) => {
     if (rangeMode === "full") return;
     const p = parseFloat(maxPriceStr) || initialPrice;
     const newP = p * (1 + delta);
     setMaxPriceStr(newP.toFixed(4));
-    setTickUpper(roundToTickSpacing(priceToTick(newP), tickSpacing));
+    setTickUpper(
+      clampTick(
+        roundToTickSpacing(priceToTick(newP), tickSpacing),
+        tickSpacing,
+      ),
+    );
   };
 
   /** Percentage from initial price */
@@ -456,11 +495,13 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     setTxHash(null);
     try {
       console.log("[Create pool] HashPack accountId:", accountId);
+      const hookAddr = getHookAddress(selectedHook) as `0x${string}`;
       const poolKey = buildPoolKey(
         addr0 as `0x${string}`,
         addr1 as `0x${string}`,
         fee,
         tickSpacing,
+        hookAddr,
       );
       const dec0 = resolveDecimals(token0);
       const dec1 = resolveDecimals(token1);
@@ -500,6 +541,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     isConnected,
     accountId,
     hashConnectRef,
+    selectedHook,
   ]);
 
   // Add liquidity: transfer tokens to PM, then multicall(initializePool + modifyLiquidities) in one tx.
@@ -527,23 +569,16 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
 
     const dec0 = resolveDecimals(token0);
     const dec1 = resolveDecimals(token1);
-    let amount0Wei: bigint, amount1Wei: bigint, liquidityWei: bigint;
+    let amount0Wei: bigint, amount1Wei: bigint;
     try {
       amount0Wei = parseUnits(amount0 || "0", dec0);
       amount1Wei = parseUnits(amount1 || "0", dec1);
-      liquidityWei = BigInt(liquidityAmount || "0");
     } catch {
       setError("Invalid amount.");
       return;
     }
     if (amount0Wei === 0n && amount1Wei === 0n) {
       setError("Enter amount for at least one token.");
-      return;
-    }
-    if (liquidityWei === 0n) {
-      setError(
-        "Could not compute liquidity from the given amounts and price range. Adjust your inputs.",
-      );
       return;
     }
 
@@ -614,76 +649,260 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
         return;
       }
 
+      const hookAddr = getHookAddress(selectedHook) as `0x${string}`;
       const poolKey = buildPoolKey(
         addr0 as `0x${string}`,
         addr1 as `0x${string}`,
         fee,
         tickSpacing,
+        hookAddr,
       );
+
+      // Detect if buildPoolKey flipped token order (currency0 < currency1 canonical sort)
+      const tokensFlipped =
+        poolKey.currency0.toLowerCase() !== addr0.toLowerCase();
+      // Map user amounts to pool's canonical order
+      const poolAmount0Wei = tokensFlipped ? amount1Wei : amount0Wei;
+      const poolAmount1Wei = tokensFlipped ? amount0Wei : amount1Wei;
+      const poolDec0 = tokensFlipped ? dec1 : dec0;
+      const poolDec1 = tokensFlipped ? dec0 : dec1;
+      console.log(
+        "[Add liquidity] tokensFlipped:",
+        tokensFlipped,
+        "poolAmount0:",
+        poolAmount0Wei.toString(),
+        "poolAmount1:",
+        poolAmount1Wei.toString(),
+      );
+
       const pmAddr = positionManagerAddress;
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+
+      // Read on-chain pool state to get actual sqrtPriceX96
+      const { encodeFunctionData: encFn } = await import("viem");
+      const poolId = getPoolId(poolKey);
+      let onChainSqrtPrice: bigint | null = null;
+      let alreadyInitialized = false;
+      const pcState = publicClientRef.current;
+      if (pcState && poolManagerAddress) {
+        try {
+          const state = (await pcState.readContract({
+            address: poolManagerAddress as `0x${string}`,
+            abi: PoolManagerAbi,
+            functionName: "getPoolState",
+            args: [poolId],
+          })) as [boolean, bigint, number];
+          alreadyInitialized = state[0];
+          if (alreadyInitialized && state[1] > 0n) {
+            onChainSqrtPrice = state[1];
+          }
+          console.log(
+            "[Add liquidity] pool initialized:",
+            alreadyInitialized,
+            "sqrtPriceX96:",
+            onChainSqrtPrice?.toString(),
+          );
+        } catch {
+          console.warn(
+            "[Add liquidity] getPoolState check failed, will include initializePool",
+          );
+        }
+      }
+
+      // Use on-chain price or compute from initialPrice
+      const sqrtPriceX96ForInit = encodePriceSqrt(
+        initialPrice,
+        poolDec0,
+        poolDec1,
+      );
+      const sqrtPriceX96 = onChainSqrtPrice ?? sqrtPriceX96ForInit;
+
+      // Compute BigInt sqrtPrices at tick boundaries
+      const clampedTickLower = clampTick(tickLower, tickSpacing);
+      const clampedTickUpper = clampTick(tickUpper, tickSpacing);
+      const sqrtPA = getSqrtPriceAtTick(clampedTickLower);
+      const sqrtPB = getSqrtPriceAtTick(clampedTickUpper);
+
+      // Compute maximum liquidity from user's deposit amounts (BigInt precision)
+      const liquidityBigInt = maxLiquidityForAmounts(
+        sqrtPriceX96,
+        sqrtPA,
+        sqrtPB,
+        poolAmount0Wei,
+        poolAmount1Wei,
+      );
+
+      if (liquidityBigInt === 0n) {
+        setError("Computed liquidity is zero. Adjust amounts or price range.");
+        setPending(false);
+        return;
+      }
+
+      // Compute exact amounts the contract will require (round up)
+      const exact = amountsForLiquidity(
+        sqrtPriceX96,
+        sqrtPA,
+        sqrtPB,
+        liquidityBigInt,
+      );
+      // Add 1% slippage buffer for amount caps
+      const amount0Max = exact.amount0 + exact.amount0 / 100n + 1n;
+      const amount1Max = exact.amount1 + exact.amount1 / 100n + 1n;
+
+      console.log(
+        "[Add liquidity] BigInt math:",
+        "L:",
+        liquidityBigInt.toString(),
+        "exact0:",
+        exact.amount0.toString(),
+        "exact1:",
+        exact.amount1.toString(),
+        "max0:",
+        amount0Max.toString(),
+        "max1:",
+        amount1Max.toString(),
+      );
+
       const unlockData = encodeUnlockDataMint(
         poolKey,
-        tickLower,
-        tickUpper,
-        liquidityWei,
-        amount0Wei,
-        amount1Wei,
+        clampedTickLower,
+        clampedTickUpper,
+        liquidityBigInt,
+        amount0Max,
+        amount1Max,
         ownerEvmAddress as `0x${string}`,
       );
 
-      // Step 1: Transfer tokens to PositionManager via Hedera SDK (separate txs per token)
-      for (const [currency, amountWei] of [
-        [poolKey.currency0, amount0Wei],
-        [poolKey.currency1, amount1Wei],
-      ] as const) {
-        if (amountWei > 0n) {
+      // Read nextTokenId before mint so we know the NFT tokenId that will be assigned
+      let mintedTokenId: number | null = null;
+      const pcForTokenId = publicClientRef.current;
+      if (pcForTokenId) {
+        try {
+          const nxt = (await pcForTokenId.readContract({
+            address: pmAddr as `0x${string}`,
+            abi: PositionManagerAbi,
+            functionName: "nextTokenId",
+          })) as bigint;
+          mintedTokenId = Number(nxt);
           console.log(
-            "[Add liquidity] transferring",
-            amountWei.toString(),
-            "of",
-            currency,
-            "to PM",
+            "[Add liquidity] nextTokenId (will be minted):",
+            mintedTokenId,
           );
+        } catch (e) {
+          console.warn("[Add liquidity] could not read nextTokenId:", e);
+        }
+      }
+
+      // Step 1: Transfer tokens to PositionManager (use buffered max amounts)
+      const transferPairs: [string, bigint, string][] = [];
+      if (amount0Max > 0n) {
+        transferPairs.push([
+          poolKey.currency0,
+          amount0Max,
+          tokensFlipped ? token1.symbol : token0.symbol,
+        ]);
+      }
+      if (amount1Max > 0n) {
+        transferPairs.push([
+          poolKey.currency1,
+          amount1Max,
+          tokensFlipped ? token0.symbol : token1.symbol,
+        ]);
+      }
+      for (const [currency, amtWei, symbol] of transferPairs) {
+        console.log(
+          "[Add liquidity] transferring",
+          amtWei.toString(),
+          "of",
+          currency,
+          `(${symbol})`,
+          "to PM",
+        );
+        try {
           await hederaTokenTransfer({
             hashConnect: hc,
             accountId,
             tokenAddress: currency,
             to: pmAddr,
-            amount: amountWei,
+            amount: amtWei,
             gas: HEDERA_GAS_ERC20,
           });
-          console.log("[Add liquidity] transfer confirmed");
+          console.log("[Add liquidity] transfer confirmed for", symbol);
+        } catch (transferErr) {
+          throw new Error(
+            `Failed to transfer ${symbol} to PositionManager: insufficient balance or token not associated. ` +
+              `Needed ${amtWei.toString()} units. Check your ${symbol} balance.`,
+          );
         }
       }
 
-      // Step 2: Encode initializePool + modifyLiquidities calldata for multicall
-      const { encodeFunctionData: encFn } = await import("viem");
-      const sqrtPriceX96 = encodePriceSqrt(initialPrice, dec0, dec1);
-      const initializeCalldata = encFn({
-        abi: PositionManagerAbi,
-        functionName: "initializePool",
-        args: [poolKey, sqrtPriceX96],
-      }) as `0x${string}`;
+      // Step 2: Build multicall
+      const calls: `0x${string}`[] = [];
+      if (!alreadyInitialized) {
+        calls.push(
+          encFn({
+            abi: PositionManagerAbi,
+            functionName: "initializePool",
+            args: [poolKey, sqrtPriceX96ForInit],
+          }) as `0x${string}`,
+        );
+      }
       const modifyCalldata = encFn({
         abi: PositionManagerAbi,
         functionName: "modifyLiquidities",
         args: [unlockData, deadline],
       }) as `0x${string}`;
+      calls.push(modifyCalldata);
 
-      // Step 3: Single multicall: initializePool (no-op if already init) + modifyLiquidities
+      // Step 3: multicall (initializePool only if needed + modifyLiquidities)
       console.log(
-        "[Add liquidity] calling multicall(initializePool + modifyLiquidities)",
+        `[Add liquidity] calling multicall with ${calls.length} subcall(s)${alreadyInitialized ? " (pool already initialized, skipping init)" : ""}`,
       );
       const txId = await hederaContractMulticall({
         hashConnect: hc,
         accountId,
         contractId: pmAddr,
-        calls: [initializeCalldata, modifyCalldata],
+        calls,
         gas: HEDERA_GAS_MODIFY_LIQ,
       });
       setTxHash(txId);
       console.log("[Add liquidity] multicall success:", txId);
+
+      // Save position to DynamoDB so it shows up in "Your positions"
+      if (mintedTokenId != null) {
+        const poolId = getPoolId(poolKey);
+        try {
+          await fetch("/api/positions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              tokenId: mintedTokenId,
+              poolId,
+              owner: ownerEvmAddress.toLowerCase(),
+              tickLower: clampedTickLower,
+              tickUpper: clampedTickUpper,
+              liquidity: liquidityBigInt.toString(),
+              currency0: poolKey.currency0,
+              currency1: poolKey.currency1,
+              symbol0: tokensFlipped ? token1.symbol : token0.symbol,
+              symbol1: tokensFlipped ? token0.symbol : token1.symbol,
+              fee,
+              tickSpacing,
+              decimals0: poolDec0,
+              decimals1: poolDec1,
+              hooks: hookAddr,
+              hookName: AVAILABLE_HOOKS.find((h) => h.id === selectedHook)
+                ?.name,
+            }),
+          });
+          console.log(
+            "[Add liquidity] position saved, tokenId:",
+            mintedTokenId,
+          );
+        } catch (e) {
+          console.warn("[Add liquidity] failed to save position to DB:", e);
+        }
+      }
     } catch (err: unknown) {
       const exactMessage = err instanceof Error ? err.message : String(err);
       const exactCode = (err as { code?: number })?.code;
@@ -699,6 +918,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     }
   }, [
     positionManagerAddress,
+    poolManagerAddress,
     token0Addr,
     token1Addr,
     token0.symbol,
@@ -709,11 +929,11 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     tickUpper,
     amount0,
     amount1,
-    liquidityAmount,
     initialPrice,
     isConnected,
     accountId,
     hashConnectRef,
+    selectedHook,
   ]);
 
   // Save pool to DynamoDB
@@ -721,11 +941,13 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     const addr0 = (token0Addr || resolveAddress(token0)).trim();
     const addr1 = (token1Addr || resolveAddress(token1)).trim();
     if (!addr0 || !addr1 || addr0 === addr1) return;
+    const hookAddr = getHookAddress(selectedHook) as `0x${string}`;
     const poolKey = buildPoolKey(
       addr0 as `0x${string}`,
       addr1 as `0x${string}`,
       fee,
       tickSpacing,
+      hookAddr,
     );
     const poolId = getPoolId(poolKey);
 
@@ -740,6 +962,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
 
     const dec0 = resolveDecimals(token0);
     const dec1 = resolveDecimals(token1);
+    const flipped = poolKey.currency0.toLowerCase() !== addr0.toLowerCase();
 
     setSavePending(true);
     setSaveSuccess(false);
@@ -753,13 +976,21 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
           currency1: poolKey.currency1,
           fee,
           tickSpacing,
-          symbol0: token0.symbol,
-          symbol1: token1.symbol,
+          symbol0: flipped ? token1.symbol : token0.symbol,
+          symbol1: flipped ? token0.symbol : token1.symbol,
           deployedBy,
           initialPrice: initialPriceStr,
-          sqrtPriceX96: String(encodePriceSqrt(initialPrice, dec0, dec1)),
-          decimals0: dec0,
-          decimals1: dec1,
+          sqrtPriceX96: String(
+            encodePriceSqrt(
+              initialPrice,
+              flipped ? dec1 : dec0,
+              flipped ? dec0 : dec1,
+            ),
+          ),
+          decimals0: flipped ? dec1 : dec0,
+          decimals1: flipped ? dec0 : dec1,
+          hooks: hookAddr,
+          hookName: AVAILABLE_HOOKS.find((h) => h.id === selectedHook)?.name,
         }),
       });
       if (!res.ok) throw new Error("Failed to save pool");
@@ -779,6 +1010,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     accountId,
     initialPriceStr,
     initialPrice,
+    selectedHook,
   ]);
 
   const sym0 = resolved0?.symbol ?? token0.symbol;
@@ -1123,6 +1355,43 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                   ))}
                 </div>
               )}
+
+              {/* Hook selector */}
+              <div>
+                <h3 className="text-base font-semibold text-text-primary mb-1">
+                  Hook (optional)
+                </h3>
+                <p className="text-sm text-text-tertiary mb-3">
+                  Attach a hook contract to customize pool behavior — e.g. TWAP
+                  oracles, dynamic fees, or limit orders.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {AVAILABLE_HOOKS.map((hook) => (
+                    <button
+                      key={hook.id}
+                      type="button"
+                      className={`flex flex-col items-start p-3 rounded-xl border cursor-pointer transition-all ${
+                        selectedHook === hook.id
+                          ? "bg-accent/10 border-accent/50"
+                          : "bg-surface-2/80 border-white/[0.08] hover:border-accent/30"
+                      }`}
+                      onClick={() => setSelectedHook(hook.id)}
+                    >
+                      <span className="text-sm font-semibold text-text-primary">
+                        {hook.name}
+                      </span>
+                      <span className="text-xs text-text-tertiary mt-0.5">
+                        {hook.description}
+                      </span>
+                      {selectedHook === hook.id && (
+                        <Badge variant="accent" className="mt-1">
+                          Selected
+                        </Badge>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <Button
                 variant="primary"

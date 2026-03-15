@@ -1,7 +1,7 @@
 import { encodeAbiParameters, getAddress, type Address } from "viem";
 import { Actions, Commands } from "../abis/UniversalRouter";
 
-const HOOKS_ZERO = "0x0000000000000000000000000000000000000000" as Address;
+import { HOOKS_ZERO } from "@/constants";
 
 export interface SwapPoolKey {
   currency0: Address;
@@ -28,12 +28,19 @@ export function buildSwapPoolKey(
   tokenB: string,
   fee: number,
   tickSpacing: number,
+  hooks: string = HOOKS_ZERO,
 ): SwapPoolKey {
   const a = getAddress(tokenA);
   const b = getAddress(tokenB);
   const currency0 = a.toLowerCase() < b.toLowerCase() ? a : b;
   const currency1 = a.toLowerCase() < b.toLowerCase() ? b : a;
-  return { currency0, currency1, fee, tickSpacing, hooks: HOOKS_ZERO };
+  return {
+    currency0,
+    currency1,
+    fee,
+    tickSpacing,
+    hooks: getAddress(hooks) as Address,
+  };
 }
 
 /**
@@ -45,6 +52,7 @@ export function buildPath(
   route: string[],
   fees: number[],
   tickSpacings: number[],
+  hooks: string[] = [],
 ): PathKey[] {
   const path: PathKey[] = [];
   for (let i = 1; i < route.length; i++) {
@@ -52,7 +60,7 @@ export function buildPath(
       intermediateCurrency: getAddress(route[i]!) as Address,
       fee: fees[i - 1]!,
       tickSpacing: tickSpacings[i - 1]!,
-      hooks: HOOKS_ZERO,
+      hooks: (hooks[i - 1] ? getAddress(hooks[i - 1]) : HOOKS_ZERO) as Address,
       hookData: "0x",
     });
   }

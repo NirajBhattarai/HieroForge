@@ -161,8 +161,8 @@ Pools are stored in **DynamoDB** so you can load any pool by ID and swap without
    - No sort key.
 
 2. **Configure AWS** in `ui/.env.local`:
-   - `AWS_REGION` (e.g. `us-east-1`)
-   - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (or use IAM role if deployed to Lambda/ECS).
+   - `HF_AWS_REGION` (e.g. `us-east-1`)
+   - `HF_AWS_ACCESS_KEY_ID` and `HF_AWS_SECRET_ACCESS_KEY` (or use IAM role if deployed to Lambda/ECS).
    - `DYNAMODB_TABLE_POOLS=hieroforge-pools`
 
 3. **In the UI:**

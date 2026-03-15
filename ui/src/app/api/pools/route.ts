@@ -3,6 +3,7 @@ import {
   listPools,
   listPoolsByDeployer,
   savePool,
+  getPoolById,
   deletePoolById,
   type PoolRecord,
 } from "@/lib/dynamo-pools";
@@ -77,6 +78,8 @@ export async function POST(request: Request) {
       sqrtPriceX96,
       decimals0,
       decimals1,
+      hooks,
+      hookName,
     } = body;
     if (
       !poolId ||
@@ -111,6 +114,12 @@ export async function POST(request: Request) {
       );
     }
 
+    // Check if pool already exists in DynamoDB
+    const existing = await getPoolById(poolId);
+    if (existing) {
+      return NextResponse.json(existing);
+    }
+
     await savePool({
       poolId,
       currency0: currency0.toLowerCase().trim(),
@@ -124,6 +133,8 @@ export async function POST(request: Request) {
       sqrtPriceX96: sqrtPriceX96 ?? undefined,
       decimals0: decimals0 != null ? Number(decimals0) : undefined,
       decimals1: decimals1 != null ? Number(decimals1) : undefined,
+      hooks: hooks ?? undefined,
+      hookName: hookName ?? undefined,
     });
     return NextResponse.json({ ok: true });
   } catch (err) {

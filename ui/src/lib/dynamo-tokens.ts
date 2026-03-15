@@ -25,12 +25,20 @@ export interface TokenRecord {
 const TABLE_NAME = process.env.DYNAMODB_TABLE_TOKENS ?? "hieroforge-tokens";
 
 function isDynamoConfigured(): boolean {
-  return !!(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
+  return !!(
+    process.env.HF_AWS_ACCESS_KEY_ID && process.env.HF_AWS_SECRET_ACCESS_KEY
+  );
 }
 
 function getClient(): DynamoDBClient {
-  const region = process.env.AWS_REGION ?? "us-east-1";
-  return new DynamoDBClient({ region });
+  const region = process.env.HF_AWS_REGION ?? "us-east-1";
+  return new DynamoDBClient({
+    region,
+    credentials: {
+      accessKeyId: process.env.HF_AWS_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.HF_AWS_SECRET_ACCESS_KEY!,
+    },
+  });
 }
 
 /** List all tokens from DynamoDB. Returns [] if not configured. */

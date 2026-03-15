@@ -29,12 +29,16 @@ import {
   getTokenDecimals,
   getQuoterAddress,
   getRouterAddress,
+  getPoolManagerAddress,
   DEFAULT_FEE,
   DEFAULT_TICK_SPACING,
   FEE_TIERS,
   feeTierToTickSpacing,
+  HOOKS_ZERO,
   type TokenOption,
 } from "@/constants";
+import { buildPoolKey, getPoolId } from "@/lib/addLiquidity";
+import { PoolManagerAbi } from "@/abis/PoolManager";
 import { useTokens } from "@/hooks/useTokens";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
 import { hederaContractExecute } from "@/lib/hederaContract";
@@ -58,6 +62,7 @@ interface SwapCardProps {
     tickSpacing: number;
     symbol0: string;
     symbol1: string;
+    hooks?: string;
   } | null;
 }
 
@@ -118,16 +123,10 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
 
   const addrIn = resolveAddress(tokenIn);
   const addrOut = resolveAddress(tokenOut);
-  const { balanceFormatted: balanceIn } = useTokenBalance(
-    addrIn || undefined,
-    accountId,
-    resolveDecimals(tokenIn),
-  );
-  const { balanceFormatted: balanceOut } = useTokenBalance(
-    addrOut || undefined,
-    accountId,
-    resolveDecimals(tokenOut),
-  );
+  const { balanceFormatted: balanceIn, refetch: refetchBalanceIn } =
+    useTokenBalance(addrIn || undefined, accountId, resolveDecimals(tokenIn));
+  const { balanceFormatted: balanceOut, refetch: refetchBalanceOut } =
+    useTokenBalance(addrOut || undefined, accountId, resolveDecimals(tokenOut));
 
   // When a pool is selected, auto-set tokenIn/tokenOut to the pool's tokens
   useEffect(() => {
@@ -141,8 +140,12 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
     }
     const c0 = selectedPool.currency0.toLowerCase();
     const c1 = selectedPool.currency1.toLowerCase();
-    const match0 = tokenOptions.find((t) => (t.address ?? "").toLowerCase() === c0);
-    const match1 = tokenOptions.find((t) => (t.address ?? "").toLowerCase() === c1);
+    const match0 = tokenOptions.find(
+      (t) => (t.address ?? "").toLowerCase() === c0,
+    );
+    const match1 = tokenOptions.find(
+      (t) => (t.address ?? "").toLowerCase() === c1,
+    );
     if (match0 && match1) {
       setTokenIn(match0);
       setTokenOut(match1);
@@ -151,31 +154,108 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
     }
   }, [selectedPool?.poolId, tokenOptions.length]);
 
-  // Fallback: when no pool is selected, fetch pools and pick tokens from the first pool
+  // Fallback: when no pool is selected and tokens not set, auto-pick first two tokens
   useEffect(() => {
-    if (tokenOptions.length < 2 || tokenIn.symbol || tokenOut.symbol || selectedPool) return;
-    let cancelled = false;
-    fetch("/api/pools")
-      .then((r) => r.json())
-      .then((pools: Array<{ currency0: string; currency1: string; fee: number }>) => {
-        if (cancelled || !pools.length) return;
-        const pool = pools[0]!;
-        const c0 = pool.currency0.toLowerCase();
-        const c1 = pool.currency1.toLowerCase();
-        const match0 = tokenOptions.find((t) => (t.address ?? "").toLowerCase() === c0);
-        const match1 = tokenOptions.find((t) => (t.address ?? "").toLowerCase() === c1);
-        if (match0 && match1) {
-          setTokenIn(match0);
-          setTokenOut(match1);
-          setSwapFee(pool.fee);
-          setHasPool(true);
-        }
-      })
-      .catch(() => {
-        // If fetching pools fails, don't set tokens without a valid pool
-      });
-    return () => { cancelled = true; };
+    if (
+      tokenOptions.length < 2 ||
+      tokenIn.symbol ||
+      tokenOut.symbol ||
+      selectedPool
+    )
+      return;
+    // Just pick first two tokens; pool detection will happen via on-chain check
+    setTokenIn(tokenOptions[0]!);
+    setTokenOut(tokenOptions[1]!);
   }, [tokenOptions.length]);
+
+  // Auto-detect pool when user changes tokenIn/tokenOut (Uniswap-style)
+  const matchedPoolRef = useRef<PoolInfo | null>(null);
+  useEffect(() => {
+    const a0 = resolveAddress(tokenIn);
+    const a1 = resolveAddress(tokenOut);
+    if (!a0 || !a1 || a0 === a1) {
+      setHasPool(false);
+      matchedPoolRef.current = null;
+      return;
+    }
+    // If selectedPool already matches, use it
+    if (selectedPool) {
+      const sortedC0 = a0 < a1 ? a0 : a1;
+      const sortedC1 = a0 < a1 ? a1 : a0;
+      if (
+        selectedPool.currency0.toLowerCase() === sortedC0 &&
+        selectedPool.currency1.toLowerCase() === sortedC1
+      ) {
+        setHasPool(true);
+        matchedPoolRef.current = selectedPool as unknown as PoolInfo;
+        return;
+      }
+    }
+    // Otherwise, check on-chain directly across all fee tiers
+    let cancelled = false;
+    (async () => {
+      const poolMgrAddr = getPoolManagerAddress();
+      const client = publicClientRef.current;
+      if (!poolMgrAddr || !client) {
+        if (!cancelled) {
+          setHasPool(false);
+          matchedPoolRef.current = null;
+        }
+        return;
+      }
+      const sortedC0 = a0 < a1 ? a0 : a1;
+      const sortedC1 = a0 < a1 ? a1 : a0;
+      for (const tier of FEE_TIERS) {
+        if (cancelled) return;
+        try {
+          const pk = buildPoolKey(
+            sortedC0 as `0x${string}`,
+            sortedC1 as `0x${string}`,
+            tier.fee,
+            feeTierToTickSpacing(tier.fee),
+          );
+          const poolId = getPoolId(pk);
+          const state = (await client.readContract({
+            address: poolMgrAddr as `0x${string}`,
+            abi: PoolManagerAbi,
+            functionName: "getPoolState",
+            args: [poolId],
+          })) as [boolean, bigint, number];
+          if (state[0]) {
+            if (!cancelled) {
+              setSwapFee(tier.fee);
+              setHasPool(true);
+              matchedPoolRef.current = {
+                poolId,
+                currency0: pk.currency0,
+                currency1: pk.currency1,
+                fee: tier.fee,
+                tickSpacing: feeTierToTickSpacing(tier.fee),
+                symbol0: tokenIn.symbol,
+                symbol1: tokenOut.symbol,
+              } as unknown as PoolInfo;
+              console.log(
+                "[Swap] pool found on-chain:",
+                poolId,
+                "fee:",
+                tier.fee,
+              );
+            }
+            return;
+          }
+        } catch {
+          // This fee tier doesn't have a pool, try next
+        }
+      }
+      if (!cancelled) {
+        setHasPool(false);
+        matchedPoolRef.current = null;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tokenIn.id, tokenOut.id, selectedPool?.poolId]);
 
   const quoterAddress = getQuoterAddress();
   const routerAddress = getRouterAddress();
@@ -253,14 +333,14 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
               intermediateCurrency: addrMid,
               fee: swapFee,
               tickSpacing: swapTickSpacing,
-              hooks: "0x0000000000000000000000000000000000000000",
+              hooks: HOOKS_ZERO,
               hookData: "0x",
             },
             {
               intermediateCurrency: addrOut,
               fee: swapFee,
               tickSpacing: swapTickSpacing,
-              hooks: "0x0000000000000000000000000000000000000000",
+              hooks: HOOKS_ZERO,
               hookData: "0x",
             },
           ];
@@ -301,10 +381,22 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
             selectedPool &&
             selectedPool.currency0.toLowerCase() === currency0.toLowerCase() &&
             selectedPool.currency1.toLowerCase() === currency1.toLowerCase();
-          const fee = useSelected ? selectedPool.fee : swapFee;
+          const mp = matchedPoolRef.current;
+          const useMatched =
+            !useSelected &&
+            mp &&
+            mp.currency0.toLowerCase() === currency0.toLowerCase() &&
+            mp.currency1.toLowerCase() === currency1.toLowerCase();
+          const fee = useSelected
+            ? selectedPool.fee
+            : useMatched
+              ? mp.fee
+              : swapFee;
           const tickSpacing = useSelected
             ? selectedPool.tickSpacing
-            : swapTickSpacing;
+            : useMatched
+              ? (mp.tickSpacing ?? feeTierToTickSpacing(fee))
+              : swapTickSpacing;
           const poolKey = { currency0, currency1, fee, tickSpacing };
 
           if (swapMode === "exactIn") {
@@ -453,17 +545,40 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
         }));
       } else if (swapMode === "exactIn") {
         // Single-hop exact input
+        const sortedC0 = (addrIn < addrOut ? addrIn : addrOut).toLowerCase();
+        const sortedC1 = (addrIn < addrOut ? addrOut : addrIn).toLowerCase();
         const useSelected =
           selectedPool &&
-          selectedPool.currency0.toLowerCase() ===
-            (addrIn < addrOut ? addrIn : addrOut).toLowerCase() &&
-          selectedPool.currency1.toLowerCase() ===
-            (addrIn < addrOut ? addrOut : addrIn).toLowerCase();
-        const fee = useSelected ? selectedPool.fee : swapFee;
+          selectedPool.currency0.toLowerCase() === sortedC0 &&
+          selectedPool.currency1.toLowerCase() === sortedC1;
+        const mp = matchedPoolRef.current;
+        const useMatched =
+          !useSelected &&
+          mp &&
+          mp.currency0.toLowerCase() === sortedC0 &&
+          mp.currency1.toLowerCase() === sortedC1;
+        const fee = useSelected
+          ? selectedPool.fee
+          : useMatched
+            ? mp.fee
+            : swapFee;
         const tickSpacing = useSelected
           ? selectedPool.tickSpacing
-          : swapTickSpacing;
-        const poolKey = buildSwapPoolKey(addrIn, addrOut, fee, tickSpacing);
+          : useMatched
+            ? (mp.tickSpacing ?? feeTierToTickSpacing(fee))
+            : swapTickSpacing;
+        const hooks = useSelected
+          ? (selectedPool.hooks ?? HOOKS_ZERO)
+          : useMatched
+            ? (mp.hooks ?? HOOKS_ZERO)
+            : HOOKS_ZERO;
+        const poolKey = buildSwapPoolKey(
+          addrIn,
+          addrOut,
+          fee,
+          tickSpacing,
+          hooks as `0x${string}`,
+        );
         const zeroForOne = addrIn.toLowerCase() < addrOut.toLowerCase();
         const amountOutMinimum =
           (amountOutWei * (10000n - slippageBps)) / 10000n;
@@ -475,17 +590,40 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
         }));
       } else {
         // Single-hop exact output
+        const sortedC0 = (addrIn < addrOut ? addrIn : addrOut).toLowerCase();
+        const sortedC1 = (addrIn < addrOut ? addrOut : addrIn).toLowerCase();
         const useSelected =
           selectedPool &&
-          selectedPool.currency0.toLowerCase() ===
-            (addrIn < addrOut ? addrIn : addrOut).toLowerCase() &&
-          selectedPool.currency1.toLowerCase() ===
-            (addrIn < addrOut ? addrOut : addrIn).toLowerCase();
-        const fee = useSelected ? selectedPool.fee : swapFee;
+          selectedPool.currency0.toLowerCase() === sortedC0 &&
+          selectedPool.currency1.toLowerCase() === sortedC1;
+        const mp = matchedPoolRef.current;
+        const useMatched =
+          !useSelected &&
+          mp &&
+          mp.currency0.toLowerCase() === sortedC0 &&
+          mp.currency1.toLowerCase() === sortedC1;
+        const fee = useSelected
+          ? selectedPool.fee
+          : useMatched
+            ? mp.fee
+            : swapFee;
         const tickSpacing = useSelected
           ? selectedPool.tickSpacing
-          : swapTickSpacing;
-        const poolKey = buildSwapPoolKey(addrIn, addrOut, fee, tickSpacing);
+          : useMatched
+            ? (mp.tickSpacing ?? feeTierToTickSpacing(fee))
+            : swapTickSpacing;
+        const hooks = useSelected
+          ? (selectedPool.hooks ?? HOOKS_ZERO)
+          : useMatched
+            ? (mp.hooks ?? HOOKS_ZERO)
+            : HOOKS_ZERO;
+        const poolKey = buildSwapPoolKey(
+          addrIn,
+          addrOut,
+          fee,
+          tickSpacing,
+          hooks as `0x${string}`,
+        );
         const zeroForOne = addrIn.toLowerCase() < addrOut.toLowerCase();
         const amountInMaximum = (amountInWei * (10000n + slippageBps)) / 10000n;
         ({ commands, inputs } = encodeSwapExactOutSingle({
@@ -513,6 +651,15 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
       setSwapTxId(txId);
       setAmountIn("");
       setAmountOut("");
+      // Refresh balances after swap (mirror node may have ~3s delay)
+      setTimeout(() => {
+        refetchBalanceIn();
+        refetchBalanceOut();
+      }, 4000);
+      setTimeout(() => {
+        refetchBalanceIn();
+        refetchBalanceOut();
+      }, 8000);
     } catch (err) {
       console.error("[swap] Error:", err);
       setSwapError(getFriendlyErrorMessage(err, "swap"));
@@ -534,6 +681,8 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
     selectedPool,
     swapFee,
     hashConnectRef,
+    refetchBalanceIn,
+    refetchBalanceOut,
   ]);
 
   const handleTokenSelect = (token: TokenOption) => {
@@ -556,7 +705,8 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
   // Determine button state
   const getButtonState = () => {
     if (!isConnected) return { text: "Connect Wallet", disabled: true };
-    if (!hasPool) return { text: "Select a pool", disabled: true };
+    if (!hasPool)
+      return { text: "No pool found for this pair", disabled: true };
     if (!amountIn || parseFloat(amountIn) === 0)
       return { text: "Enter an amount", disabled: true };
     if (quoteLoading) return { text: "Fetching quote...", disabled: true };
@@ -898,9 +1048,12 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
               </div>
 
               {/* No pool message */}
-              {!hasPool && (
+              {!hasPool && tokenIn.symbol && tokenOut.symbol && (
                 <div className="px-1 py-3 mt-2 text-center">
-                  <span className="text-sm text-text-tertiary">Select a pool to start swapping</span>
+                  <span className="text-sm text-text-tertiary">
+                    No pool found for {tokenIn.symbol}/{tokenOut.symbol}. Create
+                    one in the Pool tab.
+                  </span>
                 </div>
               )}
 

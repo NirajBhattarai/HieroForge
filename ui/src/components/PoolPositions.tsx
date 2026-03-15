@@ -6,8 +6,10 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useTokens } from "@/hooks/useTokens";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
+import { usePositions, type Position } from "@/hooks/usePositions";
 import { useHashPack } from "@/context/HashPackContext";
 import { getTokenDecimals } from "@/constants";
+import { tickToPrice } from "@/lib/priceUtils";
 
 export interface PoolInfo {
   poolId: string;
@@ -22,6 +24,13 @@ export interface PoolInfo {
   decimals0?: number;
   decimals1?: number;
   initialPrice?: string;
+  hooks?: string;
+  hookName?: string;
+  /** Position-specific fields (set when this represents an individual position) */
+  tokenId?: number;
+  tickLower?: number;
+  tickUpper?: number;
+  liquidity?: string;
 }
 
 interface PoolPositionsProps {
@@ -34,7 +43,7 @@ function shortenAddr(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
-/** Individual pool card with real-time balance display */
+/** Individual position/pool card with tick range and liquidity display */
 function PoolCard({
   pool,
   t0name,
@@ -60,9 +69,15 @@ function PoolCard({
     decimals1,
   );
 
+  const hasPosition = pool.tokenId != null;
+  const priceLow =
+    pool.tickLower != null ? tickToPrice(pool.tickLower).toFixed(6) : null;
+  const priceHigh =
+    pool.tickUpper != null ? tickToPrice(pool.tickUpper).toFixed(6) : null;
+
   return (
     <button
-      key={pool.poolId}
+      key={hasPosition ? `pos-${pool.tokenId}` : pool.poolId}
       type="button"
       className="w-full flex flex-col gap-2 p-4 rounded-xl bg-surface-2/50 border border-white/[0.06] hover:border-accent/20 hover:bg-surface-2/80 transition-all duration-200 cursor-pointer text-left shadow-sm hover:shadow-md"
       onClick={onClick}
@@ -76,10 +91,23 @@ function PoolCard({
         <div className="flex flex-col min-w-0 flex-1">
           <span className="text-sm font-semibold text-text-primary">
             {pool.pair}
+            {hasPosition && (
+              <span className="ml-2 text-xs font-normal text-text-tertiary">
+                #{pool.tokenId}
+              </span>
+            )}
           </span>
           <span className="text-xs text-text-tertiary truncate">
             v4 · {pool.feeLabel}
-            {(t0name || t1name) && (
+            {hasPosition && priceLow && priceHigh && (
+              <>
+                {" · "}
+                <span className="text-text-secondary">
+                  {priceLow} ↔ {priceHigh}
+                </span>
+              </>
+            )}
+            {!hasPosition && (t0name || t1name) && (
               <>
                 {" · "}
                 {t0name || shortenAddr(pool.currency0)} /{" "}
@@ -93,8 +121,32 @@ function PoolCard({
           <span className="text-xs text-success font-medium">In range</span>
         </div>
       </div>
-      {/* Balance row */}
-      {isConnected && (
+      {/* Position info row */}
+      {hasPosition && pool.liquidity && (
+        <div className="flex items-center gap-3 ml-11 text-xs">
+          <span className="text-text-secondary">
+            Liquidity:{" "}
+            <span className="font-mono text-text-primary">
+              {BigInt(pool.liquidity) > 1_000_000n
+                ? `${(Number(pool.liquidity) / 1e6).toFixed(2)}M`
+                : pool.liquidity}
+            </span>
+          </span>
+          {priceLow && priceHigh && (
+            <>
+              <span className="text-text-disabled">·</span>
+              <span className="text-text-secondary">
+                Range:{" "}
+                <span className="font-mono text-text-primary">
+                  [{pool.tickLower}, {pool.tickUpper}]
+                </span>
+              </span>
+            </>
+          )}
+        </div>
+      )}
+      {/* Balance row (for pool-level cards without position data) */}
+      {!hasPosition && isConnected && (
         <div className="flex items-center gap-3 ml-11 text-xs">
           <span className="flex items-center gap-1.5 text-text-secondary">
             <TokenIcon symbol={pool.symbol0 || "?"} size={14} />
@@ -124,7 +176,9 @@ export function PoolPositions({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showLoadById, setShowLoadById] = useState(false);
   const [infoBoxDismissed, setInfoBoxDismissed] = useState(false);
-  const [poolFilter, setPoolFilter] = useState<"all" | "mine">("all");
+  const [poolFilter, setPoolFilter] = useState<"all" | "mine" | "positions">(
+    "positions",
+  );
 
   const { accountId, isConnected } = useHashPack();
 
@@ -141,7 +195,48 @@ export function PoolPositions({
     dynamicTokens.map((t) => [t.address.toLowerCase(), t]),
   );
 
+  // Fetch positions for current user
+  const {
+    positions: userPositions,
+    loading: positionsLoading,
+    refetch: refetchPositions,
+  } = usePositions(deployerEvmAddress);
+
   useEffect(() => {
+    // For "positions" tab, we use the usePositions hook instead
+    if (poolFilter === "positions") {
+      if (!positionsLoading) {
+        setPools(
+          userPositions.map((p) => ({
+            poolId: p.poolId,
+            pair: [
+              p.symbol0 ?? shortenAddr(p.currency0),
+              p.symbol1 ?? shortenAddr(p.currency1),
+            ].join(" / "),
+            tickSpacing: p.tickSpacing,
+            fee: p.fee,
+            feeLabel: (p.fee / 10000).toFixed(2) + "%",
+            symbol0: p.symbol0 ?? "",
+            symbol1: p.symbol1 ?? "",
+            currency0: p.currency0,
+            currency1: p.currency1,
+            decimals0: p.decimals0,
+            decimals1: p.decimals1,
+            hooks: p.hooks,
+            hookName: p.hookName,
+            tokenId: p.tokenId,
+            tickLower: p.tickLower,
+            tickUpper: p.tickUpper,
+            liquidity: p.liquidity,
+          })),
+        );
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -204,7 +299,7 @@ export function PoolPositions({
     return () => {
       cancelled = true;
     };
-  }, [poolFilter, deployerEvmAddress]);
+  }, [poolFilter, deployerEvmAddress, userPositions, positionsLoading]);
 
   const handleLoadById = useCallback(async () => {
     const id = loadPoolId.trim();
@@ -216,7 +311,7 @@ export function PoolPositions({
     try {
       const res = await fetch(`/api/pools/${encodeURIComponent(id)}`);
       if (!res.ok) {
-        if (res.status === 404) throw new Error("Pool not found in DynamoDB");
+        if (res.status === 404) throw new Error("Pool not found on-chain");
         throw new Error("Failed to load pool");
       }
       const p = (await res.json()) as {
@@ -300,6 +395,19 @@ export function PoolPositions({
 
           {/* Filters — pill style */}
           <div className="flex items-center gap-2 flex-wrap">
+            {isConnected && (
+              <button
+                type="button"
+                onClick={() => setPoolFilter("positions")}
+                className={`px-3 py-2 text-xs font-medium rounded-full border transition-all cursor-pointer ${
+                  poolFilter === "positions"
+                    ? "bg-accent/15 text-accent border-accent/30"
+                    : "bg-surface-2/80 text-text-secondary border-white/[0.08] hover:border-accent/30 hover:text-text-primary"
+                }`}
+              >
+                My positions
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setPoolFilter("all")}
@@ -419,7 +527,9 @@ export function PoolPositions({
                 const t1info = tokenByAddr.get(pool.currency1.toLowerCase());
                 return (
                   <PoolCard
-                    key={pool.poolId}
+                    key={
+                      pool.tokenId != null ? `pos-${pool.tokenId}` : pool.poolId
+                    }
                     pool={pool}
                     t0name={t0info?.name}
                     t1name={t1info?.name}

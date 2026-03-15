@@ -66,7 +66,8 @@ contract PoolManagerTest is Test {
     }
 
     function test_Initialize_EmitsInitializeEvent_WithCustomHooks() public {
-        address hooksAddr = address(0x1234);
+        // Use an address without permission bits (lower 6 bits = 0) so validateHookPermissions passes without code
+        address hooksAddr = address(0x1200);
         PoolKey memory key = PoolKey({
             currency0: Currency.wrap(address(0x1)),
             currency1: Currency.wrap(address(0x2)),

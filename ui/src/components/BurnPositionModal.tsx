@@ -26,7 +26,9 @@ const HEDERA_GAS_MODIFY_LIQ = 5_000_000;
 
 export function BurnPositionModal({ pool, onClose }: BurnPositionModalProps) {
   const { accountId, isConnected, hashConnectRef } = useHashPack();
-  const [tokenId, setTokenId] = useState("");
+  const [tokenId, setTokenId] = useState(
+    pool.tokenId != null ? String(pool.tokenId) : "",
+  );
   const [confirmed, setConfirmed] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +82,21 @@ export function BurnPositionModal({ pool, onClose }: BurnPositionModalProps) {
       });
 
       setTxHash(txId);
+
+      // Delete position record from DynamoDB if we have the positionId
+      if (pool.tokenId != null) {
+        try {
+          const positionId = `${pool.currency0}-${pool.currency1}-${pool.fee}-${pool.tickSpacing}-${pool.hooks ?? "0x0000000000000000000000000000000000000000"}-${pool.tokenId}`;
+          await fetch(
+            `/api/positions?positionId=${encodeURIComponent(positionId)}`,
+            {
+              method: "DELETE",
+            },
+          );
+        } catch {
+          // Non-critical – position was burned on-chain regardless
+        }
+      }
     } catch (err: unknown) {
       setError(getFriendlyErrorMessage(err, "transaction"));
     } finally {
