@@ -1,0 +1,29 @@
+# HieroForge UI (Next.js) – Netlify deploy
+# Fix: JS module scripts must be served with application/javascript, not application/octet-stream
+
+[build]
+  base = "ui"
+  command = "npm run build"
+  publish = ".next"
+
+# Use Netlify's Essential Next.js plugin so Next runs correctly and static assets get proper MIME types
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Fallback: force correct MIME type for JS (fixes "application/octet-stream" module script error)
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Content-Type = "application/javascript; charset=utf-8"
+
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Content-Type = "application/javascript; charset=utf-8"
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/_next/static/*.css"
+  [headers.values]
+    Content-Type = "text/css; charset=utf-8"
+    Cache-Control = "public, max-age=31536000, immutable"
