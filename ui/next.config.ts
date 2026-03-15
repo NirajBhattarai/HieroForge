@@ -7,12 +7,22 @@ const require = createRequire(import.meta.url)
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   transpilePackages: ['hashconnect', '@hashgraph/sdk'],
-  webpack(config) {
-    // Dedupe @hashgraph/sdk so hashconnect and app use one copy (avoids "Identifier 'n' has already been declared" in minified chunk)
+  webpack(config, { isServer }) {
+    // Dedupe @hashgraph/sdk and use browser build so we don't pull Node/grpc (fs, net, tls) into client bundle
+    const sdkRoot = path.dirname(require.resolve('@hashgraph/sdk/package.json'))
     config.resolve = config.resolve ?? {}
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@hashgraph/sdk': path.dirname(require.resolve('@hashgraph/sdk/package.json')),
+      '@hashgraph/sdk': path.join(sdkRoot, 'lib', 'browser.js'),
+    }
+    // Stub Node built-ins for client bundle when SDK or deps reference them
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+      }
     }
     // Suppress "Critical dependency" warnings from hashconnect / hedera-wallet-connect
     config.ignoreWarnings = [
