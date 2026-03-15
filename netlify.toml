@@ -9,25 +9,24 @@
   # Omit these from secrets scan so build doesn't fail when they appear in server bundle or scripts (values only in server-side code)
   [build.environment]
     SECRETS_SCAN_OMIT_KEYS = "HF_AWS_REGION,HF_AWS_ACCESS_KEY_ID,HF_AWS_SECRET_ACCESS_KEY"
+    # Pin Node version so Netlify build cache is tied to it;
+    # bump this value to force a full cache-clear on next deploy.
+    NODE_VERSION = "20"
 
 # Use Netlify's Essential Next.js plugin so Next runs correctly and static assets get proper MIME types
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-# Fallback: force correct MIME type for JS (fixes "application/octet-stream" module script error)
+# Correct MIME types for _next/static assets.
+# Scope JS rule to .js files only – the catch-all was overriding the CSS rule below.
 [[headers]]
-  for = "/*.js"
-  [headers.values]
-    Content-Type = "application/javascript; charset=utf-8"
-
-[[headers]]
-  for = "/_next/static/*"
+  for = "/_next/static/chunks/*.js"
   [headers.values]
     Content-Type = "application/javascript; charset=utf-8"
     Cache-Control = "public, max-age=31536000, immutable"
 
 [[headers]]
-  for = "/_next/static/*.css"
+  for = "/_next/static/css/*.css"
   [headers.values]
     Content-Type = "text/css; charset=utf-8"
     Cache-Control = "public, max-age=31536000, immutable"
