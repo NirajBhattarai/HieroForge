@@ -22,12 +22,23 @@ library QuoterRevert {
         }
     }
 
-    /// @notice Returns the amount from a QuoteSwap revert; reverts with UnexpectedRevertBytes if not QuoteSwap
-    function parseQuoteAmount(bytes memory reason) internal pure returns (uint256 quoteAmount) {
-        // QuoteSwap(uint256) = 4-byte selector + 32-byte amount. Amount at offset 4 in the payload.
-        if (reason.length != 36) revert UnexpectedRevertBytes(reason);
-        assembly ("memory-safe") {
-            quoteAmount := mload(add(reason, 0x24))
+    /// @notice Returns the amount from a QuoteSwap revert; bubbles the original reason if not QuoteSwap
+    function parseQuoteAmountOrBubble(bytes memory reason) internal pure returns (uint256 quoteAmount) {
+        // QuoteSwap(uint256) payload layout:
+        //  - 4-byte selector
+        //  - 32-byte amount at offset 4
+        if (reason.length == 36) {
+            bytes4 selector;
+            assembly ("memory-safe") {
+                selector := mload(add(reason, 0x20))
+            }
+            if (selector == QuoteSwap.selector) {
+                assembly ("memory-safe") {
+                    quoteAmount := mload(add(reason, 0x24))
+                }
+                return quoteAmount;
+            }
         }
+        bubbleReason(reason);
     }
 }

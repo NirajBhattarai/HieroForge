@@ -11,10 +11,10 @@
 #   - .env with addresses for contracts you verify. For API: jq and curl.
 #
 # Usage:
-#   ./scripts/verify-contracts.sh [PoolManager|Router|Counter|all]
-#   Default: all (PoolManager + Router; Counter included if COUNTER_ADDRESS set).
+#   ./scripts/verify-contracts.sh [PoolManager|Router|all]
+#   Default: all (PoolManager + Router).
 #
-# Env: POOL_MANAGER_ADDRESS, ROUTER_ADDRESS; optional: COUNTER_ADDRESS, CHAIN_ID (default 296),
+# Env: POOL_MANAGER_ADDRESS, ROUTER_ADDRESS; optional: CHAIN_ID (default 296),
 #   VERIFY_WATCH=1, VERIFY_MANUAL=1 (skip programmatic, only prepare bundles).
 #
 # Examples:
@@ -56,7 +56,6 @@ fi
 case "$CONTRACT_ARG" in
   PoolManager) [[ -z "$POOL_MANAGER_ADDRESS" ]] && { echo "Error: POOL_MANAGER_ADDRESS not set."; exit 1; } ;;
   Router)      [[ -z "$ROUTER_ADDRESS" ]] && { echo "Error: ROUTER_ADDRESS not set."; exit 1; } ;;
-  Counter)     [[ -z "$COUNTER_ADDRESS" ]] && { echo "Error: COUNTER_ADDRESS not set."; exit 1; } ;;
   all)
     if [[ -z "$POOL_MANAGER_ADDRESS" ]]; then echo "Error: POOL_MANAGER_ADDRESS not set."; exit 1; fi
     if [[ -z "$ROUTER_ADDRESS" ]]; then echo "Error: ROUTER_ADDRESS not set."; exit 1; fi
@@ -106,7 +105,6 @@ print_manual_instructions() {
   echo "Contract pages:"
   echo "  PoolManager: https://hashscan.io/testnet/contract/$POOL_MANAGER_ADDRESS"
   echo "  Router:      https://hashscan.io/testnet/contract/$ROUTER_ADDRESS"
-  [[ -n "$COUNTER_ADDRESS" ]] && echo "  Counter:     https://hashscan.io/testnet/contract/$COUNTER_ADDRESS"
   if [[ "$CHAIN_ID" == "295" ]]; then
     echo "  (mainnet)    https://hashscan.io/mainnet/contract/..."
   fi
@@ -172,35 +170,6 @@ verify_router() {
   echo ""
 }
 
-verify_counter() {
-  echo "--- Verifying Counter at $COUNTER_ADDRESS ---"
-  if [[ -z "$VERIFY_MANUAL" ]]; then
-    set +e
-    hashscan_api_verify "$REPO_ROOT" "Counter" "$COUNTER_ADDRESS" "$CHAIN_ID" && r=0 || r=1
-    if [[ $r -ne 0 ]]; then
-      forge verify-contract \
-        "$COUNTER_ADDRESS" \
-        src/Counter.sol:Counter \
-        --chain-id "$CHAIN_ID" \
-        --verifier sourcify \
-        --verifier-url "$HEDERA_VERIFIER_URL" \
-        $WATCH_FLAG
-      r=$?
-    fi
-    set -e
-    if [[ $r -ne 0 ]]; then
-      echo "Counter programmatic verification failed; use manual verification below."
-      NEED_MANUAL=1
-    fi
-  else
-    NEED_MANUAL=1
-  fi
-  if [[ -n "$NEED_MANUAL" ]] || [[ -n "$VERIFY_MANUAL" ]]; then
-    prepare_manual_bundle "Counter" "src/Counter.sol" || true
-  fi
-  echo ""
-}
-
 NEED_MANUAL=""
 case "$CONTRACT_ARG" in
   PoolManager)
@@ -209,22 +178,15 @@ case "$CONTRACT_ARG" in
   Router)
     verify_router
     ;;
-  Counter)
-    verify_counter
-    ;;
   all)
     verify_pool_manager
     verify_router
-    if [[ -n "$COUNTER_ADDRESS" ]]; then
-      verify_counter
-    fi
     ;;
   *)
-    echo "Usage: $0 [PoolManager|Router|Counter|all]"
+    echo "Usage: $0 [PoolManager|Router|all]"
     echo "  PoolManager  - verify PoolManager only"
     echo "  Router       - verify Router (constructor: POOL_MANAGER_ADDRESS)"
-    echo "  Counter      - verify Counter (set COUNTER_ADDRESS)"
-    echo "  all          - verify PoolManager + Router (+ Counter if COUNTER_ADDRESS set)"
+    echo "  all          - verify PoolManager + Router"
     echo ""
     echo "For Quoter (periphery): run ./scripts/verify-contracts.sh from hieroforge-periphery"
     exit 1
@@ -237,7 +199,6 @@ else
   echo "Done. Check HashScan:"
   echo "  PoolManager: https://hashscan.io/testnet/contract/$POOL_MANAGER_ADDRESS"
   echo "  Router:      https://hashscan.io/testnet/contract/$ROUTER_ADDRESS"
-  [[ -n "$COUNTER_ADDRESS" ]] && echo "  Counter:     https://hashscan.io/testnet/contract/$COUNTER_ADDRESS"
   if [[ "$CHAIN_ID" == "295" ]]; then
     echo "  (mainnet)    https://hashscan.io/mainnet/contract/..."
   fi

@@ -11,7 +11,6 @@ hieroforge-core/
 │   ├── constants.sol                 #   MIN/MAX tick bounds, tick spacing limits
 │   ├── NoDelegateCall.sol            #   Guard against delegatecall (immutable address check)
 │   ├── TokenClassifier.sol           #   Classify token addresses as ERC-20 / HTS / Unknown
-│   ├── Counter.sol                   #   Minimal test contract for deploy verification
 │   ├── interfaces/                   #   Contract interfaces
 │   │   ├── IPoolManager.sol          #     Full PoolManager interface (init, swap, liquidity, etc.)
 │   │   └── IERC20Minimal.sol         #     Minimal ERC-20 (balanceOf, transfer, transferFrom)
@@ -77,7 +76,6 @@ hieroforge-core/
 │   ├── MintHtsToken.s.sol            #   Mint additional HTS supply
 │   ├── CreatePoolAndAddLiquidityTestnet.s.sol  # Init pool + add liquidity
 │   ├── ModifyLiquidityTestnet.s.sol  #   Add liquidity across multiple tick ranges
-│   └── DeployCounter.s.sol           #   Deploy Counter (verification smoke test)
 ├── scripts/                          # Shell script wrappers
 │   ├── deploy-pool-manager.sh        #   Deploy PoolManager to testnet
 │   ├── deploy-router.sh              #   Deploy Router (needs POOL_MANAGER_ADDRESS)
@@ -85,10 +83,8 @@ hieroforge-core/
 │   ├── mint-token.sh                 #   Mint more HTS tokens
 │   ├── create-pool-and-add-liquidity.sh  # Create pool + add liquidity
 │   ├── run-modify-liquidity.sh       #   Add/remove liquidity
-│   ├── deploy-counter.sh             #   Deploy Counter contract
 │   ├── run-initialize-tests.sh       #   Run initialize tests only
 │   ├── verify-contracts.sh           #   Verify on HashScan (Sourcify)
-│   ├── verify-counter.sh             #   Verify Counter on HashScan
 │   └── hashscan-verify-api.sh        #   Direct HashScan API helper
 ├── foundry.toml                      # Build config (Cancun EVM, via_ir, optimizer, RPC)
 ├── lib/                              # Git submodules

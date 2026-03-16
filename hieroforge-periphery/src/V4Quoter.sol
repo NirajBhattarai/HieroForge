@@ -37,7 +37,7 @@ contract V4Quoter is IV4Quoter, BaseV4Quoter {
         try poolManager.unlock(abi.encodeCall(this._quoteExactInputSingle, (params))) {}
         catch (bytes memory reason) {
             gasEstimate = gasBefore - gasleft();
-            amountOut = reason.parseQuoteAmount();
+            amountOut = reason.parseQuoteAmountOrBubble();
         }
     }
 
@@ -51,7 +51,7 @@ contract V4Quoter is IV4Quoter, BaseV4Quoter {
         try poolManager.unlock(abi.encodeCall(this._quoteExactInput, (params))) {}
         catch (bytes memory reason) {
             gasEstimate = gasBefore - gasleft();
-            amountOut = reason.parseQuoteAmount();
+            amountOut = reason.parseQuoteAmountOrBubble();
         }
     }
 
@@ -65,7 +65,7 @@ contract V4Quoter is IV4Quoter, BaseV4Quoter {
         try poolManager.unlock(abi.encodeCall(this._quoteExactOutputSingle, (params))) {}
         catch (bytes memory reason) {
             gasEstimate = gasBefore - gasleft();
-            amountIn = reason.parseQuoteAmount();
+            amountIn = reason.parseQuoteAmountOrBubble();
         }
     }
 
@@ -79,7 +79,7 @@ contract V4Quoter is IV4Quoter, BaseV4Quoter {
         try poolManager.unlock(abi.encodeCall(this._quoteExactOutput, (params))) {}
         catch (bytes memory reason) {
             gasEstimate = gasBefore - gasleft();
-            amountIn = reason.parseQuoteAmount();
+            amountIn = reason.parseQuoteAmountOrBubble();
         }
     }
 
