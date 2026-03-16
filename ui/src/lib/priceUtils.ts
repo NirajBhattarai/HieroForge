@@ -42,6 +42,28 @@ export function encodePriceSqrt(
   return bigIntSqrt(inner);
 }
 
+const Q192 = Q96 * Q96;
+const PRECISION = 10n ** 18n;
+
+/**
+ * Convert sqrtPriceX96 from pool state to human-readable price (token1 per token0).
+ * Inverse of encodePriceSqrt; use for "rate from pool" in add-liquidity UI.
+ */
+export function sqrtPriceX96ToPrice(
+  sqrtPriceX96: bigint,
+  decimals0: number,
+  decimals1: number,
+): number {
+  if (sqrtPriceX96 <= 0n) return 0;
+  const decDiff = decimals1 - decimals0;
+  const adjustedNum = (sqrtPriceX96 * sqrtPriceX96 * PRECISION) / Q192;
+  const priceNum =
+    decDiff >= 0
+      ? adjustedNum / 10n ** BigInt(decDiff)
+      : adjustedNum * 10n ** BigInt(-decDiff);
+  return Number(priceNum) / 1e18;
+}
+
 /** Uniswap v3/v4: price (token1 per token0) = 1.0001^tick */
 const Q = 1.0001;
 

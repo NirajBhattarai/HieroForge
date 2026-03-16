@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { parseUnits } from "viem";
+import { createPublicClient, http } from "viem";
 import { TokenIcon, TokenPairIcon } from "./TokenIcon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -21,7 +22,7 @@ import {
   encodeUnlockDataMint,
   encodeUnlockDataMintFromDeltas,
 } from "@/lib/addLiquidity";
-import { encodePriceSqrt } from "@/lib/priceUtils";
+import { encodePriceSqrt, sqrtPriceX96ToPrice } from "@/lib/priceUtils";
 import {
   getSqrtPriceAtTick,
   maxLiquidityForAmounts,
@@ -71,6 +72,8 @@ export function AddLiquidityModal({
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [useFromDeltas, setUseFromDeltas] = useState(false);
+  /** Current pool price (token1 per token0) from chain; used to auto-calc the other amount when user types one */
+  const [poolPrice, setPoolPrice] = useState<number | null>(null);
 
   const decimals0 = pool.decimals0 ?? getTokenDecimals(pool.symbol0);
   const decimals1 = pool.decimals1 ?? getTokenDecimals(pool.symbol1);
@@ -86,11 +89,49 @@ export function AddLiquidityModal({
   );
 
   const positionManagerAddress = getPositionManagerAddress();
+  const poolManagerAddress = getPoolManagerAddress();
   const parsedInitialPrice = parseFloat(pool.initialPrice ?? "");
   const referencePrice =
     Number.isFinite(parsedInitialPrice) && parsedInitialPrice > 0
       ? parsedInitialPrice
       : 1;
+  /** Price used for auto-calculation: live pool price when available, else initial/reference */
+  const effectivePrice = poolPrice != null && poolPrice > 0 ? poolPrice : referencePrice;
+
+  // Fetch on-chain sqrtPriceX96 when modal opens so we can show "rate from pool" and auto-calc the other token amount
+  useEffect(() => {
+    if (!poolManagerAddress || !pool.currency0 || !pool.currency1) return;
+    let cancelled = false;
+    const poolKey = buildPoolKey(
+      pool.currency0 as `0x${string}`,
+      pool.currency1 as `0x${string}`,
+      pool.fee,
+      pool.tickSpacing,
+    );
+    const poolId = getPoolId(poolKey);
+    const pc = createPublicClient({
+      chain: HEDERA_TESTNET,
+      transport: http(getRpcUrl()),
+    });
+    pc.readContract({
+      address: poolManagerAddress as `0x${string}`,
+      abi: PoolManagerAbi,
+      functionName: "getPoolState",
+      args: [poolId],
+    })
+      .then((state) => {
+        if (cancelled) return;
+        const [initialized, sqrtPriceX96] = state as [boolean, bigint, number];
+        if (initialized && sqrtPriceX96 > 0n) {
+          const price = sqrtPriceX96ToPrice(sqrtPriceX96, decimals0, decimals1);
+          if (Number.isFinite(price) && price > 0) setPoolPrice(price);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [poolManagerAddress, pool.currency0, pool.currency1, pool.fee, pool.tickSpacing, decimals0, decimals1]);
 
   const amount0Num = parseFloat(amount0) || 0;
   const amount1Num = parseFloat(amount1) || 0;
@@ -121,17 +162,17 @@ export function AddLiquidityModal({
       setAmount1("");
       return;
     }
-    setAmount1(formatEquivalent(n * referencePrice, decimals1));
+    setAmount1(formatEquivalent(n * effectivePrice, decimals1));
   };
 
   const updateFromAmount1 = (value: string) => {
     setAmount1(value);
     const n = parseFloat(value);
-    if (!Number.isFinite(n) || n <= 0 || referencePrice <= 0) {
+    if (!Number.isFinite(n) || n <= 0 || effectivePrice <= 0) {
       setAmount0("");
       return;
     }
-    setAmount0(formatEquivalent(n / referencePrice, decimals0));
+    setAmount0(formatEquivalent(n / effectivePrice, decimals0));
   };
 
   const handleMaxToken0 = () => updateFromAmount0(balance0);

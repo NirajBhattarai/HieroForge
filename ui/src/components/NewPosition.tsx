@@ -34,6 +34,7 @@ import {
   priceToTick,
   roundToTickSpacing,
   encodePriceSqrt,
+  sqrtPriceX96ToPrice,
   computeLiquidityFromAmount,
   liquidityToWei,
   clampTick,
@@ -178,6 +179,15 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [savePending, setSavePending] = useState(false);
 
+  /** Step 2: whether pool (pair + fee + hook) exists on-chain; null = loading */
+  const [poolExistsOnChain, setPoolExistsOnChain] = useState<boolean | null>(
+    null,
+  );
+  /** Step 2: current pool sqrtPriceX96 when pool exists (for range/deposit math) */
+  const [onChainSqrtPriceStep2, setOnChainSqrtPriceStep2] = useState<
+    bigint | null
+  >(null);
+
   const poolManagerAddress = getPoolManagerAddress();
   const positionManagerAddress = getPositionManagerAddress();
 
@@ -275,6 +285,121 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     }
   }, [resolved1]);
 
+  // When leaving Step 2, reset pool check state so we re-fetch next time
+  useEffect(() => {
+    if (step !== 2) {
+      setPoolExistsOnChain(null);
+      setOnChainSqrtPriceStep2(null);
+    }
+  }, [step]);
+
+  // When Step 2 is shown, check on-chain if pool (pair + fee + hook) already exists
+  useEffect(() => {
+    if (step !== 2 || !poolManagerAddress) return;
+    const addr0 = (token0Addr || resolveAddress(token0)).trim();
+    const addr1 = (token1Addr || resolveAddress(token1)).trim();
+    if (!addr0 || !addr1 || addr0 === addr1) {
+      setPoolExistsOnChain(false);
+      return;
+    }
+    setPoolExistsOnChain(null);
+    setOnChainSqrtPriceStep2(null);
+    const hookAddr = getHookAddress(selectedHook) as `0x${string}`;
+    const poolKey = buildPoolKey(
+      addr0 as `0x${string}`,
+      addr1 as `0x${string}`,
+      fee,
+      tickSpacing,
+      hookAddr,
+    );
+    const poolId = getPoolId(poolKey);
+    const pc = publicClientRef.current;
+    if (!pc) {
+      setPoolExistsOnChain(false);
+      return;
+    }
+    let cancelled = false;
+    pc.readContract({
+      address: poolManagerAddress as `0x${string}`,
+      abi: PoolManagerAbi,
+      functionName: "getPoolState",
+      args: [poolId],
+    })
+      .then((state) => {
+        if (cancelled) return;
+        const [initialized, sqrtPriceX96] = state as [boolean, bigint, number];
+        setPoolExistsOnChain(!!initialized);
+        if (initialized && sqrtPriceX96 > 0n) {
+          setOnChainSqrtPriceStep2(sqrtPriceX96);
+        } else {
+          setOnChainSqrtPriceStep2(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPoolExistsOnChain(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    step,
+    poolManagerAddress,
+    token0Addr,
+    token1Addr,
+    token0,
+    token1,
+    fee,
+    tickSpacing,
+    selectedHook,
+  ]);
+
+  /** Step 2: use on-chain price when pool exists, else user's initial price (for range/deposit display and math) */
+  const effectivePriceForStep2 = useMemo(() => {
+    if (
+      poolExistsOnChain !== true ||
+      onChainSqrtPriceStep2 == null ||
+      onChainSqrtPriceStep2 <= 0n
+    ) {
+      return initialPrice;
+    }
+    const addr0 = (token0Addr || resolveAddress(token0)).trim();
+    const addr1 = (token1Addr || resolveAddress(token1)).trim();
+    if (!addr0 || !addr1 || addr0 === addr1) return initialPrice;
+    const hookAddr = getHookAddress(selectedHook) as `0x${string}`;
+    const poolKey = buildPoolKey(
+      addr0 as `0x${string}`,
+      addr1 as `0x${string}`,
+      fee,
+      tickSpacing,
+      hookAddr,
+    );
+    const tokensFlipped =
+      poolKey.currency0.toLowerCase() !== addr0.toLowerCase();
+    const dec0 = resolveDecimals(token0);
+    const dec1 = resolveDecimals(token1);
+    const poolDec0 = tokensFlipped ? dec1 : dec0;
+    const poolDec1 = tokensFlipped ? dec0 : dec1;
+    const rawPrice = sqrtPriceX96ToPrice(
+      onChainSqrtPriceStep2,
+      poolDec0,
+      poolDec1,
+    );
+    return tokensFlipped ? 1 / rawPrice : rawPrice;
+  }, [
+    poolExistsOnChain,
+    onChainSqrtPriceStep2,
+    initialPrice,
+    token0Addr,
+    token1Addr,
+    token0,
+    token1,
+    selectedHook,
+    fee,
+    tickSpacing,
+    resolveAddress,
+    resolveDecimals,
+  ]);
+
   const syncPriceToTicks = useCallback(() => {
     if (rangeMode === "full") return;
     const minP = parseFloat(minPriceStr);
@@ -304,7 +429,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
 
   const setCustomRange = () => {
     setRangeMode("custom");
-    const ref = initialPrice;
+    const ref = effectivePriceForStep2;
     const minP = ref * 0.95;
     const maxP = ref * 1.05;
     setMinPriceStr(minP.toFixed(4));
@@ -325,7 +450,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
 
   const adjustMinPrice = (delta: number) => {
     if (rangeMode === "full") return;
-    const p = parseFloat(minPriceStr) || initialPrice;
+    const p = parseFloat(minPriceStr) || effectivePriceForStep2;
     const newP = Math.max(0, p * (1 + delta));
     setMinPriceStr(newP.toFixed(4));
     setTickLower(
@@ -337,7 +462,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
   };
   const adjustMaxPrice = (delta: number) => {
     if (rangeMode === "full") return;
-    const p = parseFloat(maxPriceStr) || initialPrice;
+    const p = parseFloat(maxPriceStr) || effectivePriceForStep2;
     const newP = p * (1 + delta);
     setMaxPriceStr(newP.toFixed(4));
     setTickUpper(
@@ -348,32 +473,32 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     );
   };
 
-  /** Percentage from initial price */
+  /** Percentage from effective price (initial or on-chain) */
   const minPricePct = (): string => {
     if (rangeMode === "full") return "";
     const p = parseFloat(minPriceStr);
     if (!Number.isFinite(p)) return "";
-    const pct = ((p - initialPrice) / initialPrice) * 100;
+    const pct = ((p - effectivePriceForStep2) / effectivePriceForStep2) * 100;
     return `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
   };
   const maxPricePct = (): string => {
     if (rangeMode === "full") return "";
     const p = parseFloat(maxPriceStr);
     if (!Number.isFinite(p)) return "";
-    const pct = ((p - initialPrice) / initialPrice) * 100;
+    const pct = ((p - effectivePriceForStep2) / effectivePriceForStep2) * 100;
     return `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
   };
 
-  /** Deposit math: equivalent amount at initial price (token1 per token0) */
+  /** Deposit math: equivalent amount at effective price (token1 per token0) */
   const amount1AtPrice = (a0: string): string => {
     const n = parseFloat(a0);
     if (!Number.isFinite(n) || n <= 0) return "—";
-    return (n * initialPrice).toFixed(6);
+    return (n * effectivePriceForStep2).toFixed(6);
   };
   const amount0AtPrice = (a1: string): string => {
     const n = parseFloat(a1);
-    if (!Number.isFinite(n) || n <= 0 || initialPrice <= 0) return "—";
-    return (n / initialPrice).toFixed(6);
+    if (!Number.isFinite(n) || n <= 0 || effectivePriceForStep2 <= 0) return "—";
+    return (n / effectivePriceForStep2).toFixed(6);
   };
 
   // Compute actual price boundaries from ticks (matches what the contract sees)
@@ -382,10 +507,10 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
 
   // Determine which tokens are needed based on current price vs tick range
   const depositMode = useMemo(() => {
-    if (initialPrice <= priceLower) return "token0Only" as const;
-    if (initialPrice >= priceUpper) return "token1Only" as const;
+    if (effectivePriceForStep2 <= priceLower) return "token0Only" as const;
+    if (effectivePriceForStep2 >= priceUpper) return "token1Only" as const;
     return "both" as const;
-  }, [initialPrice, priceLower, priceUpper]);
+  }, [effectivePriceForStep2, priceLower, priceUpper]);
 
   // Recalculate paired amount whenever the driving input, price, or range changes.
   // We track which token the user is editing via lastEditedToken and only re-derive
@@ -401,7 +526,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
       }
 
       const result = computeLiquidityFromAmount(
-        initialPrice,
+        effectivePriceForStep2,
         priceLower,
         priceUpper,
         inputAmt,
@@ -434,10 +559,10 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
         }
       }
     },
-    [initialPrice, priceLower, priceUpper, depositMode, token0, token1],
+    [effectivePriceForStep2, priceLower, priceUpper, depositMode, token0, token1],
   );
 
-  // Re-run calculation when price range or initial price changes (use the last-edited token as driver)
+  // Re-run calculation when price range or effective price changes (use the last-edited token as driver)
   useEffect(() => {
     const driverAmt = lastEditedToken === 0 ? amount0 : amount1;
     if (driverAmt && parseFloat(driverAmt) > 0) {
@@ -445,7 +570,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     }
     // Only react to range/price changes, not to amount changes (amounts are handled by onChange)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialPrice, priceLower, priceUpper, depositMode]);
+  }, [effectivePriceForStep2, priceLower, priceUpper, depositMode]);
 
   // When deposit mode changes (range adjusted), clear the disabled token's amount
   useEffect(() => {
@@ -868,9 +993,22 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
       setTxHash(txId);
       console.log("[Add liquidity] multicall success:", txId);
 
-      // Save position to DynamoDB so it shows up in "Your positions"
+      // Ensure pool is in DynamoDB so it appears in Explore and Pools list (covers both existing and newly initialized pool)
+      try {
+        await fetch("/api/pools/ensure", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            poolId,
+            deployedBy: ownerEvmAddress?.toLowerCase(),
+          }),
+        });
+      } catch (e) {
+        console.warn("[Add liquidity] failed to ensure pool in DB:", e);
+      }
+
+      // Save position to DynamoDB so it shows up in "Your positions" (covers both existing and newly initialized pool; single multicall handles both)
       if (mintedTokenId != null) {
-        const poolId = getPoolId(poolKey);
         try {
           await fetch("/api/positions", {
             method: "POST",
@@ -1410,101 +1548,130 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
           {/* ========== STEP 2 ========== */}
           {step === 2 && (
             <div className="space-y-4 sm:space-y-5">
-              {/* ---- Set initial price ---- */}
-              <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 p-4 sm:p-5 md:p-6 space-y-4 shadow-inner">
-                <div>
-                  <h3 className="text-base font-semibold text-text-primary mb-1">
-                    Set initial price
+              {/* ---- Pool status: loading / already created / set initial price ---- */}
+              {poolExistsOnChain === null && (
+                <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 p-4 sm:p-5 md:p-6 shadow-inner">
+                  <p className="text-sm text-text-tertiary">Checking pool…</p>
+                </div>
+              )}
+              {poolExistsOnChain === true && (
+                <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 p-4 sm:p-5 md:p-6 space-y-2 shadow-inner">
+                  <h3 className="text-base font-semibold text-text-primary">
+                    Pool already created
                   </h3>
                   <p className="text-sm text-text-tertiary">
-                    When creating a new pool, you must set the starting exchange
-                    rate for both tokens. This rate will reflect the initial
-                    market price.
+                    This pool exists. Set your price range and deposit amounts
+                    below to create a position.
                   </p>
+                  {effectivePriceForStep2 > 0 && (
+                    <p className="text-sm font-medium text-text-secondary">
+                      Current price: 1 {token0.symbol} ={" "}
+                      {effectivePriceForStep2 >= 1e6
+                        ? effectivePriceForStep2.toExponential(2)
+                        : effectivePriceForStep2 < 0.0001
+                          ? effectivePriceForStep2.toExponential(2)
+                          : effectivePriceForStep2.toFixed(6).replace(/\.?0+$/, "")}{" "}
+                      {token1.symbol} (rate from pool)
+                    </p>
+                  )}
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-text-secondary uppercase tracking-wider">
-                    Initial price
-                  </label>
-                  <div className="flex flex-wrap items-stretch gap-2 sm:gap-3">
-                    <input
-                      type="text"
-                      className="flex-1 min-w-[100px] px-4 py-3 bg-surface-2 border border-white/[0.08] rounded-xl text-xl sm:text-2xl font-bold text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-colors"
-                      placeholder="0"
-                      value={
-                        priceQuotePerToken0
-                          ? initialPriceStr
-                          : initialPrice > 0
-                            ? (1 / initialPrice)
-                                .toFixed(6)
-                                .replace(/\.?0+$/, "")
-                            : ""
-                      }
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (priceQuotePerToken0) {
-                          setInitialPriceStr(v);
-                        } else {
-                          const n = parseFloat(v);
-                          if (Number.isFinite(n) && n > 0)
-                            setInitialPriceStr((1 / n).toFixed(10));
-                        }
-                      }}
-                      aria-label="Initial price"
-                    />
-                    <div className="flex rounded-full p-1 bg-surface-2 border border-white/[0.08] shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setPriceQuotePerToken0(true)}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-all cursor-pointer ${
-                          priceQuotePerToken0
-                            ? "bg-surface-1 text-text-primary shadow-sm border border-white/[0.06]"
-                            : "text-text-tertiary hover:text-text-secondary"
-                        }`}
-                      >
-                        <TokenIcon symbol={sym0} size={18} />
-                        {sym0}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPriceQuotePerToken0(false)}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-all cursor-pointer ${
-                          !priceQuotePerToken0
-                            ? "bg-surface-1 text-text-primary shadow-sm border border-white/[0.06]"
-                            : "text-text-tertiary hover:text-text-secondary"
-                        }`}
-                      >
-                        <TokenIcon symbol={sym1} size={18} />
-                        {sym1}
-                      </button>
-                    </div>
+              )}
+              {poolExistsOnChain === false && (
+                <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 p-4 sm:p-5 md:p-6 space-y-4 shadow-inner">
+                  <div>
+                    <h3 className="text-base font-semibold text-text-primary mb-1">
+                      Set initial price
+                    </h3>
+                    <p className="text-sm text-text-tertiary">
+                      When creating a new pool, you must set the starting
+                      exchange rate for both tokens. This rate will reflect the
+                      initial market price.
+                    </p>
                   </div>
-                  <p className="text-sm text-text-tertiary">
-                    {priceQuotePerToken0
-                      ? `${sym1} = 1 ${sym0}`
-                      : `${sym0} = 1 ${sym1}`}
-                  </p>
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-text-secondary uppercase tracking-wider">
+                      Initial price
+                    </label>
+                    <div className="flex flex-wrap items-stretch gap-2 sm:gap-3">
+                      <input
+                        type="text"
+                        className="flex-1 min-w-[100px] px-4 py-3 bg-surface-2 border border-white/[0.08] rounded-xl text-xl sm:text-2xl font-bold text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-colors"
+                        placeholder="0"
+                        value={
+                          priceQuotePerToken0
+                            ? initialPriceStr
+                            : initialPrice > 0
+                              ? (1 / initialPrice)
+                                  .toFixed(6)
+                                  .replace(/\.?0+$/, "")
+                              : ""
+                        }
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (priceQuotePerToken0) {
+                            setInitialPriceStr(v);
+                          } else {
+                            const n = parseFloat(v);
+                            if (Number.isFinite(n) && n > 0)
+                              setInitialPriceStr((1 / n).toFixed(10));
+                          }
+                        }}
+                        aria-label="Initial price"
+                      />
+                      <div className="flex rounded-full p-1 bg-surface-2 border border-white/[0.08] shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setPriceQuotePerToken0(true)}
+                          className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-all cursor-pointer ${
+                            priceQuotePerToken0
+                              ? "bg-surface-1 text-text-primary shadow-sm border border-white/[0.06]"
+                              : "text-text-tertiary hover:text-text-secondary"
+                          }`}
+                        >
+                          <TokenIcon symbol={sym0} size={18} />
+                          {sym0}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPriceQuotePerToken0(false)}
+                          className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-all cursor-pointer ${
+                            !priceQuotePerToken0
+                              ? "bg-surface-1 text-text-primary shadow-sm border border-white/[0.06]"
+                              : "text-text-tertiary hover:text-text-secondary"
+                          }`}
+                        >
+                          <TokenIcon symbol={sym1} size={18} />
+                          {sym1}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-sm text-text-tertiary">
+                      {priceQuotePerToken0
+                        ? `${sym1} = 1 ${sym0}`
+                        : `${sym0} = 1 ${sym1}`}
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-2 p-3 rounded-xl bg-warning-muted/50 border border-warning/15">
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      className="text-warning shrink-0 mt-0.5"
+                    >
+                      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                    <p className="text-xs text-warning">
+                      Market price not found. Please do your own research to
+                      avoid loss of funds.
+                    </p>
+                  </div>
                 </div>
-                <div className="flex items-start gap-2 p-3 rounded-xl bg-warning-muted/50 border border-warning/15">
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    className="text-warning shrink-0 mt-0.5"
-                  >
-                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
-                  <p className="text-xs text-warning">
-                    Market price not found. Please do your own research to avoid
-                    loss of funds.
-                  </p>
-                </div>
-              </div>
+              )}
 
               {/* ---- Set Price Range ---- */}
               <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 p-4 sm:p-5 md:p-6 space-y-4 sm:space-y-5 shadow-inner">
