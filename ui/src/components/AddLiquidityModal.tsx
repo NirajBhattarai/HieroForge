@@ -212,7 +212,9 @@ export function AddLiquidityModal({
     setTxHash(null);
 
     try {
-      const ownerEvmAddress = accountIdToEvmAddress(accountId);
+      const { getPositionOwnerAddress } = await import("@/lib/hederaAccount");
+      const network = (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_HEDERA_NETWORK) || "testnet";
+      const ownerEvmAddress = (await getPositionOwnerAddress(accountId, network)) ?? accountIdToEvmAddress(accountId);
       if (!ownerEvmAddress) {
         setError("Cannot derive EVM address.");
         setPending(false);

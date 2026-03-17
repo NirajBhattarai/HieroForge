@@ -83,7 +83,20 @@ export function PositionDetail({
         decimals0: pool.decimals0,
         decimals1: pool.decimals1,
       }),
-    }).catch(() => {});
+    })
+      .then(async (resp) => {
+        if (!resp.ok) {
+          const j = (await resp.json().catch(() => null)) as
+            | { error?: string; persisted?: boolean }
+            | null;
+          console.warn(
+            "[PositionDetail] failed to persist position:",
+            resp.status,
+            j?.error ?? "(no error body)",
+          );
+        }
+      })
+      .catch(() => {});
   }, [onChain, pool.symbol0, pool.symbol1, pool.decimals0, pool.decimals1]);
 
   const decimals0 = displayPool.decimals0 ?? getTokenDecimals(displayPool.symbol0);

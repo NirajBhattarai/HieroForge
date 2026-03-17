@@ -767,12 +767,15 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     setTxHash(null);
     try {
       console.log("[Add liquidity] HashPack accountId:", accountId);
-      const ownerEvmAddress = accountIdToEvmAddress(accountId);
+      const { getPositionOwnerAddress } = await import("@/lib/hederaAccount");
+      const network = (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_HEDERA_NETWORK) || "testnet";
+      const ownerEvmAddress = (await getPositionOwnerAddress(accountId, network)) ?? accountIdToEvmAddress(accountId);
       if (!ownerEvmAddress) {
         setError("Cannot derive EVM address from account ID.");
         setPending(false);
         return;
       }
+      console.log("[Add liquidity] position owner (use ECDSA so remove works):", ownerEvmAddress);
 
       const hookAddr = getHookAddress(selectedHook) as `0x${string}`;
       const poolKey = buildPoolKey(
@@ -1010,7 +1013,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
       // Save position to DynamoDB so it shows up in "Your positions" (covers both existing and newly initialized pool; single multicall handles both)
       if (mintedTokenId != null) {
         try {
-          await fetch("/api/positions", {
+          const resp = await fetch("/api/positions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1033,6 +1036,16 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                 ?.name,
             }),
           });
+          if (!resp.ok) {
+            const j = (await resp.json().catch(() => null)) as
+              | { error?: string; persisted?: boolean }
+              | null;
+            console.warn(
+              "[Add liquidity] save position failed:",
+              resp.status,
+              j?.error ?? "(no error body)",
+            );
+          }
           console.log(
             "[Add liquidity] position saved, tokenId:",
             mintedTokenId,

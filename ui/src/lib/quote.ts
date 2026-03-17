@@ -63,7 +63,13 @@ export function quoteParams(
       currency1: poolKey.currency1,
       fee: poolKey.fee,
       tickSpacing: poolKey.tickSpacing,
-      hooks: ZERO_ADDRESS,
+      hooks:
+        (poolKey.hooks &&
+          typeof poolKey.hooks === "string" &&
+          poolKey.hooks.startsWith("0x") &&
+          poolKey.hooks.length === 42
+          ? (poolKey.hooks as `0x${string}`)
+          : ZERO_ADDRESS),
     },
     zeroForOne,
     exactAmount,

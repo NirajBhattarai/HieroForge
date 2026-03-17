@@ -86,7 +86,7 @@ hieroforge-periphery/
 │       └── MockHTS.sol                     #   Mock HTS precompile (etched at 0x167)
 ├── script/                                 # Foundry deploy/setup scripts
 │   ├── DeployPositionManager.s.sol         #   Deploy PositionManager(poolManager)
-│   ├── DeployHieroForgeV4Position.s.sol    #   Deploy HieroForgeV4Position(operatorAccount) + createCollection (--ffi --skip-simulation)
+│   ├── DeployHieroForgeV4Position.s.sol    #   Deploy HieroForgeV4Position(poolManager, operatorAccount) + createCollection (env: POOL_MANAGER; --ffi --skip-simulation)
 │   ├── DeployUniversalRouter.s.sol         #   Deploy UniversalRouter(poolManager, positionManager)
 │   ├── DeployQuoter.s.sol                  #   Deploy V4Quoter(poolManager)
 │   ├── AddLiquidityPositionManager.s.sol   #   Multicall: initializePool + modifyLiquidities

@@ -28,6 +28,22 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    // DynamoDB writes require server-side AWS credentials.
+    if (
+      !process.env.HF_AWS_ACCESS_KEY_ID ||
+      !process.env.HF_AWS_SECRET_ACCESS_KEY
+    ) {
+      return NextResponse.json(
+        {
+          ok: false,
+          persisted: false,
+          error:
+            "DynamoDB not configured on server. Set HF_AWS_ACCESS_KEY_ID and HF_AWS_SECRET_ACCESS_KEY.",
+        },
+        { status: 503 },
+      );
+    }
+
     const body = (await request.json()) as PositionRecord;
     const {
       tokenId,
@@ -82,7 +98,7 @@ export async function POST(request: Request) {
       hooks: body.hooks ?? undefined,
       hookName: body.hookName ?? undefined,
     });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, persisted: true });
   } catch (err) {
     console.error("Save position error:", err);
     return NextResponse.json(

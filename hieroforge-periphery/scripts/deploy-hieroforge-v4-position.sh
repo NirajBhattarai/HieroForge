@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploy HieroForgeV4Position (HTS NFT, no royalties) to Hedera testnet.
 #
-# Prereq: .env with HEDERA_PRIVATE_KEY or PRIVATE_KEY (ECDSA key for Hedera testnet; required for HTS precompile).
+# Prereq: .env with HEDERA_PRIVATE_KEY or PRIVATE_KEY, and POOL_MANAGER (address of PoolManager).
 # Optional: OPERATOR_ACCOUNT (defaults to signer address), HTS_VALUE (default 25 ether), HTS_CREATE_GAS_LIMIT (default 2M).
 #
 # Usage:

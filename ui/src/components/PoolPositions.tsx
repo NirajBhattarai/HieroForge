@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { TokenIcon, TokenPairIcon } from "./TokenIcon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -10,6 +10,7 @@ import { usePositions, type Position } from "@/hooks/usePositions";
 import { useHashPack } from "@/context/HashPackContext";
 import { getTokenDecimals } from "@/constants";
 import { tickToPrice } from "@/lib/priceUtils";
+import { getAccountEvmAddress } from "@/lib/hederaAccount";
 
 export interface PoolInfo {
   poolId: string;
@@ -190,6 +191,26 @@ export function PoolPositions({
     return "0x" + BigInt(m[3]!).toString(16).padStart(40, "0");
   })();
 
+  // Positions may be owned by the Hedera ECDSA alias (tx sender) or the long-zero address.
+  // Query both so old + new positions show under "Your positions".
+  const [accountEvmAlias, setAccountEvmAlias] = useState<string | null>(null);
+  const network =
+    (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_HEDERA_NETWORK) ||
+    "testnet";
+  useEffect(() => {
+    if (!accountId) {
+      setAccountEvmAlias(null);
+      return;
+    }
+    let cancelled = false;
+    getAccountEvmAddress(accountId, network).then((evm) => {
+      if (!cancelled) setAccountEvmAlias(evm ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId, network]);
+
   const { tokens: dynamicTokens } = useTokens();
   const tokenByAddr = new Map(
     dynamicTokens.map((t) => [t.address.toLowerCase(), t]),
@@ -200,7 +221,13 @@ export function PoolPositions({
     positions: userPositions,
     loading: positionsLoading,
     refetch: refetchPositions,
-  } = usePositions(deployerEvmAddress);
+  } = usePositions(
+    useMemo(
+      () =>
+        [accountEvmAlias, deployerEvmAddress].filter(Boolean) as string[],
+      [accountEvmAlias, deployerEvmAddress],
+    ),
+  );
 
   useEffect(() => {
     // For "positions" tab, we use the usePositions hook instead

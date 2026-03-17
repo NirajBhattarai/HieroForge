@@ -24,26 +24,44 @@ export interface Position {
 }
 
 /**
- * Fetches positions for a given owner from /api/positions.
- * Pass the owner's EVM address (lowercase hex).
+ * Fetches positions for one or more owners from /api/positions.
+ * Pass EVM address(es) (lowercase hex). If multiple are provided, results are merged.
  */
-export function usePositions(owner: string | null) {
+export function usePositions(owners: string | string[] | null) {
   const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchPositions = useCallback(() => {
-    if (!owner) {
+    const ownerList = (
+      Array.isArray(owners) ? owners : owners ? [owners] : []
+    )
+      .map((o) => o?.toLowerCase().trim())
+      .filter(Boolean) as string[];
+    const uniqueOwners = Array.from(new Set(ownerList));
+
+    if (!uniqueOwners.length) {
       setPositions([]);
       setLoading(false);
       return;
     }
     setLoading(true);
-    fetch(`/api/positions?owner=${encodeURIComponent(owner)}`)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data: Position[]) => setPositions(data))
+
+    Promise.all(
+      uniqueOwners.map((o) =>
+        fetch(`/api/positions?owner=${encodeURIComponent(o)}`).then((res) =>
+          res.ok ? (res.json() as Promise<Position[]>) : ([] as Position[]),
+        ),
+      ),
+    )
+      .then((lists) => {
+        const merged = lists.flat();
+        const byId = new Map<string, Position>();
+        for (const p of merged) byId.set(String(p.positionId ?? p.tokenId), p);
+        setPositions(Array.from(byId.values()));
+      })
       .catch(() => setPositions([]))
       .finally(() => setLoading(false));
-  }, [owner]);
+  }, [owners]);
 
   useEffect(() => {
     fetchPositions();

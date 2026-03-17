@@ -25,6 +25,7 @@ import { PositionManagerAbi } from "@/abis/PositionManager";
 import { PoolManagerAbi } from "@/abis/PoolManager";
 import { amountsForLiquidity, getSqrtPriceAtTick } from "@/lib/sqrtPriceMath";
 import { getFriendlyErrorMessage } from "@/lib/errors";
+import { getAccountEvmAddress } from "@/lib/hederaAccount";
 import type { PoolInfo } from "./PoolPositions";
 
 interface RemoveLiquidityModalProps {
@@ -63,6 +64,20 @@ export function RemoveLiquidityModal({
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [sqrtPriceX96, setSqrtPriceX96] = useState<bigint | null>(null);
+  const [accountEvmAlias, setAccountEvmAlias] = useState<string | null>(null);
+
+  const network = (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_HEDERA_NETWORK) || "testnet";
+  useEffect(() => {
+    if (!accountId) {
+      setAccountEvmAlias(null);
+      return;
+    }
+    let cancelled = false;
+    getAccountEvmAddress(accountId, network).then((evm) => {
+      if (!cancelled) setAccountEvmAlias(evm ?? null);
+    });
+    return () => { cancelled = true; };
+  }, [accountId, network]);
 
   const publicClient = useMemo(
     () =>
@@ -134,13 +149,13 @@ export function RemoveLiquidityModal({
   const hasTicks =
     typeof tickLower === "number" && typeof tickUpper === "number";
 
-  const { estimated0, estimated1 } = useMemo(() => {
+  const { estimated0, estimated1, estimatesReady } = useMemo(() => {
     if (
       !sqrtPriceX96 ||
       !hasTicks ||
       liquidityWei <= 0n
     ) {
-      return { estimated0: "0", estimated1: "0" };
+      return { estimated0: "—", estimated1: "—", estimatesReady: false };
     }
     try {
       const sqrtPA = getSqrtPriceAtTick(tickLower!);
@@ -161,9 +176,10 @@ export function RemoveLiquidityModal({
       return {
         estimated0: toDisplay(e0, decimals0),
         estimated1: toDisplay(e1, decimals1),
+        estimatesReady: true,
       };
     } catch {
-      return { estimated0: "0", estimated1: "0" };
+      return { estimated0: "—", estimated1: "—", estimatesReady: false };
     }
   }, [
     sqrtPriceX96,
@@ -239,9 +255,13 @@ export function RemoveLiquidityModal({
       setTxHash(txId);
 
       // If 100% removal (burn), delete position record from DynamoDB
-      if (percent === 100 && pool.tokenId != null) {
+      if (percent === 100) {
         try {
-          const positionId = `${pool.currency0}-${pool.currency1}-${pool.fee}-${pool.tickSpacing}-${pool.hooks ?? "0x0000000000000000000000000000000000000000"}-${pool.tokenId}`;
+          // DynamoDB positions table stores positionId as String(tokenId).
+          const positionId =
+            (resolvedTokenId ?? (onChain?.tokenId != null ? String(onChain.tokenId) : "")) ||
+            "";
+          if (!positionId) return;
           await fetch(
             `/api/positions?positionId=${encodeURIComponent(positionId)}`,
             {
@@ -263,6 +283,7 @@ export function RemoveLiquidityModal({
     percent,
     resolvedTokenId,
     onChainLiquidity,
+    onChain?.tokenId,
     liquidityWei,
     isConnected,
     accountId,
@@ -326,17 +347,46 @@ export function RemoveLiquidityModal({
             On-chain owner: {onChain.owner}
           </p>
           <p className="text-xs text-text-secondary font-mono break-all mt-1">
-            You: {accountId} → EVM (long-zero): {accountIdToEvmAddress(accountId) ?? "—"}
+            You: {accountId} → long-zero: {accountIdToEvmAddress(accountId) ?? "—"}
           </p>
-          {onChain.owner.toLowerCase() !== accountIdToEvmAddress(accountId) ? (
-            <p className="text-xs text-amber-500 mt-2">
-              These differ. Only the on-chain owner can remove. If you see Unauthorized, use the same wallet that created this position.
-            </p>
-          ) : (
-            <p className="text-xs text-text-tertiary mt-2">
-              Your account’s long-zero matches the owner. If you still get Unauthorized, Hedera may be using your wallet’s ECDSA alias as the tx sender; the position must have been created with the same sender type.
+          {accountEvmAlias && (
+            <p className="text-xs text-text-secondary font-mono break-all mt-0.5">
+              Your ECDSA address (tx sender): {accountEvmAlias}
             </p>
           )}
+          {(() => {
+            const owner = onChain.owner.toLowerCase();
+            const longZero = (accountIdToEvmAddress(accountId) ?? "").toLowerCase();
+            const evmAlias = (accountEvmAlias ?? "").toLowerCase();
+            const ownerIsLongZero = owner === longZero;
+            const ownerIsEvmAlias = evmAlias && owner === evmAlias;
+            if (ownerIsEvmAlias) {
+              return (
+                <p className="text-xs text-success mt-2">
+                  You can remove — owner matches your tx sender (ECDSA).
+                </p>
+              );
+            }
+            if (ownerIsLongZero && evmAlias) {
+              return (
+                <p className="text-xs text-amber-500 mt-2">
+                  Remove will fail: Hedera sends txs from your ECDSA address, but this position is owned by your long-zero. New positions created from this app now use your ECDSA address so remove works. This position was created with the old flow; use the same sender that created it, or add new liquidity and remove that instead.
+                </p>
+              );
+            }
+            if (owner !== longZero && !ownerIsEvmAlias) {
+              return (
+                <p className="text-xs text-amber-500 mt-2">
+                  Only the on-chain owner can remove. If you see Unauthorized, use the wallet that created this position.
+                </p>
+              );
+            }
+            return (
+              <p className="text-xs text-text-tertiary mt-2">
+                If you get Unauthorized, Hedera may be using your ECDSA address as sender. New positions use that address so remove works.
+              </p>
+            );
+          })()}
         </div>
       )}
 
@@ -406,6 +456,11 @@ export function RemoveLiquidityModal({
           <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
             Estimated to receive
           </p>
+          {!estimatesReady && (
+            <p className="text-xs text-text-tertiary">
+              — means the app couldn’t estimate yet (needs on-chain pool price + position range).
+            </p>
+          )}
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm text-text-secondary">

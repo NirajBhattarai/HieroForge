@@ -5,7 +5,8 @@
 # Usage:
 #   export QUOTER_ADDRESS=0x...   # for Quoter
 #   export POSITION_MANAGER_ADDRESS=0x... POOL_MANAGER_ADDRESS=0x...  # for PositionManager
-#   ./scripts/verify-contracts.sh [Quoter|PositionManager|Multicall|all]
+#   export HIEROFORGE_V4_POSITION_ADDRESS=0x... POOL_MANAGER_ADDRESS=0x... OPERATOR_ACCOUNT=0x...  # for HieroForgeV4Position
+#   ./scripts/verify-contracts.sh [Quoter|PositionManager|HieroForgeV4Position|Multicall|all]
 #
 # Prerequisites: forge build (extra_output_files = ["metadata"]). jq, curl for API verification.
 
@@ -54,6 +55,20 @@ case "$CONTRACT_ARG" in
       exit 1
     fi
     ;;
+  HieroForgeV4Position)
+    if [[ -z "$HIEROFORGE_V4_POSITION_ADDRESS" ]]; then
+      echo "Error: HIEROFORGE_V4_POSITION_ADDRESS not set."
+      exit 1
+    fi
+    if [[ -z "$POOL_MANAGER_ADDRESS" ]]; then
+      echo "Error: POOL_MANAGER_ADDRESS required for HieroForgeV4Position constructor."
+      exit 1
+    fi
+    if [[ -z "$OPERATOR_ACCOUNT" ]]; then
+      echo "Error: OPERATOR_ACCOUNT required for HieroForgeV4Position (use the EOA that deployed it)."
+      exit 1
+    fi
+    ;;
   all)
     if [[ -z "$QUOTER_ADDRESS" ]]; then echo "Error: QUOTER_ADDRESS not set."; exit 1; fi
     if [[ -z "$POSITION_MANAGER_ADDRESS" ]]; then echo "Error: POSITION_MANAGER_ADDRESS not set."; exit 1; fi
@@ -63,11 +78,12 @@ case "$CONTRACT_ARG" in
     fi
     ;;
   *)
-    echo "Usage: $0 [Quoter|PositionManager|Multicall|all]"
-    echo "  Quoter          - verify Quoter (set QUOTER_ADDRESS)"
-    echo "  PositionManager - verify PositionManager (set POSITION_MANAGER_ADDRESS, POOL_MANAGER_ADDRESS)"
-    echo "  Multicall       - same as PositionManager (multicall is part of PositionManager)"
-    echo "  all             - verify Quoter + PositionManager"
+    echo "Usage: $0 [Quoter|PositionManager|HieroForgeV4Position|Multicall|all]"
+    echo "  Quoter              - verify Quoter (set QUOTER_ADDRESS)"
+    echo "  PositionManager     - verify PositionManager (set POSITION_MANAGER_ADDRESS, POOL_MANAGER_ADDRESS)"
+    echo "  HieroForgeV4Position - verify HieroForgeV4Position (set HIEROFORGE_V4_POSITION_ADDRESS, POOL_MANAGER_ADDRESS, OPERATOR_ACCOUNT)"
+    echo "  Multicall           - same as PositionManager"
+    echo "  all                 - verify Quoter + PositionManager"
     exit 1
     ;;
 esac
@@ -170,6 +186,38 @@ verify_position_manager() {
   echo ""
 }
 
+verify_hieroforge_v4_position() {
+  echo "--- Verifying HieroForgeV4Position at $HIEROFORGE_V4_POSITION_ADDRESS ---"
+  NEED_MANUAL=""
+  if [[ -z "$VERIFY_MANUAL" ]]; then
+    set +e
+    hashscan_api_verify "$REPO_ROOT" "HieroForgeV4Position" "$HIEROFORGE_V4_POSITION_ADDRESS" "$CHAIN_ID" && r=0 || r=1
+    if [[ $r -ne 0 ]]; then
+      CONSTRUCTOR_ARGS=$(cast abi-encode "constructor(address,address)" "$POOL_MANAGER_ADDRESS" "$OPERATOR_ACCOUNT")
+      forge verify-contract \
+        "$HIEROFORGE_V4_POSITION_ADDRESS" \
+        src/HieroForgeV4Position.sol:HieroForgeV4Position \
+        --chain-id "$CHAIN_ID" \
+        --verifier sourcify \
+        --verifier-url "$HEDERA_VERIFIER_URL" \
+        --constructor-args "$CONSTRUCTOR_ARGS" \
+        $WATCH_FLAG
+      r=$?
+    fi
+    set -e
+    if [[ $r -ne 0 ]]; then
+      echo "HieroForgeV4Position programmatic verification failed; use manual verification below."
+      NEED_MANUAL=1
+    fi
+  else
+    NEED_MANUAL=1
+  fi
+  if [[ -n "$NEED_MANUAL" ]] || [[ -n "$VERIFY_MANUAL" ]]; then
+    prepare_manual_bundle "HieroForgeV4Position" "src/HieroForgeV4Position.sol" || true
+  fi
+  echo ""
+}
+
 NEED_MANUAL=""
 case "$CONTRACT_ARG" in
   Quoter)
@@ -178,9 +226,13 @@ case "$CONTRACT_ARG" in
   PositionManager|Multicall)
     verify_position_manager
     ;;
+  HieroForgeV4Position)
+    verify_hieroforge_v4_position
+    ;;
   all)
     verify_quoter
     verify_position_manager
+    [[ -n "$HIEROFORGE_V4_POSITION_ADDRESS" ]] && [[ -n "$OPERATOR_ACCOUNT" ]] && verify_hieroforge_v4_position
     ;;
 esac
 
@@ -191,8 +243,10 @@ if [[ -n "$NEED_MANUAL" ]] || [[ -n "$VERIFY_MANUAL" ]]; then
   echo "  3. Upload files from verify-bundles/<Contract>/"
   [[ -n "$QUOTER_ADDRESS" ]] && echo "  Quoter:         https://hashscan.io/testnet/contract/$QUOTER_ADDRESS"
   [[ -n "$POSITION_MANAGER_ADDRESS" ]] && echo "  PositionManager: https://hashscan.io/testnet/contract/$POSITION_MANAGER_ADDRESS"
+  [[ -n "$HIEROFORGE_V4_POSITION_ADDRESS" ]] && echo "  HieroForgeV4Position: https://hashscan.io/testnet/contract/$HIEROFORGE_V4_POSITION_ADDRESS"
 else
   echo "Done."
   [[ -n "$QUOTER_ADDRESS" ]] && echo "  Quoter: https://hashscan.io/testnet/contract/$QUOTER_ADDRESS"
   [[ -n "$POSITION_MANAGER_ADDRESS" ]] && echo "  PositionManager: https://hashscan.io/testnet/contract/$POSITION_MANAGER_ADDRESS"
+  [[ -n "$HIEROFORGE_V4_POSITION_ADDRESS" ]] && echo "  HieroForgeV4Position: https://hashscan.io/testnet/contract/$HIEROFORGE_V4_POSITION_ADDRESS"
 fi
