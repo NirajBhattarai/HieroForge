@@ -1,12 +1,15 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { TokenIcon, TokenPairIcon } from "./TokenIcon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useHashPack } from "@/context/HashPackContext";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
+import { usePositionOnChain } from "@/hooks/usePositionOnChain";
 import { getTokenDecimals, HOOKS_ZERO } from "@/constants";
 import { tickToPrice } from "@/lib/priceUtils";
+import { buildPoolKey, getPoolId } from "@/lib/addLiquidity";
 import type { PoolInfo } from "./PoolPositions";
 import { TWAPOracleCard, HookBadge } from "./TWAPOracleCard";
 
@@ -31,15 +34,67 @@ export function PositionDetail({
 }: PositionDetailProps) {
   const { symbol0, symbol1, fee } = pool;
   const { accountId, isConnected } = useHashPack();
-  const decimals0 = pool.decimals0 ?? getTokenDecimals(symbol0);
-  const decimals1 = pool.decimals1 ?? getTokenDecimals(symbol1);
+  const { data: onChain, loading: onChainLoading, error: onChainError } =
+    usePositionOnChain(pool.tokenId ?? null, { enabled: pool.tokenId != null });
+  const syncedRef = useRef(false);
+
+  const displayPool: PoolInfo = onChain
+    ? {
+        ...pool,
+        liquidity: onChain.liquidity,
+        tickLower: onChain.tickLower,
+        tickUpper: onChain.tickUpper,
+        currency0: onChain.currency0,
+        currency1: onChain.currency1,
+        fee: onChain.fee,
+        tickSpacing: onChain.tickSpacing,
+        hooks: onChain.hooks,
+      }
+    : pool;
+
+  useEffect(() => {
+    if (!onChain || syncedRef.current || !onChain.owner) return;
+    syncedRef.current = true;
+    const poolKey = buildPoolKey(
+      onChain.currency0 as `0x${string}`,
+      onChain.currency1 as `0x${string}`,
+      onChain.fee,
+      onChain.tickSpacing,
+      (onChain.hooks || "0x0000000000000000000000000000000000000000") as `0x${string}`,
+    );
+    const poolId = getPoolId(poolKey);
+    fetch("/api/positions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tokenId: onChain.tokenId,
+        poolId,
+        owner: onChain.owner.toLowerCase(),
+        tickLower: onChain.tickLower,
+        tickUpper: onChain.tickUpper,
+        liquidity: onChain.liquidity,
+        currency0: onChain.currency0,
+        currency1: onChain.currency1,
+        fee: onChain.fee,
+        tickSpacing: onChain.tickSpacing,
+        hooks: onChain.hooks,
+        symbol0: pool.symbol0,
+        symbol1: pool.symbol1,
+        decimals0: pool.decimals0,
+        decimals1: pool.decimals1,
+      }),
+    }).catch(() => {});
+  }, [onChain, pool.symbol0, pool.symbol1, pool.decimals0, pool.decimals1]);
+
+  const decimals0 = displayPool.decimals0 ?? getTokenDecimals(displayPool.symbol0);
+  const decimals1 = displayPool.decimals1 ?? getTokenDecimals(displayPool.symbol1);
   const { balanceFormatted: balance0, loading: bal0Loading } = useTokenBalance(
-    pool.currency0,
+    displayPool.currency0,
     accountId,
     decimals0,
   );
   const { balanceFormatted: balance1, loading: bal1Loading } = useTokenBalance(
-    pool.currency1,
+    displayPool.currency1,
     accountId,
     decimals1,
   );
@@ -81,6 +136,13 @@ export function PositionDetail({
         </div>
       </div>
 
+      {/* On-chain load error */}
+      {onChainError && pool.tokenId != null && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 mb-4 text-sm text-red-400">
+          {onChainError}
+        </div>
+      )}
+
       {/* Pool identity + status */}
       <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 p-4 sm:p-5 mb-5 shadow-inner">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
@@ -89,17 +151,21 @@ export function PositionDetail({
             {symbol0} / {symbol1}
           </span>
           <Badge variant="accent">v4</Badge>
-          <Badge>{formatFee(fee)}</Badge>
-          {pool.hooks && pool.hooks !== HOOKS_ZERO && (
+          <Badge>{formatFee(displayPool.fee)}</Badge>
+          {displayPool.hooks && displayPool.hooks !== HOOKS_ZERO && (
             <HookBadge hookName={pool.hookName} />
           )}
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs text-text-tertiary">
           <span>Testnet</span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-success" />
-            In range
-          </span>
+          {onChainLoading && pool.tokenId != null ? (
+            <span>Loading position from chain…</span>
+          ) : (
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-success" />
+              In range
+            </span>
+          )}
         </div>
       </div>
 
@@ -160,29 +226,29 @@ export function PositionDetail({
           <div className="rounded-2xl border border-white/[0.06] bg-surface-2/50 p-4 sm:p-5 shadow-inner">
             <h3 className="text-sm font-semibold text-text-primary mb-4 flex items-center gap-2">
               Position
-              {pool.tokenId != null && (
+              {displayPool.tokenId != null && (
                 <Badge className="bg-accent/15 text-accent text-[10px] px-1.5 py-0.5">
-                  #{pool.tokenId}
+                  #{displayPool.tokenId}
                 </Badge>
               )}
             </h3>
 
-            {/* Position-specific: tick range + liquidity */}
-            {pool.tokenId != null && (
+            {/* Position-specific: tick range + liquidity (from chain when available) */}
+            {displayPool.tokenId != null && (
               <div className="space-y-3 mb-4 pb-4 border-b border-white/[0.06]">
                 <div>
                   <p className="text-xs text-text-tertiary mb-1">Price range</p>
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-text-primary font-semibold">
-                      {pool.tickLower != null
-                        ? tickToPrice(pool.tickLower).toFixed(6)
-                        : "—"}
+                      {displayPool.tickLower != null
+                        ? tickToPrice(displayPool.tickLower).toFixed(6)
+                        : onChainLoading ? "…" : "—"}
                     </span>
                     <span className="text-text-tertiary">↔</span>
                     <span className="text-text-primary font-semibold">
-                      {pool.tickUpper != null
-                        ? tickToPrice(pool.tickUpper).toFixed(6)
-                        : "—"}
+                      {displayPool.tickUpper != null
+                        ? tickToPrice(displayPool.tickUpper).toFixed(6)
+                        : onChainLoading ? "…" : "—"}
                     </span>
                     <span className="text-xs text-text-tertiary">
                       {symbol1}/{symbol0}
@@ -192,15 +258,15 @@ export function PositionDetail({
                 <div>
                   <p className="text-xs text-text-tertiary mb-1">Tick range</p>
                   <p className="text-sm text-text-secondary">
-                    [{pool.tickLower ?? "—"}, {pool.tickUpper ?? "—"}]
+                    [{displayPool.tickLower ?? "—"}, {displayPool.tickUpper ?? "—"}]
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-text-tertiary mb-1">Liquidity</p>
                   <p className="text-sm font-semibold text-text-primary">
-                    {pool.liquidity
-                      ? BigInt(pool.liquidity).toLocaleString()
-                      : "—"}
+                    {displayPool.liquidity
+                      ? BigInt(displayPool.liquidity).toLocaleString()
+                      : onChainLoading ? "…" : "—"}
                   </p>
                 </div>
               </div>

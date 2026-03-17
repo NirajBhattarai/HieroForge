@@ -100,12 +100,26 @@ contract MulticallScript is Script {
         bytes memory unlockData = abi.encode(actions, params);
         uint256 deadline = block.timestamp + 3600;
 
-        bytes[] memory calls = new bytes[](1);
-        calls[0] = abi.encodeWithSelector(IPositionManager.modifyLiquidities.selector, unlockData, deadline);
-        IMulticall_v4(positionManagerAddr).multicall(calls);
+        // 1. Add liquidity: mint position + settle
+        bytes[] memory addCalls = new bytes[](1);
+        addCalls[0] = abi.encodeWithSelector(IPositionManager.modifyLiquidities.selector, unlockData, deadline);
+        IMulticall_v4(positionManagerAddr).multicall(addCalls);
 
         uint256 tokenId = lpm.nextTokenId() - 1;
         console.log("Position minted: tokenId", tokenId, "owner", owner);
+
+        // 2. Decrease 25% of liquidity (position keeps 75%)
+        uint256 liquidityDecrease = (liquidity * 25) / 100;
+        bytes memory decreaseActions = abi.encodePacked(uint8(Actions.DECREASE_LIQUIDITY));
+        bytes[] memory decreaseParams = new bytes[](1);
+        decreaseParams[0] = abi.encode(tokenId, liquidityDecrease, uint128(0), uint128(0), bytes(""));
+        bytes memory decreaseUnlockData = abi.encode(decreaseActions, decreaseParams);
+        bytes[] memory removeCalls = new bytes[](1);
+        removeCalls[0] =
+            abi.encodeWithSelector(IPositionManager.modifyLiquidities.selector, decreaseUnlockData, deadline);
+        IMulticall_v4(positionManagerAddr).multicall(removeCalls);
+
+        console.log("Decreased 25%% liquidity:", liquidityDecrease, "remaining in position:", liquidity - liquidityDecrease);
 
         vm.stopBroadcast();
     }

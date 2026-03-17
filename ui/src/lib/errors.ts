@@ -65,6 +65,14 @@ export function getFriendlyErrorMessage(
     return "Network error. Check your connection and try again.";
   if (/wrong network|chain mismatch|unsupported chain/i.test(raw))
     return "Wrong network. Please switch to Hedera Testnet.";
+  // Unauthorized (0x82b42900) = not owner or approved for the position NFT
+  if (raw.includes("0x82b42900") && context === "transaction")
+    return "Connect the wallet that owns this position (the one that added liquidity), or use an approved operator.";
+  if (
+    /transaction failed on-chain|contract_revert_executed|revert/i.test(raw) &&
+    context === "transaction"
+  )
+    return "Transaction reverted. Make sure you're connected with the wallet that owns this position (the one that added liquidity).";
 
   return raw.length > 120 ? `${raw.slice(0, 117)}...` : raw;
 }

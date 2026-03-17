@@ -205,14 +205,23 @@ case "$TARGET" in
     echo "[deploy] Done. Next: ./scripts/modify.sh to add liquidity."
     echo "  Verify contracts: ./scripts/verify-contracts.sh all"
     ;;
+  contracts|no-tokens)
+    run_pool_manager
+    run_position_manager
+    run_quoter
+    run_router
+    echo "[deploy] Done (no tokens). Copy .env addresses to ui and core (see ENV.md)."
+    echo "  Verify contracts: ./scripts/verify-contracts.sh all"
+    ;;
   *)
-    echo "Usage: $0 [pool-manager|tokens|position-manager|router|quoter|all]"
+    echo "Usage: $0 [pool-manager|tokens|position-manager|router|quoter|all|contracts]"
     echo "  pool-manager     - deploy PoolManager (core)"
     echo "  tokens           - deploy mock ERC20 or HTS tokens (USE_HTS=1 for HTS)"
     echo "  position-manager - deploy PositionManager (requires POOL_MANAGER_ADDRESS)"
     echo "  router           - deploy UniversalRouter (requires POOL_MANAGER_ADDRESS + POSITION_MANAGER_ADDRESS)"
     echo "  quoter           - deploy Quoter/V4Quoter (requires POOL_MANAGER_ADDRESS)"
     echo "  all              - deploy full stack (default)"
+    echo "  contracts        - deploy pool-manager + position-manager + quoter + router (no tokens)"
     exit 1
     ;;
 esac

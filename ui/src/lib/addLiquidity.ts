@@ -131,9 +131,8 @@ export function encodeUnlockDataMint(
 export { SQRT_PRICE_1_1 };
 
 /**
- * Encode unlockData for DECREASE_LIQUIDITY action.
- * Used to remove liquidity from an existing position by tokenId.
- * actions = [DECREASE_LIQUIDITY], params = [abi.encode(tokenId, liquidity, amount0Min, amount1Min, hookData)]
+ * Encode unlockData for DECREASE_LIQUIDITY — same layout as Multicall.s.sol:
+ * abi.encode(bytes actions, bytes[] params) with actions = abi.encodePacked(uint8(0x01)), params[0] = abi.encode(tokenId, liquidity, amount0Min, amount1Min, bytes("")).
  */
 export function encodeUnlockDataDecrease(
   tokenId: bigint,
@@ -154,18 +153,12 @@ export function encodeUnlockDataDecrease(
 
   const actions =
     `0x${DECREASE_LIQUIDITY_ACTION.toString(16).padStart(2, "0")}` as `0x${string}`;
-  return encodeAbiParameters(
-    [
-      { type: "bytes", name: "actions" },
-      { type: "bytes[]", name: "params" },
-    ],
-    [actions, [decreaseParam]],
-  ) as `0x${string}`;
+  return encodeUnlockDataStrict(actions, [decreaseParam]);
 }
 
 /**
- * Encode unlockData for BURN_POSITION action (full remove + burn NFT).
- * actions = [BURN_POSITION], params = [abi.encode(tokenId, amount0Min, amount1Min, hookData)]
+ * Encode unlockData for BURN_POSITION — same layout as script:
+ * abi.encode(bytes actions, bytes[] params) with actions = abi.encodePacked(uint8(0x03)), params[0] = abi.encode(tokenId, amount0Min, amount1Min, bytes("")).
  */
 export function encodeUnlockDataBurn(
   tokenId: bigint,
@@ -184,13 +177,7 @@ export function encodeUnlockDataBurn(
 
   const actions =
     `0x${BURN_POSITION_ACTION.toString(16).padStart(2, "0")}` as `0x${string}`;
-  return encodeAbiParameters(
-    [
-      { type: "bytes", name: "actions" },
-      { type: "bytes[]", name: "params" },
-    ],
-    [actions, [burnParam]],
-  ) as `0x${string}`;
+  return encodeUnlockDataStrict(actions, [burnParam]);
 }
 
 // ---------------------------------------------------------------------------
@@ -200,6 +187,50 @@ export function encodeUnlockDataBurn(
 function packActions(...ids: number[]): `0x${string}` {
   return ("0x" +
     ids.map((a) => a.toString(16).padStart(2, "0")).join("")) as `0x${string}`;
+}
+
+/**
+ * Encode (bytes actions, bytes[] params) in the strict layout expected by
+ * CalldataDecoder.decodeActionsRouterParams: params[] uses offsets relative to params.offset.
+ * Standard ABI uses absolute offsets, so we must build this manually.
+ */
+function encodeUnlockDataStrict(
+  actionsHex: `0x${string}`,
+  paramHexes: `0x${string}`[],
+): `0x${string}` {
+  const actionsRaw = actionsHex.slice(2);
+  const actionsLen = actionsRaw.length / 2;
+  const actionsAligned = Math.ceil(actionsLen / 32) * 32;
+  const paramsLengthOffset = 0x60 + actionsAligned;
+  const paramsStart = paramsLengthOffset + 0x20;
+  const relativeOffsets: number[] = [];
+  let currentRelative = 0x20;
+  for (const p of paramHexes) {
+    relativeOffsets.push(currentRelative);
+    const raw = p.slice(2);
+    const len = raw.length / 2;
+    const lenAligned = Math.ceil(len / 32) * 32;
+    currentRelative += 32 + lenAligned;
+  }
+  const parts: string[] = [];
+  parts.push("40".padStart(64, "0")); // word0: offset to actions = 0x40
+  parts.push(paramsLengthOffset.toString(16).padStart(64, "0")); // word1: offset to params
+  parts.push(actionsLen.toString(16).padStart(64, "0")); // actions length
+  const actionsPadded =
+    actionsRaw + "0".repeat(Math.max(0, actionsAligned * 2 - actionsRaw.length));
+  parts.push(actionsPadded.padEnd(64, "0")); // actions + padding
+  parts.push(paramHexes.length.toString(16).padStart(64, "0")); // params.length
+  for (const rel of relativeOffsets) {
+    parts.push(rel.toString(16).padStart(64, "0"));
+  }
+  for (const p of paramHexes) {
+    const raw = p.slice(2);
+    const len = raw.length / 2;
+    const lenAligned = Math.ceil(len / 32) * 32;
+    parts.push(len.toString(16).padStart(64, "0"));
+    parts.push(raw.padEnd(lenAligned * 2, "0"));
+  }
+  return ("0x" + parts.join("")) as `0x${string}`;
 }
 
 /**
@@ -260,13 +291,7 @@ export function encodeUnlockDataMintFromDeltas(
 
   const actions = packActions(MINT_POSITION_FROM_DELTAS_ACTION, PM_SETTLE_PAIR);
 
-  return encodeAbiParameters(
-    [
-      { type: "bytes", name: "actions" },
-      { type: "bytes[]", name: "params" },
-    ],
-    [actions, [mintParam, settlePairParam]],
-  ) as `0x${string}`;
+  return encodeUnlockDataStrict(actions, [mintParam, settlePairParam]);
 }
 
 /**
