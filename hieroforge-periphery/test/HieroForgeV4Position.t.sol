@@ -56,6 +56,9 @@ contract HieroForgeV4PositionTest is Test {
         uint256 fundAmount = 5e18;
         (a0 < a1 ? token0 : token1).transfer(address(lpm), fundAmount);
         (a0 < a1 ? token1 : token0).transfer(address(lpm), fundAmount);
+
+        // Ensure the HTS NFT collection is created before any position actions
+        lpm.createCollection{value: 25 ether}();
     }
 
     function _encodeMintUnlockData(
@@ -511,5 +514,90 @@ contract HieroForgeV4PositionTest is Test {
         } catch {
             // hedera-forking may revert for NFT mint; skip assertion
         }
+    }
+
+    function test_onlyPositionOwnerOrApproved_owner_and_approval() public {
+        // Mint to alice
+        bytes memory mintData = _encodeMintUnlockData(key, -60, 60, 1e18, type(uint128).max, type(uint128).max, alice, "");
+        lpm.modifyLiquidities(mintData, block.timestamp + 1);
+        uint256 tokenId = 1;
+        assertEq(lpm.ownerOf(tokenId), alice);
+
+        // Try as not owner, not approved
+        bytes memory incData = _encodeIncreaseLiquidityUnlockData(tokenId, 100, type(uint128).max, type(uint128).max, "");
+        vm.prank(address(0xBEEF));
+        vm.expectRevert();
+        lpm.modifyLiquidities(incData, block.timestamp + 1);
+
+        // Approve this contract for tokenId
+        vm.prank(alice);
+        IERC721(address(lpm.htsTokenAddress())).approve(address(this), tokenId);
+        // Now should succeed
+        lpm.modifyLiquidities(incData, block.timestamp + 1);
+
+        // Approve operator
+        vm.prank(alice);
+        IERC721(address(lpm.htsTokenAddress())).setApprovalForAll(address(0xCAFE), true);
+        // Operator can now act
+        vm.prank(address(0xCAFE));
+        lpm.modifyLiquidities(incData, block.timestamp + 1);
+    }
+
+    function test_onlyPositionOwnerOrApproved_reverts_for_unapproved_and_nonowner() public {
+        // Mint to alice
+        bytes memory mintData = _encodeMintUnlockData(key, -60, 60, 1e18, type(uint128).max, type(uint128).max, alice, "");
+        lpm.modifyLiquidities(mintData, block.timestamp + 1);
+        uint256 tokenId = 1;
+        assertEq(lpm.ownerOf(tokenId), alice);
+
+        // Try as a random address (not owner, not approved, not operator)
+        bytes memory incData = _encodeIncreaseLiquidityUnlockData(tokenId, 100, type(uint128).max, type(uint128).max, "");
+        address attacker = address(0xBADBEEF);
+        vm.prank(attacker);
+        vm.expectRevert();
+        lpm.modifyLiquidities(incData, block.timestamp + 1);
+    }
+
+    function test_onlyPositionOwnerOrApproved_reverts_for_revoked_operator() public {
+        // Mint to alice
+        bytes memory mintData = _encodeMintUnlockData(key, -60, 60, 1e18, type(uint128).max, type(uint128).max, alice, "");
+        lpm.modifyLiquidities(mintData, block.timestamp + 1);
+        uint256 tokenId = 1;
+        assertEq(lpm.ownerOf(tokenId), alice);
+
+        // Approve operator
+        address operator = address(0xCAFE);
+        vm.prank(alice);
+        IERC721(address(lpm.htsTokenAddress())).setApprovalForAll(operator, true);
+        // Operator can act
+        vm.prank(operator);
+        lpm.modifyLiquidities(_encodeIncreaseLiquidityUnlockData(tokenId, 100, type(uint128).max, type(uint128).max, ""), block.timestamp + 1);
+        // Revoke operator
+        vm.prank(alice);
+        IERC721(address(lpm.htsTokenAddress())).setApprovalForAll(operator, false);
+        // Operator should now be blocked
+        vm.prank(operator);
+        vm.expectRevert();
+        lpm.modifyLiquidities(_encodeIncreaseLiquidityUnlockData(tokenId, 100, type(uint128).max, type(uint128).max, ""), block.timestamp + 1);
+    }
+
+    function test_onlyPositionOwnerOrApproved_reverts_for_revoked_approval() public {
+        // Mint to alice
+        bytes memory mintData = _encodeMintUnlockData(key, -60, 60, 1e18, type(uint128).max, type(uint128).max, alice, "");
+        lpm.modifyLiquidities(mintData, block.timestamp + 1);
+        uint256 tokenId = 1;
+        assertEq(lpm.ownerOf(tokenId), alice);
+
+        // Approve this contract for tokenId
+        vm.prank(alice);
+        IERC721(address(lpm.htsTokenAddress())).approve(address(this), tokenId);
+        // Should succeed
+        lpm.modifyLiquidities(_encodeIncreaseLiquidityUnlockData(tokenId, 100, type(uint128).max, type(uint128).max, ""), block.timestamp + 1);
+        // Revoke approval
+        vm.prank(alice);
+        IERC721(address(lpm.htsTokenAddress())).approve(address(0), tokenId);
+        // Should now revert
+        vm.expectRevert();
+        lpm.modifyLiquidities(_encodeIncreaseLiquidityUnlockData(tokenId, 100, type(uint128).max, type(uint128).max, ""), block.timestamp + 1);
     }
 }

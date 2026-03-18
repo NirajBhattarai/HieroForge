@@ -33,7 +33,7 @@ fi
 source "$CORE_SCRIPTS/hashscan-verify-api.sh"
 
 CHAIN_ID="${CHAIN_ID:-296}"
-HEDERA_VERIFIER_URL="${HEDERA_VERIFIER_URL:-https://server-verify.hashscan.io}"
+HEDERA_VERIFIER_URL="${HEDERA_VERIFIER_URL:-https://server-verify.hashscan.io/api}"
 CONTRACT_ARG="${1:-Quoter}"
 WATCH_FLAG=""
 [[ -n "$VERIFY_WATCH" ]] && WATCH_FLAG="--watch"

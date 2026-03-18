@@ -251,8 +251,39 @@ RPC_URL=http://localhost:7546 LOCAL_HTS_EMULATION=1 ./scripts/modify.sh
 - **Local Hedera**: use an Alias ECDSA key from `hedera generate-accounts` (see [Hedera local node](https://docs.hedera.com/hedera/tutorials/local-node/how-to-set-up-a-hedera-local-node)); set `PRIVATE_KEY` or `LOCAL_NODE_OPERATOR_PRIVATE_KEY` in `.env`.
 - **Testnet**: `modify.sh` uses `--ffi --skip-simulation` when not on localhost.
 
+## Troubleshooting: Contract Verification and Address Sync
+
+### Problem: Verification Bytecode Mismatch
+If you encounter a bytecode mismatch when verifying HieroForgeV4Position (or any contract) on HashScan, follow these steps:
+
+1. **Full Clean and Rebuild**: Run `forge clean && forge build --extra-output-files metadata` in both `hieroforge-core` and `hieroforge-periphery` to ensure all dependencies and build artifacts are fresh.
+2. **Redeploy the Contract**: Use the deployment script (e.g. `./scripts/deploy-hieroforge-v4-position.sh`) to deploy a new instance. This will generate a new contract address.
+3. **Update .env Files**: Copy the new contract address from the deployment output to both `hieroforge-periphery/.env` and `ui/.env` (as `NEXT_PUBLIC_HIEROFORGE_V4_POSITION_ADDRESS`).
+4. **Re-run Verification**: Run `./scripts/verify-contracts.sh HieroForgeV4Position` to verify the new deployment. Verification should now succeed if the bytecode matches.
+
+**Root Cause:**
+- The mismatch was due to verifying an old contract address after a new deployment, or stale build artifacts. Always ensure the address in `.env` matches the latest deployment and that all contracts are rebuilt before verification.
+
+**Summary:**
+- Always clean, rebuild, redeploy, and update addresses in all relevant `.env` files before verifying. This keeps all environments in sync and avoids bytecode mismatches.
+
 ## Usage
 
 1. Deploy **hieroforge-core** (PoolManager and optionally create pools).
 2. Deploy periphery contracts, passing the core PoolManager address.
 3. In the UI or scripts, call periphery to execute swaps; periphery will call the core to perform the swap and handle token settlement.
+
+## Syncing Contract Addresses to UI
+
+After deploying or verifying contracts, update the UI's `.env` file with the latest contract addresses to keep the frontend in sync. For HieroForgeV4Position, add or update the following line in `ui/.env`:
+
+```
+NEXT_PUBLIC_HIEROFORGE_V4_POSITION_ADDRESS=<latest deployed address>
+```
+
+Example:
+```
+NEXT_PUBLIC_HIEROFORGE_V4_POSITION_ADDRESS=0x03401a54406740040d34ee3d698064f7199a535d
+```
+
+This ensures the UI always points to the correct contract instance. Repeat this step for other contract addresses as needed after deployment or verification.
