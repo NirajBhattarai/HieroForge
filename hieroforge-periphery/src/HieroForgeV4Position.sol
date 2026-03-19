@@ -105,10 +105,10 @@ contract HieroForgeV4Position is IPositionManager, IPoolInitializer_v4, Multical
 
     /// @dev Returns true if spender is owner or approved for the tokenId (ERC721-style logic).
     function _isApprovedOrOwner(address spender, uint256 tokenId) internal view returns (bool) {
-        address owner = _positionOwner(tokenId);
-        return (spender == owner ||
+        address positionOwner = _positionOwner(tokenId);
+        return (spender == positionOwner ||
             IERC721(htsTokenAddress).getApproved(tokenId) == spender ||
-            IERC721(htsTokenAddress).isApprovedForAll(owner, spender));
+            IERC721(htsTokenAddress).isApprovedForAll(positionOwner, spender));
     }
 
     /// @dev Restrict actions to the HTS NFT owner or approved (ERC721-style behavior).
@@ -306,8 +306,9 @@ contract HieroForgeV4Position is IPositionManager, IPoolInitializer_v4, Multical
         metadata[0] = DEFAULT_METADATA;
 
         (int64 rc, , int64[] memory serials) =
-            IHederaTokenService(HTS_ADDRESS).mintToken(htsTokenAddress, 0, metadata);
+            IHederaTokenService(HTS_ADDRESS).mintToken(htsTokenAddress, 1, metadata);
         if (rc != HederaResponseCodes.SUCCESS) revert HtsMintFailed();
+        require(serials.length > 0, "HTS mintToken did not return a serial");
 
         uint256 tokenId = uint256(uint64(serials[0]));
         IERC721(htsTokenAddress).transferFrom(address(this), owner_, tokenId);
@@ -374,8 +375,9 @@ contract HieroForgeV4Position is IPositionManager, IPoolInitializer_v4, Multical
         metadata[0] = DEFAULT_METADATA;
 
         (int64 rc, , int64[] memory serials) =
-            IHederaTokenService(HTS_ADDRESS).mintToken(htsTokenAddress, 0, metadata);
+            IHederaTokenService(HTS_ADDRESS).mintToken(htsTokenAddress, 1, metadata);
         if (rc != HederaResponseCodes.SUCCESS) revert HtsMintFailed();
+        require(serials.length > 0, "HTS mintToken did not return a serial");
 
         uint256 tokenId = uint256(uint64(serials[0]));
         IERC721(htsTokenAddress).transferFrom(address(this), owner_, tokenId);
@@ -587,8 +589,9 @@ contract HieroForgeV4Position is IPositionManager, IPoolInitializer_v4, Multical
         metadata[0] = DEFAULT_METADATA;
 
         (int64 rc, , int64[] memory serials) =
-            IHederaTokenService(HTS_ADDRESS).mintToken(htsTokenAddress, 0, metadata);
+            IHederaTokenService(HTS_ADDRESS).mintToken(htsTokenAddress, 1, metadata);
         if (rc != HederaResponseCodes.SUCCESS) revert HtsMintFailed();
+        require(serials.length > 0, "HTS mintToken did not return a serial");
 
         uint256 tokenId = uint256(uint64(serials[0]));
         IERC721(htsTokenAddress).transferFrom(address(this), to, tokenId);

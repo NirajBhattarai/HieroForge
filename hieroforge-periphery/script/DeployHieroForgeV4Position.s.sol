@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {Script, console} from "forge-std/Script.sol";
 import {IPoolManager} from "hieroforge-core/interfaces/IPoolManager.sol";
 import {HieroForgeV4Position} from "../src/HieroForgeV4Position.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 
 /// @notice Deploy HieroForgeV4Position (position manager + optional HTS NFT collection). Same pattern as CreateHtsToken: htsSetup() then broadcast with --ffi --skip-simulation.
 /// Env: PRIVATE_KEY or HEDERA_PRIVATE_KEY; POOL_MANAGER (address of PoolManager); OPERATOR_ACCOUNT optional (defaults to signer address).
@@ -12,7 +12,7 @@ import {htsSetup} from "hedera-forking/htsSetup.sol";
 ///   forge script script/DeployHieroForgeV4Position.s.sol:DeployHieroForgeV4Position --rpc-url testnet --broadcast --private-key $PRIVATE_KEY --ffi --skip-simulation
 contract DeployHieroForgeV4Position is Script {
     function run() external {
-        htsSetup();
+        Hsc.htsSetup();
 
         uint256 PRIVATE_KEY = vm.envOr("HEDERA_PRIVATE_KEY", vm.envUint("PRIVATE_KEY"));
         address poolManagerAddr = vm.envAddress("POOL_MANAGER");

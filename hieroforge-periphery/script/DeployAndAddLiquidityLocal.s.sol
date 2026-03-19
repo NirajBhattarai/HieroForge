@@ -11,7 +11,7 @@ import {IERC20Minimal} from "hieroforge-core/interfaces/IERC20Minimal.sol";
 import {PositionManager} from "../src/PositionManager.sol";
 import {IPositionManager} from "../src/interfaces/IPositionManager.sol";
 import {Actions} from "../src/libraries/Actions.sol";
-import {MockHTS} from "../test/mocks/MockHTS.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 
 /// @notice Minimal ERC20 for local deploy script (no test dependency)
 contract MockERC20Local {
@@ -50,7 +50,6 @@ contract MockERC20Local {
 ///   Or: forge script script/DeployAndAddLiquidityLocal.s.sol:DeployAndAddLiquidityLocalScript --rpc-url http://localhost:7546 --broadcast --private-key $PRIVATE_KEY
 contract DeployAndAddLiquidityLocalScript is Script {
     uint160 constant SQRT_PRICE_1_1 = 79228162514264337593543950336;
-    address constant HTS_PRECOMPILE = address(0x167);
 
     function run() external {
         uint256 deployerPrivateKey =
@@ -72,10 +71,8 @@ contract DeployAndAddLiquidityLocalScript is Script {
         console.log("Token0:", address(token0));
         console.log("Token1:", address(token1));
 
-        // 3. Local HTS emulation (same as tests)
-        MockHTS mockHts = new MockHTS();
-        vm.etch(HTS_PRECOMPILE, address(mockHts).code);
-        console.log("MockHTS etched at 0x167");
+        // 3. HTS emulation at 0x167 (hedera-forking; requires --ffi)
+        Hsc.htsSetup();
 
         // 4. Deploy PositionManager
         PositionManager lpm = new PositionManager(IPoolManager(address(poolManager)));

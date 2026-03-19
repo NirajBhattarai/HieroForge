@@ -6,7 +6,7 @@ import {console} from "forge-std/console.sol";
 import {PositionManager} from "../src/PositionManager.sol";
 import {IPositionManager} from "../src/interfaces/IPositionManager.sol";
 import {IMulticall_v4} from "../src/interfaces/IMulticall_v4.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 import {PoolKey} from "hieroforge-core/types/PoolKey.sol";
 import {Currency} from "hieroforge-core/types/Currency.sol";
 import {Actions} from "../src/libraries/Actions.sol";
@@ -44,7 +44,7 @@ contract MulticallScript is Script {
     address internal constant HTS_PRECOMPILE = address(0x167);
 
     function run() external {
-        htsSetup();
+        Hsc.htsSetup();
         address c0 = vm.envAddress("CURRENCY0_ADDRESS");
         address c1 = vm.envAddress("CURRENCY1_ADDRESS");
 

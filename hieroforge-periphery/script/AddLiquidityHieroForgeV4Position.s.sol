@@ -3,8 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
-import {MockHTS} from "../test/mocks/MockHTS.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 import {IPositionManager} from "../src/interfaces/IPositionManager.sol";
 import {HieroForgeV4Position} from "../src/HieroForgeV4Position.sol";
 import {IPoolInitializer_v4} from "../src/interfaces/IPoolInitializer_v4.sol";
@@ -15,24 +14,16 @@ import {IERC20Minimal} from "hieroforge-core/interfaces/IERC20Minimal.sol";
 import {Actions} from "../src/libraries/Actions.sol";
 
 /// @notice Add liquidity via HieroForgeV4Position (same flow as PositionManager): multicall(initializePool, modifyLiquidities(mint position)).
-/// Local: set LOCAL_HTS_EMULATION=1 to etch MockHTS at 0x167 (same as tests).
-/// Testnet: uses hedera-forking htsSetup() with --ffi so HTS token transfers work.
+/// Uses hedera-forking htsSetup() with --ffi so HTS at 0x167 works (local or testnet fork).
 ///
 /// Required env: PRIVATE_KEY, HIEROFORGE_V4_POSITION_ADDRESS, CURRENCY0_ADDRESS, CURRENCY1_ADDRESS, AMOUNT0, AMOUNT1
-/// Optional: LOCAL_HTS_EMULATION=1, FEE=3000, TICK_SPACING=60, TICK_LOWER=-120, TICK_UPPER=120, LIQUIDITY=1e8, OWNER=(broadcaster),
+/// Optional: FEE=3000, TICK_SPACING=60, TICK_LOWER=-120, TICK_UPPER=120, LIQUIDITY=1e8, OWNER=(broadcaster),
 ///   SKIP_BALANCE_CHECK=1 (skip balance require), SKIP_TRANSFER=1 (skip transferring tokens; run TransferToHieroForgeV4Position first)
 contract AddLiquidityHieroForgeV4PositionScript is Script {
-    address internal constant HTS_PRECOMPILE = address(0x167);
     uint160 internal constant SQRT_PRICE_1_1 = 79228162514264337593543950336;
 
     function run() external {
-        if (vm.envOr("LOCAL_HTS_EMULATION", uint256(0)) == 1) {
-            MockHTS mockHts = new MockHTS();
-            vm.etch(HTS_PRECOMPILE, address(mockHts).code);
-            console.log("Local HTS emulation: MockHTS etched at 0x167 (same as tests)");
-        } else {
-            htsSetup();
-        }
+        Hsc.htsSetup();
 
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address sender = vm.addr(deployerPrivateKey);

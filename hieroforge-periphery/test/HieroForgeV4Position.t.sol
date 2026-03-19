@@ -15,9 +15,7 @@ import {IMulticall_v4} from "../src/interfaces/IMulticall_v4.sol";
 import {IERC721Permit_v4} from "../src/interfaces/IERC721Permit_v4.sol";
 import {Actions} from "../src/libraries/Actions.sol";
 import {BaseActionsRouter} from "../src/base/BaseActionsRouter.sol";
-import {MockHTS} from "./mocks/MockHTS.sol";
 import {IERC721} from "hedera-forking/IERC721.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
 
 /// @notice Tests for HieroForgeV4Position: PositionManager functionality (modifyLiquidities, mint/increase/decrease/burn)
 ///         plus HTS collection (createCollection, mintNFT). Run position-manager tests with MockHTS; run HTS tests with --ffi.
@@ -36,8 +34,7 @@ contract HieroForgeV4PositionTest is Test {
 
     function setUp() public {
         manager = new PoolManager();
-        MockHTS mockHts = new MockHTS();
-        vm.etch(HTS_PRECOMPILE, address(mockHts).code);
+        vm.etch(HTS_PRECOMPILE, address(this).code);
         lpm = new HieroForgeV4Position(manager, address(this));
 
         token0 = new MockERC20();
@@ -476,7 +473,6 @@ contract HieroForgeV4PositionTest is Test {
 
     /// @dev When first createCollection succeeds, second must revert (our selector or HTS/env revert).
     function test_createCollection_revertsWhenAlreadyCreated() public {
-        htsSetup();
         vm.deal(address(this), 20 ether);
         try lpm.createCollection{value: 15 ether}() {} catch {}
         if (lpm.htsTokenAddress() != address(0)) {
@@ -489,7 +485,6 @@ contract HieroForgeV4PositionTest is Test {
     }
 
     function test_mintNFT_revertsWhenNotOwner() public {
-        htsSetup();
         vm.deal(address(this), 20 ether);
         lpm.createCollection{value: 15 ether}();
 
@@ -505,7 +500,6 @@ contract HieroForgeV4PositionTest is Test {
 
     /// @dev On real Hedera, mintToken(0, metadata) mints NFTs. With hedera-forking/ffi or MockHTS, may succeed or skip.
     function test_mintNFT_transfersToRecipient() public {
-        htsSetup();
         vm.deal(address(this), 20 ether);
         lpm.createCollection{value: 15 ether}();
 

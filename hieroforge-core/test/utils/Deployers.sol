@@ -11,7 +11,7 @@ import {ModifyLiquidityParams} from "../../src/types/ModifyLiquidityParams.sol";
 import {TickMath} from "../../src/libraries/TickMath.sol";
 import {Constants} from "./Constants.sol";
 import {Router} from "./Router.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 import {IHederaTokenService} from "hedera-forking/IHederaTokenService.sol";
 import {HederaResponseCodes} from "hedera-forking/HederaResponseCodes.sol";
 import {IERC20} from "hedera-forking/IERC20.sol";
@@ -57,7 +57,7 @@ contract Deployers is Test {
     /// @notice Deploy two HTS fungible tokens via HTS precompile at 0x167; use this as treasury. Sort by address (currency0 < currency1).
     /// @dev Requires htsSetup() and ffi. Run: forge test --match-path test/PoolManager/modifyLiquidity.t.sol --ffi
     function deployMintAndApprove2CurrenciesHTS() internal returns (Currency, Currency) {
-        htsSetup();
+        Hsc.htsSetup();
         vm.deal(address(this), 1 ether);
         address hts = address(0x167);
 

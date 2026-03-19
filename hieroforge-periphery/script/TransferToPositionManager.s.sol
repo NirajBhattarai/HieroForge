@@ -3,25 +3,15 @@ pragma solidity ^0.8.13;
 
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
-import {MockHTS} from "../test/mocks/MockHTS.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 import {IERC20Minimal} from "hieroforge-core/interfaces/IERC20Minimal.sol";
 
 /// @notice Transfer AMOUNT0 and AMOUNT1 to PositionManager in one tx.
 /// Use this on testnet first; then run AddLiquidityPositionManager with SKIP_TRANSFER=1 so the add-liquidity script only runs multicall.
 /// Required env: PRIVATE_KEY, POSITION_MANAGER_ADDRESS, CURRENCY0_ADDRESS, CURRENCY1_ADDRESS, AMOUNT0, AMOUNT1.
-/// Optional: LOCAL_HTS_EMULATION=1 (local node).
 contract TransferToPositionManagerScript is Script {
-    address internal constant HTS_PRECOMPILE = address(0x167);
-
     function run() external {
-        if (vm.envOr("LOCAL_HTS_EMULATION", uint256(0)) == 1) {
-            MockHTS mockHts = new MockHTS();
-            vm.etch(HTS_PRECOMPILE, address(mockHts).code);
-            console.log("Local HTS emulation: MockHTS etched at 0x167");
-        } else {
-            htsSetup();
-        }
+        Hsc.htsSetup();
 
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address positionManagerAddr = vm.envAddress("POSITION_MANAGER_ADDRESS");

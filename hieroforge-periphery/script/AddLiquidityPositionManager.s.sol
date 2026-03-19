@@ -3,8 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
-import {MockHTS} from "../test/mocks/MockHTS.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 import {IPositionManager} from "../src/interfaces/IPositionManager.sol";
 import {PositionManager} from "../src/PositionManager.sol";
 import {IPoolInitializer_v4} from "../src/interfaces/IPoolInitializer_v4.sol";
@@ -16,11 +15,10 @@ import {Actions} from "../src/libraries/Actions.sol";
 
 /// @notice Add liquidity via PositionManager for currency0 and currency1.
 /// Uses multicall to atomically initializePool (if needed) + modifyLiquidities (mint position) in one tx.
-/// Local: set LOCAL_HTS_EMULATION=1 to etch MockHTS at 0x167 (same as tests) — script passes without --ffi.
-/// Testnet: uses hedera-forking htsSetup() with --ffi so HTS token transfers work.
+/// Uses hedera-forking htsSetup() with --ffi so HTS at 0x167 works (local or testnet fork).
 ///
 /// Required env: PRIVATE_KEY, POSITION_MANAGER_ADDRESS, CURRENCY0_ADDRESS, CURRENCY1_ADDRESS, AMOUNT0, AMOUNT1
-/// Optional: LOCAL_HTS_EMULATION=1 (local node: same HTS emulation as tests), FEE=3000, TICK_SPACING=60,
+/// Optional: FEE=3000, TICK_SPACING=60,
 ///   TICK_LOWER=-120, TICK_UPPER=120, LIQUIDITY (default 1e8; use 1e18 only if AMOUNT0/AMOUNT1 are ~6e15+), OWNER=(broadcaster),
 ///   SKIP_BALANCE_CHECK=1 (skip balance require; use when script sees 0 due to fork/simulation but deployer has tokens on chain, e.g. testnet HTS)
 ///   SKIP_TRANSFER=1 (skip transferring tokens to PM; use when tokens were already sent in a separate tx, e.g. run TransferToPositionManager first on testnet)
@@ -28,17 +26,10 @@ import {Actions} from "../src/libraries/Actions.sol";
 /// Local: LOCAL_HTS_EMULATION=1 ./scripts/modify.sh
 /// Testnet (two-step): 1) ./scripts/transfer-to-position-manager.sh  2) SKIP_TRANSFER=1 ./scripts/modify.sh
 contract AddLiquidityPositionManagerScript is Script {
-    address internal constant HTS_PRECOMPILE = address(0x167);
     uint160 internal constant SQRT_PRICE_1_1 = 79228162514264337593543950336;
 
     function run() external {
-        if (vm.envOr("LOCAL_HTS_EMULATION", uint256(0)) == 1) {
-            MockHTS mockHts = new MockHTS();
-            vm.etch(HTS_PRECOMPILE, address(mockHts).code);
-            console.log("Local HTS emulation: MockHTS etched at 0x167 (same as tests)");
-        } else {
-            htsSetup();
-        }
+        Hsc.htsSetup();
 
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address sender = vm.addr(deployerPrivateKey);

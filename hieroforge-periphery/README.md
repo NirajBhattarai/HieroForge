@@ -71,7 +71,7 @@ hieroforge-periphery/
 │   └── types/
 │       └── PositionInfo.sol                #   Bit-packed position: poolId + ticks + subscriber
 ├── test/                                   # Foundry test suite
-│   ├── HieroForgeV4Position.t.sol          #   HieroForgeV4Position: deploy, createCollection, mint, onlyOwner (--ffi)
+│   ├── HieroForgeV4Position.t.sol          #   HieroForgeV4Position: deploy, createCollection, mint, onlyOwner (run with --fork-url testnet --ffi)
 │   ├── Quoter.t.sol                        #   V4Quoter: single-hop quotes, edge cases
 │   ├── V4RouterSwapTest.sol                #   UniversalRouter: exact-in/out single-hop swaps
 │   ├── V4RouterMultiHopTest.sol            #   Multi-hop swaps (A→B→C), settlement actions
@@ -82,8 +82,6 @@ hieroforge-periphery/
 │   │   ├── QuoterTestDeployers.sol         #   HTS-based test setup (PoolManager + tokens + pool)
 │   │   ├── QuoterTestDeployersMock.sol     #   MockERC20-based setup (no HTS node needed)
 │   │   └── MockERC20.sol                   #   Minimal ERC-20 mock
-│   └── mocks/
-│       └── MockHTS.sol                     #   Mock HTS precompile (etched at 0x167)
 ├── script/                                 # Foundry deploy/setup scripts
 │   ├── DeployPositionManager.s.sol         #   Deploy PositionManager(poolManager)
 │   ├── DeployHieroForgeV4Position.s.sol    #   Deploy HieroForgeV4Position(poolManager, operatorAccount) + createCollection (env: POOL_MANAGER; --ffi --skip-simulation)
@@ -161,24 +159,22 @@ Same toolchain and libs as the core:
 | What   | Command |
 |--------|--------|
 | Build  | `forge build` |
-| Test   | `forge test` |
-| Quoter tests | `forge test --match-contract QuoterTest --ffi` |
-| Quoter tests vs local Hedera node | `forge test --match-contract QuoterTest --ffi --fork-url http://localhost:7546` |
-| V4Router swap tests (HTS) | `forge test --match-contract V4RouterSwapTest --ffi` |
-| V4Router swap tests vs local Hedera node | `forge test --match-contract V4RouterSwapTest --ffi --fork-url http://localhost:7546` |
-| HieroForgeV4Position tests (HTS NFT) | `forge test --match-contract HieroForgeV4PositionTest --ffi` |
+| Test (all vs Hedera testnet fork) | `forge test --fork-url testnet --ffi` |
+| Test vs local Hedera node | `forge test --fork-url http://localhost:7546 --ffi` |
 | Format | `forge fmt`   |
 
 ## Config
 
 `foundry.toml` matches **hieroforge-core** (Cancun EVM, via_ir, optimizer, Hedera RPC endpoints). Use the same `--rpc-url` (e.g. testnet or local) as the core when deploying or calling periphery.
 
-## HTS and local node
+## HTS and fork
 
-Quoter tests use **MockERC20** by default so they pass without a Hedera node. To run against a **local Hedera (Hiero) node**, use:
+All tests use **hedera-forking** `htsSetup()` so HTS at `0x167` is available. Run tests against the **Hedera testnet fork** (or local node) with `--fork-url` and `--ffi`:
 
-- `forge test --match-contract QuoterTest --fork-url http://localhost:7546`
-For tests that create **HTS tokens** (e.g. `htsSetup()` and `createFungibleToken`), run the HTS tests from **hieroforge-core** (e.g. `cd hieroforge-core && forge test --match-test test_addLiquidity_htsHts --ffi`). The periphery Quoter is compatible with pools that use HTS tokens created on the node.
+- **Testnet fork**: `forge test --fork-url testnet --ffi` (or `--fork-url https://testnet.hashio.io/api --ffi`)
+- **Local Hedera node**: `forge test --fork-url http://localhost:7546 --ffi`
+
+For more HTS token tests (e.g. `createFungibleToken`), run **hieroforge-core** tests: `cd hieroforge-core && forge test --match-test test_addLiquidity_htsHts --ffi`.
 
 ## Scripts
 

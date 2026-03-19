@@ -10,7 +10,7 @@ import {PoolId} from "hieroforge-core/types/PoolId.sol";
 import {Currency} from "hieroforge-core/types/Currency.sol";
 import {ModifyLiquidityParams} from "hieroforge-core/types/ModifyLiquidityParams.sol";
 import {TickMath} from "hieroforge-core/libraries/TickMath.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 import {IHederaTokenService} from "hedera-forking/IHederaTokenService.sol";
 import {HederaResponseCodes} from "hedera-forking/HederaResponseCodes.sol";
 import {IERC20} from "hedera-forking/IERC20.sol";
@@ -45,7 +45,7 @@ abstract contract QuoterTestDeployers is Test {
     /// @dev Requires htsSetup() in setUp and --ffi. Run: forge test --match-contract QuoterTest --ffi
     ///      Against local Hedera node: forge test --match-contract QuoterTest --fork-url http://localhost:7546 --ffi
     function deployMintAndApprove2CurrenciesHTS() internal returns (Currency, Currency) {
-        htsSetup();
+        Hsc.htsSetup();
         vm.deal(address(this), 1 ether);
         address hts = address(0x167);
 
