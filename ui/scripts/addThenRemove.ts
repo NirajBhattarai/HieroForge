@@ -23,7 +23,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { getPositionManagerAddress, getRpcUrl, HEDERA_TESTNET } from "../src/constants";
 import {
   buildPoolKey,
-  encodeUnlockDataMintFromDeltas,
+  encodeUnlockDataMint,
   encodeUnlockDataDecrease,
 } from "../src/lib/addLiquidity";
 import { getAmount0Delta, getAmount1Delta, getSqrtPriceAtTick } from "../src/lib/sqrtPriceMath";
@@ -45,6 +45,19 @@ const ERC20_APPROVE_ABI = [
     name: "approve",
     inputs: [
       { name: "spender", type: "address", internalType: "address" },
+      { name: "amount", type: "uint256", internalType: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool", internalType: "bool" }],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
+const ERC20_TRANSFER_ABI = [
+  {
+    type: "function",
+    name: "transfer",
+    inputs: [
+      { name: "to", type: "address", internalType: "address" },
       { name: "amount", type: "uint256", internalType: "uint256" },
     ],
     outputs: [{ name: "", type: "bool", internalType: "bool" }],
@@ -103,20 +116,56 @@ async function main() {
     functionName: "approve",
     args: [pmAddr as `0x${string}`, amount1],
   });
-  await walletClient.sendTransaction({
+  const approveTx0 = await walletClient.sendTransaction({
     to: poolKey.currency0 as `0x${string}`,
     data: approve0,
     account,
   });
-  await walletClient.sendTransaction({
+  const approveTx1 = await walletClient.sendTransaction({
     to: poolKey.currency1 as `0x${string}`,
     data: approve1,
     account,
   });
+  await publicClient.waitForTransactionReceipt({ hash: approveTx0 });
+  await publicClient.waitForTransactionReceipt({ hash: approveTx1 });
   console.log("   Approved.");
 
-  console.log("2. Adding liquidity (mint position)...");
-  const mintUnlockData = encodeUnlockDataMintFromDeltas(
+  // PositionManager settles adds/removes from its own token balances.
+  // So transfer amount0/amount1 into the PositionManager before multicall(mint).
+  console.log("2b. Transferring tokens to PositionManager...");
+  if (amount0 > 0n) {
+    const transfer0 = encodeFunctionData({
+      abi: ERC20_TRANSFER_ABI,
+      functionName: "transfer",
+      args: [pmAddr as `0x${string}`, amount0],
+    });
+    const tx0 = await walletClient.sendTransaction({
+      to: poolKey.currency0 as `0x${string}`,
+      data: transfer0,
+      gas: 200_000n,
+      account,
+    });
+    await publicClient.waitForTransactionReceipt({ hash: tx0 });
+  }
+  if (amount1 > 0n) {
+    const transfer1 = encodeFunctionData({
+      abi: ERC20_TRANSFER_ABI,
+      functionName: "transfer",
+      args: [pmAddr as `0x${string}`, amount1],
+    });
+    const tx1 = await walletClient.sendTransaction({
+      to: poolKey.currency1 as `0x${string}`,
+      data: transfer1,
+      gas: 200_000n,
+      account,
+    });
+    await publicClient.waitForTransactionReceipt({ hash: tx1 });
+  }
+  console.log("   Transferred.");
+
+  console.log("3. Adding liquidity (mint position)...");
+  // Use the same unlockData layout as the periphery Solidity scripts (MINT_POSITION).
+  const mintUnlockData = encodeUnlockDataMint(
     poolKey,
     tickLower,
     tickUpper,
@@ -130,10 +179,19 @@ async function main() {
     functionName: "modifyLiquidities",
     args: [mintUnlockData, deadline],
   });
+
+  // Must initialize pool before minting when pool doesn't exist yet.
+  const sqrtPriceX96ForInit = getSqrtPriceAtTick(0); // 1:1
+  const initializeCalldata = encodeFunctionData({
+    abi: PositionManagerAbi,
+    functionName: "initializePool",
+    args: [poolKey, sqrtPriceX96ForInit],
+  });
+
   const multicallAdd = encodeFunctionData({
     abi: MULTICALL_ABI,
     functionName: "multicall",
-    args: [[modifyMintCalldata as `0x${string}`]],
+    args: [[initializeCalldata as `0x${string}`, modifyMintCalldata as `0x${string}`]],
   });
   const addHash = await walletClient.sendTransaction({
     to: pmAddr as `0x${string}`,
@@ -143,6 +201,8 @@ async function main() {
   });
   console.log("   Tx hash:", addHash);
 
+  // Important: wait for mint tx so `nextTokenId` is updated.
+  await publicClient.waitForTransactionReceipt({ hash: addHash });
   const nextId = (await publicClient.readContract({
     address: pmAddr as `0x${string}`,
     abi: PositionManagerAbi,
@@ -152,7 +212,20 @@ async function main() {
   const tokenId = nextId - 1n;
   console.log("   Position minted: tokenId", tokenId.toString());
 
-  const liquidityDecrease = (liquidity * 25n) / 100n;
+  const trackedLiquidity = (await publicClient.readContract({
+    address: pmAddr as `0x${string}`,
+    abi: PositionManagerAbi,
+    functionName: "positionLiquidity",
+    args: [tokenId],
+  })) as bigint;
+
+  if (trackedLiquidity <= 0n) {
+    throw new Error(
+      `Minted token has no liquidity (tokenId=${tokenId.toString()}). Check mint tx status/revert.`,
+    );
+  }
+
+  const liquidityDecrease = (trackedLiquidity * 25n) / 100n;
   console.log("3. Removing 25% liquidity...");
   const decreaseUnlockData = encodeUnlockDataDecrease(tokenId, liquidityDecrease, 0n, 0n);
   const modifyDecreaseCalldata = encodeFunctionData({
@@ -172,6 +245,7 @@ async function main() {
     account,
   });
   console.log("   Tx hash:", removeHash);
+  await publicClient.waitForTransactionReceipt({ hash: removeHash });
   console.log("");
   console.log("SUCCESS: Added liquidity then removed 25%. Remove liquidity encoding works.");
 }

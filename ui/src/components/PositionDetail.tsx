@@ -99,6 +99,16 @@ export function PositionDetail({
       .catch(() => {});
   }, [onChain, pool.symbol0, pool.symbol1, pool.decimals0, pool.decimals1]);
 
+  // If the position disappears from on-chain (e.g. after burn), return to the list view
+  // so the UI refreshes and removes the burned position.
+  useEffect(() => {
+    if (pool.tokenId == null) return;
+    if (onChainLoading) return;
+    if (onChain == null && !onChainError) {
+      onBack();
+    }
+  }, [pool.tokenId, onChain, onChainLoading, onChainError, onBack]);
+
   const decimals0 = displayPool.decimals0 ?? getTokenDecimals(displayPool.symbol0);
   const decimals1 = displayPool.decimals1 ?? getTokenDecimals(displayPool.symbol1);
   const { balanceFormatted: balance0, loading: bal0Loading } = useTokenBalance(

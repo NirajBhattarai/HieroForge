@@ -102,13 +102,11 @@ contract HieroForgeV4Position is IPositionManager, IPoolInitializer_v4, Multical
         return IERC721(htsTokenAddress).ownerOf(tokenId);
     }
 
-
     /// @dev Returns true if spender is owner or approved for the tokenId (ERC721-style logic).
     function _isApprovedOrOwner(address spender, uint256 tokenId) internal view returns (bool) {
         address positionOwner = _positionOwner(tokenId);
-        return (spender == positionOwner ||
-            IERC721(htsTokenAddress).getApproved(tokenId) == spender ||
-            IERC721(htsTokenAddress).isApprovedForAll(positionOwner, spender));
+        return (spender == positionOwner || IERC721(htsTokenAddress).getApproved(tokenId) == spender
+                || IERC721(htsTokenAddress).isApprovedForAll(positionOwner, spender));
     }
 
     /// @dev Restrict actions to the HTS NFT owner or approved (ERC721-style behavior).
@@ -305,8 +303,7 @@ contract HieroForgeV4Position is IPositionManager, IPoolInitializer_v4, Multical
         bytes[] memory metadata = new bytes[](1);
         metadata[0] = DEFAULT_METADATA;
 
-        (int64 rc, , int64[] memory serials) =
-            IHederaTokenService(HTS_ADDRESS).mintToken(htsTokenAddress, 1, metadata);
+        (int64 rc,, int64[] memory serials) = IHederaTokenService(HTS_ADDRESS).mintToken(htsTokenAddress, 1, metadata);
         if (rc != HederaResponseCodes.SUCCESS) revert HtsMintFailed();
         require(serials.length > 0, "HTS mintToken did not return a serial");
 
@@ -374,8 +371,7 @@ contract HieroForgeV4Position is IPositionManager, IPoolInitializer_v4, Multical
         bytes[] memory metadata = new bytes[](1);
         metadata[0] = DEFAULT_METADATA;
 
-        (int64 rc, , int64[] memory serials) =
-            IHederaTokenService(HTS_ADDRESS).mintToken(htsTokenAddress, 1, metadata);
+        (int64 rc,, int64[] memory serials) = IHederaTokenService(HTS_ADDRESS).mintToken(htsTokenAddress, 1, metadata);
         if (rc != HederaResponseCodes.SUCCESS) revert HtsMintFailed();
         require(serials.length > 0, "HTS mintToken did not return a serial");
 
@@ -512,8 +508,12 @@ contract HieroForgeV4Position is IPositionManager, IPoolInitializer_v4, Multical
         int128 a0 = liquidityDelta.amount0() + feesAccrued.amount0();
         int128 a1 = liquidityDelta.amount1() + feesAccrued.amount1();
         address to = msgSender();
-        if (a0 > 0) poolManager.take(poolKey.currency0, to, uint256(uint128(a0)));
-        if (a1 > 0) poolManager.take(poolKey.currency1, to, uint256(uint128(a1)));
+        // Uniswap v4-style: caller must both settle negative deltas and take positive deltas.
+        if (a0 < 0) _settleCurrency(poolKey.currency0, uint256(uint128(-a0)));
+        else if (a0 > 0) poolManager.take(poolKey.currency0, to, uint256(uint128(a0)));
+
+        if (a1 < 0) _settleCurrency(poolKey.currency1, uint256(uint128(-a1)));
+        else if (a1 > 0) poolManager.take(poolKey.currency1, to, uint256(uint128(a1)));
     }
 
     /// @dev Validates that principal amounts deposited (excluding fee credits) don't exceed slippage limits
@@ -570,8 +570,8 @@ contract HieroForgeV4Position is IPositionManager, IPoolInitializer_v4, Multical
         token.maxSupply = type(int64).max;
         token.freezeDefault = false;
         token.tokenKeys = new IHederaTokenService.TokenKey[](2);
-        token.tokenKeys[0] = IHederaTokenService.TokenKey(0x1, contractKey);   // ADMIN
-        token.tokenKeys[1] = IHederaTokenService.TokenKey(0x10, contractKey);  // SUPPLY
+        token.tokenKeys[0] = IHederaTokenService.TokenKey(0x1, contractKey); // ADMIN
+        token.tokenKeys[1] = IHederaTokenService.TokenKey(0x10, contractKey); // SUPPLY
         token.expiry = IHederaTokenService.Expiry(0, address(0), 8_000_000);
 
         (int64 rc, address created) = IHederaTokenService(HTS_ADDRESS).createNonFungibleToken{value: msg.value}(token);
@@ -588,8 +588,7 @@ contract HieroForgeV4Position is IPositionManager, IPoolInitializer_v4, Multical
         bytes[] memory metadata = new bytes[](1);
         metadata[0] = DEFAULT_METADATA;
 
-        (int64 rc, , int64[] memory serials) =
-            IHederaTokenService(HTS_ADDRESS).mintToken(htsTokenAddress, 1, metadata);
+        (int64 rc,, int64[] memory serials) = IHederaTokenService(HTS_ADDRESS).mintToken(htsTokenAddress, 1, metadata);
         if (rc != HederaResponseCodes.SUCCESS) revert HtsMintFailed();
         require(serials.length > 0, "HTS mintToken did not return a serial");
 

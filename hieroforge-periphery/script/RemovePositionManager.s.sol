@@ -103,11 +103,17 @@ contract RemovePositionManagerScript is Script {
         bool skipTransfer = vm.envOr("SKIP_TRANSFER", uint256(0)) == 1;
         if (!skipTransfer) {
             if (amount0ForCurrency0 > 0) {
-                require(IERC20Minimal(currency0).transfer(address(pm), amount0ForCurrency0), "mint: transfer currency0 failed");
+                require(
+                    IERC20Minimal(currency0).transfer(address(pm), amount0ForCurrency0),
+                    "mint: transfer currency0 failed"
+                );
                 console.log("Transferred currency0 to PositionManager:", amount0ForCurrency0);
             }
             if (amount1ForCurrency1 > 0) {
-                require(IERC20Minimal(currency1).transfer(address(pm), amount1ForCurrency1), "mint: transfer currency1 failed");
+                require(
+                    IERC20Minimal(currency1).transfer(address(pm), amount1ForCurrency1),
+                    "mint: transfer currency1 failed"
+                );
                 console.log("Transferred currency1 to PositionManager:", amount1ForCurrency1);
             }
         } else {
@@ -116,8 +122,16 @@ contract RemovePositionManagerScript is Script {
 
         bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION));
         bytes[] memory mintParams = new bytes[](1);
-        mintParams[0] =
-            abi.encode(poolKey, tickLower, tickUpper, liquidity, uint128(amount0ForCurrency0), uint128(amount1ForCurrency1), owner, bytes(""));
+        mintParams[0] = abi.encode(
+            poolKey,
+            tickLower,
+            tickUpper,
+            liquidity,
+            uint128(amount0ForCurrency0),
+            uint128(amount1ForCurrency1),
+            owner,
+            bytes("")
+        );
         bytes memory unlockData = abi.encode(actions, mintParams);
 
         uint256 deadline = block.timestamp + vm.envOr("DEADLINE_SECONDS", uint256(3600));
@@ -167,7 +181,9 @@ contract RemovePositionManagerScript is Script {
                 console.log("  liquidity(L):", liquidity);
 
                 vm.startBroadcast(pk);
-                tokenId = _mintPosition(pm, sender, amount0, amount1, c0, c1, liquidity, fee, tickSpacing, tickLower, tickUpper, owner);
+                tokenId = _mintPosition(
+                    pm, sender, amount0, amount1, c0, c1, liquidity, fee, tickSpacing, tickLower, tickUpper, owner
+                );
                 vm.stopBroadcast();
 
                 console.log("Minted tokenId:", tokenId);

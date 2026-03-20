@@ -119,7 +119,9 @@ contract MulticallScript is Script {
             abi.encodeWithSelector(IPositionManager.modifyLiquidities.selector, decreaseUnlockData, deadline);
         IMulticall_v4(positionManagerAddr).multicall(removeCalls);
 
-        console.log("Decreased 25%% liquidity:", liquidityDecrease, "remaining in position:", liquidity - liquidityDecrease);
+        console.log(
+            "Decreased 25%% liquidity:", liquidityDecrease, "remaining in position:", liquidity - liquidityDecrease
+        );
 
         vm.stopBroadcast();
     }

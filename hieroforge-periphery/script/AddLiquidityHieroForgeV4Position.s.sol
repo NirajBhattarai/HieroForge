@@ -53,7 +53,9 @@ contract AddLiquidityHieroForgeV4PositionScript is Script {
         } else {
             // On Hedera testnet, balanceOf for HTS tokens may require precompile plumbing and can be flaky in simulation,
             // so we skip both the require and the balanceOf calls when SKIP_BALANCE_CHECK=1.
-            console.log("SKIP_BALANCE_CHECK=1: skipping balanceOf + balance require (ensure deployer has tokens on chain)");
+            console.log(
+                "SKIP_BALANCE_CHECK=1: skipping balanceOf + balance require (ensure deployer has tokens on chain)"
+            );
             console.log("Required token0:", amount0);
             console.log("Required token1:", amount1);
         }

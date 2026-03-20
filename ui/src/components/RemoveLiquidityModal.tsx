@@ -21,6 +21,7 @@ import {
   encodeUnlockDataBurn,
 } from "@/lib/addLiquidity";
 import { hederaContractMulticall } from "@/lib/hederaContract";
+import { hederaContractExecute } from "@/lib/hederaContract";
 import { PositionManagerAbi } from "@/abis/PositionManager";
 import { PoolManagerAbi } from "@/abis/PoolManager";
 import { amountsForLiquidity, getSqrtPriceAtTick } from "@/lib/sqrtPriceMath";
@@ -202,10 +203,13 @@ export function RemoveLiquidityModal({
       return;
     }
     if (onChainLiquidity == null) {
-      setError("Load position from chain first.");
+      // If the token no longer exists (e.g. already burned), the on-chain loader returns null.
+      setError(percent === 100 ? "Position not found on chain (already burned)." : "Load position from chain first.");
       return;
     }
-    if (liquidityWei <= 0n) {
+    // Burn-only (100%) is allowed even when tracked liquidity is 0.
+    // PositionManager._burn supports burning when liquidity is already cleared.
+    if (liquidityWei <= 0n && percent !== 100) {
       setError("Liquidity to remove must be greater than zero.");
       return;
     }
@@ -221,6 +225,86 @@ export function RemoveLiquidityModal({
       // Partial (10%, 25%, 50%, 75%): only DECREASE_LIQUIDITY — position keeps the rest.
       // 100%: BURN_POSITION — removes all remaining liquidity and burns the NFT.
       let unlockData: `0x${string}`;
+
+      // For BURN_POSITION we need ERC721 approval:
+      // PositionManager._burn() uses onlyIfApproved(msgSender(), tokenId).
+      // So the account that sends modifyLiquidities must be approved (or be the owner).
+      const ensureBurnApproval = async () => {
+        if (percent !== 100) return;
+        const spender =
+          (accountEvmAlias?.toLowerCase() ?? accountIdToLongZero(accountId)?.toLowerCase()) ??
+          null;
+        if (!spender) {
+          setError("Unable to resolve sender EVM address for burn approval.");
+          return;
+        }
+
+        const owner =
+          (onChain?.owner ? String(onChain.owner) : undefined)?.toLowerCase() ??
+          null;
+
+        // If we can't read on-chain owner, fall back to ownerOf().
+        let ownerResolved = owner;
+        if (!ownerResolved) {
+          const ownerFromChain = (await publicClient.readContract({
+            address: positionManagerAddress as `0x${string}`,
+            abi: PositionManagerAbi,
+            functionName: "ownerOf",
+            args: [posTokenId],
+          })) as string;
+          ownerResolved = ownerFromChain.toLowerCase();
+        }
+
+        if (!ownerResolved) {
+          setError("Unable to resolve position owner for burn approval.");
+          return;
+        }
+
+        // If the connected wallet is not the ERC721 owner, we can't auto-approve;
+        // the owner must approve the sender.
+        if (ownerResolved !== spender) {
+          setError(
+            "Connected wallet is not the position NFT owner. Switch to the owner wallet or have the owner approve this NFT."
+          );
+          return;
+        }
+
+        const approved = (await publicClient.readContract({
+          address: positionManagerAddress as `0x${string}`,
+          abi: PositionManagerAbi,
+          functionName: "getApproved",
+          args: [posTokenId],
+        })) as string;
+
+        const approvedForAll = (await publicClient.readContract({
+          address: positionManagerAddress as `0x${string}`,
+          abi: PositionManagerAbi,
+          functionName: "isApprovedForAll",
+          args: [ownerResolved as `0x${string}`, spender as `0x${string}`],
+        })) as boolean;
+
+        const alreadyApproved =
+          (approved && approved.toLowerCase() === spender.toLowerCase()) || approvedForAll;
+
+        if (alreadyApproved) return;
+
+        // Approve spender to burn this specific token.
+        const approveArgs: readonly unknown[] = [spender as `0x${string}`, posTokenId];
+        await hederaContractExecute({
+          hashConnect: hc,
+          accountId,
+          contractId: positionManagerAddress,
+          abi: PositionManagerAbi,
+          functionName: "approve",
+          args: approveArgs,
+          gas: 2_000_000,
+        });
+      };
+
+      if (percent === 100) {
+        await ensureBurnApproval();
+      }
+
       if (percent === 100) {
         unlockData = encodeUnlockDataBurn(posTokenId, 0n, 0n);
       } else {
@@ -276,7 +360,9 @@ export function RemoveLiquidityModal({
     resolvedTokenId,
     onChainLiquidity,
     onChain?.tokenId,
+    onChain?.owner,
     liquidityWei,
+    accountEvmAlias,
     isConnected,
     accountId,
     hashConnectRef,
@@ -292,7 +378,7 @@ export function RemoveLiquidityModal({
           ? "Loading position…"
           : onChainLiquidity == null
             ? "Position not found on chain"
-            : liquidityWei <= 0n
+            : liquidityWei <= 0n && percent !== 100
               ? "Liquidity to remove is too low"
               : pending
                 ? "Removing…"
@@ -305,7 +391,7 @@ export function RemoveLiquidityModal({
     hasSelection &&
     !!resolvedTokenId &&
     onChainLiquidity != null &&
-    liquidityWei > 0n &&
+    (percent === 100 ? true : liquidityWei > 0n) &&
     !pending &&
     !!positionManagerAddress;
 

@@ -430,8 +430,12 @@ contract PositionManager is IPositionManager, IPoolInitializer_v4, ERC721Permit_
         int128 a0 = liquidityDelta.amount0() + feesAccrued.amount0();
         int128 a1 = liquidityDelta.amount1() + feesAccrued.amount1();
         address to = msgSender();
-        if (a0 > 0) poolManager.take(poolKey.currency0, to, uint256(uint128(a0)));
-        if (a1 > 0) poolManager.take(poolKey.currency1, to, uint256(uint128(a1)));
+        // Uniswap v4-style: caller must both settle negative deltas and take positive deltas.
+        if (a0 < 0) _settleCurrency(poolKey.currency0, uint256(uint128(-a0)));
+        else if (a0 > 0) poolManager.take(poolKey.currency0, to, uint256(uint128(a0)));
+
+        if (a1 < 0) _settleCurrency(poolKey.currency1, uint256(uint128(-a1)));
+        else if (a1 > 0) poolManager.take(poolKey.currency1, to, uint256(uint128(a1)));
     }
 
     /// @dev Validates that principal amounts deposited (excluding fee credits) don't exceed slippage limits

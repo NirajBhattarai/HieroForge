@@ -5,8 +5,9 @@
 # Usage:
 #   export QUOTER_ADDRESS=0x...   # for Quoter
 #   export POSITION_MANAGER_ADDRESS=0x... POOL_MANAGER_ADDRESS=0x...  # for PositionManager
+#   export ROUTER_ADDRESS=0x...   # for UniversalRouter (requires POOL_MANAGER_ADDRESS + POSITION_MANAGER_ADDRESS)
 #   export HIEROFORGE_V4_POSITION_ADDRESS=0x... POOL_MANAGER_ADDRESS=0x... OPERATOR_ACCOUNT=0x...  # for HieroForgeV4Position
-#   ./scripts/verify-contracts.sh [Quoter|PositionManager|HieroForgeV4Position|Multicall|all]
+#   ./scripts/verify-contracts.sh [Quoter|PositionManager|Router|HieroForgeV4Position|Multicall|all]
 #
 # Prerequisites: forge build (extra_output_files = ["metadata"]). jq, curl for API verification.
 
@@ -45,6 +46,20 @@ case "$CONTRACT_ARG" in
       exit 1
     fi
     ;;
+  Router)
+    if [[ -z "$ROUTER_ADDRESS" ]]; then
+      echo "Error: ROUTER_ADDRESS not set."
+      exit 1
+    fi
+    if [[ -z "$POOL_MANAGER_ADDRESS" ]]; then
+      echo "Error: POOL_MANAGER_ADDRESS required for Router constructor args."
+      exit 1
+    fi
+    if [[ -z "$POSITION_MANAGER_ADDRESS" ]]; then
+      echo "Error: POSITION_MANAGER_ADDRESS required for Router constructor args."
+      exit 1
+    fi
+    ;;
   PositionManager|Multicall)
     if [[ -z "$POSITION_MANAGER_ADDRESS" ]]; then
       echo "Error: POSITION_MANAGER_ADDRESS not set."
@@ -76,14 +91,19 @@ case "$CONTRACT_ARG" in
       echo "Error: POOL_MANAGER_ADDRESS required for PositionManager."
       exit 1
     fi
+    if [[ -z "$ROUTER_ADDRESS" ]]; then
+      echo "Error: ROUTER_ADDRESS required for Router."
+      exit 1
+    fi
     ;;
   *)
-    echo "Usage: $0 [Quoter|PositionManager|HieroForgeV4Position|Multicall|all]"
+    echo "Usage: $0 [Quoter|PositionManager|Router|HieroForgeV4Position|Multicall|all]"
     echo "  Quoter              - verify Quoter (set QUOTER_ADDRESS)"
     echo "  PositionManager     - verify PositionManager (set POSITION_MANAGER_ADDRESS, POOL_MANAGER_ADDRESS)"
+    echo "  Router              - verify UniversalRouter (set ROUTER_ADDRESS, POOL_MANAGER_ADDRESS, POSITION_MANAGER_ADDRESS)"
     echo "  HieroForgeV4Position - verify HieroForgeV4Position (set HIEROFORGE_V4_POSITION_ADDRESS, POOL_MANAGER_ADDRESS, OPERATOR_ACCOUNT)"
     echo "  Multicall           - same as PositionManager"
-    echo "  all                 - verify Quoter + PositionManager"
+    echo "  all                 - verify Quoter + PositionManager + Router"
     exit 1
     ;;
 esac
@@ -114,7 +134,7 @@ prepare_manual_bundle() {
 
 verify_quoter() {
   echo "--- Verifying V4Quoter at $QUOTER_ADDRESS ---"
-  NEED_MANUAL=""
+  local need_manual=""
   if [[ -z "$VERIFY_MANUAL" ]]; then
     set +e
     hashscan_api_verify "$REPO_ROOT" "V4Quoter" "$QUOTER_ADDRESS" "$CHAIN_ID" && r=0 || r=1
@@ -143,20 +163,21 @@ verify_quoter() {
     set -e
     if [[ $r -ne 0 ]]; then
       echo "V4Quoter programmatic verification failed; use manual verification below."
-      NEED_MANUAL=1
+      need_manual=1
     fi
   else
-    NEED_MANUAL=1
+    need_manual=1
   fi
-  if [[ -n "$NEED_MANUAL" ]] || [[ -n "$VERIFY_MANUAL" ]]; then
+  if [[ -n "$need_manual" ]] || [[ -n "$VERIFY_MANUAL" ]]; then
     prepare_manual_bundle "V4Quoter" "src/V4Quoter.sol" || true
   fi
+  [[ -n "$need_manual" ]] && NEED_MANUAL=1
   echo ""
 }
 
 verify_position_manager() {
   echo "--- Verifying PositionManager at $POSITION_MANAGER_ADDRESS ---"
-  NEED_MANUAL=""
+  local need_manual=""
   if [[ -z "$VERIFY_MANUAL" ]]; then
     set +e
     hashscan_api_verify "$REPO_ROOT" "PositionManager" "$POSITION_MANAGER_ADDRESS" "$CHAIN_ID" && r=0 || r=1
@@ -175,20 +196,54 @@ verify_position_manager() {
     set -e
     if [[ $r -ne 0 ]]; then
       echo "PositionManager programmatic verification failed; use manual verification below."
-      NEED_MANUAL=1
+      need_manual=1
     fi
   else
-    NEED_MANUAL=1
+    need_manual=1
   fi
-  if [[ -n "$NEED_MANUAL" ]] || [[ -n "$VERIFY_MANUAL" ]]; then
+  if [[ -n "$need_manual" ]] || [[ -n "$VERIFY_MANUAL" ]]; then
     prepare_manual_bundle "PositionManager" "src/PositionManager.sol" || true
   fi
+  [[ -n "$need_manual" ]] && NEED_MANUAL=1
+  echo ""
+}
+
+verify_router() {
+  echo "--- Verifying UniversalRouter at $ROUTER_ADDRESS ---"
+  local need_manual=""
+  if [[ -z "$VERIFY_MANUAL" ]]; then
+    set +e
+    hashscan_api_verify "$REPO_ROOT" "UniversalRouter" "$ROUTER_ADDRESS" "$CHAIN_ID" && r=0 || r=1
+    if [[ $r -ne 0 ]]; then
+      CONSTRUCTOR_ARGS=$(cast abi-encode "constructor(address,address)" "$POOL_MANAGER_ADDRESS" "$POSITION_MANAGER_ADDRESS")
+      forge verify-contract \
+        "$ROUTER_ADDRESS" \
+        src/UniversalRouter.sol:UniversalRouter \
+        --chain-id "$CHAIN_ID" \
+        --verifier sourcify \
+        --verifier-url "$HEDERA_VERIFIER_URL" \
+        --constructor-args "$CONSTRUCTOR_ARGS" \
+        $WATCH_FLAG
+      r=$?
+    fi
+    set -e
+    if [[ $r -ne 0 ]]; then
+      echo "UniversalRouter programmatic verification failed; use manual verification below."
+      need_manual=1
+    fi
+  else
+    need_manual=1
+  fi
+  if [[ -n "$need_manual" ]] || [[ -n "$VERIFY_MANUAL" ]]; then
+    prepare_manual_bundle "UniversalRouter" "src/UniversalRouter.sol" || true
+  fi
+  [[ -n "$need_manual" ]] && NEED_MANUAL=1
   echo ""
 }
 
 verify_hieroforge_v4_position() {
   echo "--- Verifying HieroForgeV4Position at $HIEROFORGE_V4_POSITION_ADDRESS ---"
-  NEED_MANUAL=""
+  local need_manual=""
   if [[ -z "$VERIFY_MANUAL" ]]; then
     set +e
     hashscan_api_verify "$REPO_ROOT" "HieroForgeV4Position" "$HIEROFORGE_V4_POSITION_ADDRESS" "$CHAIN_ID" && r=0 || r=1
@@ -207,14 +262,15 @@ verify_hieroforge_v4_position() {
     set -e
     if [[ $r -ne 0 ]]; then
       echo "HieroForgeV4Position programmatic verification failed; use manual verification below."
-      NEED_MANUAL=1
+      need_manual=1
     fi
   else
-    NEED_MANUAL=1
+    need_manual=1
   fi
-  if [[ -n "$NEED_MANUAL" ]] || [[ -n "$VERIFY_MANUAL" ]]; then
+  if [[ -n "$need_manual" ]] || [[ -n "$VERIFY_MANUAL" ]]; then
     prepare_manual_bundle "HieroForgeV4Position" "src/HieroForgeV4Position.sol" || true
   fi
+  [[ -n "$need_manual" ]] && NEED_MANUAL=1
   echo ""
 }
 
@@ -222,6 +278,9 @@ NEED_MANUAL=""
 case "$CONTRACT_ARG" in
   Quoter)
     verify_quoter
+    ;;
+  Router)
+    verify_router
     ;;
   PositionManager|Multicall)
     verify_position_manager
@@ -232,6 +291,7 @@ case "$CONTRACT_ARG" in
   all)
     verify_quoter
     verify_position_manager
+    verify_router
     [[ -n "$HIEROFORGE_V4_POSITION_ADDRESS" ]] && [[ -n "$OPERATOR_ACCOUNT" ]] && verify_hieroforge_v4_position
     ;;
 esac
@@ -243,10 +303,12 @@ if [[ -n "$NEED_MANUAL" ]] || [[ -n "$VERIFY_MANUAL" ]]; then
   echo "  3. Upload files from verify-bundles/<Contract>/"
   [[ -n "$QUOTER_ADDRESS" ]] && echo "  Quoter:         https://hashscan.io/testnet/contract/$QUOTER_ADDRESS"
   [[ -n "$POSITION_MANAGER_ADDRESS" ]] && echo "  PositionManager: https://hashscan.io/testnet/contract/$POSITION_MANAGER_ADDRESS"
+  [[ -n "$ROUTER_ADDRESS" ]] && echo "  Router:         https://hashscan.io/testnet/contract/$ROUTER_ADDRESS"
   [[ -n "$HIEROFORGE_V4_POSITION_ADDRESS" ]] && echo "  HieroForgeV4Position: https://hashscan.io/testnet/contract/$HIEROFORGE_V4_POSITION_ADDRESS"
 else
   echo "Done."
   [[ -n "$QUOTER_ADDRESS" ]] && echo "  Quoter: https://hashscan.io/testnet/contract/$QUOTER_ADDRESS"
   [[ -n "$POSITION_MANAGER_ADDRESS" ]] && echo "  PositionManager: https://hashscan.io/testnet/contract/$POSITION_MANAGER_ADDRESS"
+  [[ -n "$ROUTER_ADDRESS" ]] && echo "  Router: https://hashscan.io/testnet/contract/$ROUTER_ADDRESS"
   [[ -n "$HIEROFORGE_V4_POSITION_ADDRESS" ]] && echo "  HieroForgeV4Position: https://hashscan.io/testnet/contract/$HIEROFORGE_V4_POSITION_ADDRESS"
 fi

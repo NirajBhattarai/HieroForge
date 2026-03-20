@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { TokenPairIcon } from "./TokenIcon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ErrorMessage } from "./ErrorMessage";
 import { useHashPack } from "@/context/HashPackContext";
-import { getPositionManagerAddress } from "@/constants";
+import { getPositionManagerAddress, getRpcUrl, HEDERA_TESTNET } from "@/constants";
 import { encodeUnlockDataBurn } from "@/lib/addLiquidity";
-import { hederaContractMulticall } from "@/lib/hederaContract";
+import { hederaContractExecute, hederaContractMulticall } from "@/lib/hederaContract";
 import { PositionManagerAbi } from "@/abis/PositionManager";
 import { getFriendlyErrorMessage } from "@/lib/errors";
 import type { PoolInfo } from "./PoolPositions";
+import { createPublicClient, http } from "viem";
+import { accountIdToLongZero, getAccountEvmAddress } from "@/lib/hederaAccount";
 
 interface BurnPositionModalProps {
   pool: PoolInfo;
@@ -29,12 +31,38 @@ export function BurnPositionModal({ pool, onClose }: BurnPositionModalProps) {
   const [tokenId, setTokenId] = useState(
     pool.tokenId != null ? String(pool.tokenId) : "",
   );
+  const [accountEvmAlias, setAccountEvmAlias] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
 
   const positionManagerAddress = getPositionManagerAddress();
+
+  const network =
+    (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_HEDERA_NETWORK) || "testnet";
+  useEffect(() => {
+    if (!accountId) {
+      setAccountEvmAlias(null);
+      return;
+    }
+    let cancelled = false;
+    getAccountEvmAddress(accountId, network).then((evm) => {
+      if (!cancelled) setAccountEvmAlias(evm ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId, network]);
+
+  const publicClient = useMemo(
+    () =>
+      createPublicClient({
+        chain: HEDERA_TESTNET,
+        transport: http(getRpcUrl()),
+      }),
+    [],
+  );
 
   const burnPosition = useCallback(async () => {
     if (!positionManagerAddress) {
@@ -62,6 +90,66 @@ export function BurnPositionModal({ pool, onClose }: BurnPositionModalProps) {
     try {
       const posTokenId = BigInt(tokenId.trim());
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+
+      // Ensure ERC721 approval for burning:
+      // PositionManager._burn() requires onlyIfApproved(msgSender(), tokenId),
+      // so the account that sends modifyLiquidities must be approved (or be the owner).
+      const spender =
+        (accountEvmAlias?.toLowerCase() ?? accountIdToLongZero(accountId)?.toLowerCase()) ?? null;
+      if (!spender) {
+        setError("Unable to resolve sender EVM address for burn approval.");
+        return;
+      }
+
+      let ownerResolved: string;
+      try {
+        ownerResolved = (await publicClient.readContract({
+          address: positionManagerAddress as `0x${string}`,
+          abi: PositionManagerAbi,
+          functionName: "ownerOf",
+          args: [posTokenId],
+        })) as string;
+      } catch {
+        // ownerOf reverts for nonexistent/burned ERC721 tokens.
+        setError("Position not found on-chain (it may have already been burned).");
+        return;
+      }
+
+      if (ownerResolved?.toLowerCase() !== spender) {
+        setError(
+          "Connected wallet is not the position NFT owner. Switch to the owner wallet or have the owner approve this NFT."
+        );
+        return;
+      }
+
+      const approved = (await publicClient.readContract({
+        address: positionManagerAddress as `0x${string}`,
+        abi: PositionManagerAbi,
+        functionName: "getApproved",
+        args: [posTokenId],
+      })) as string;
+
+      const approvedForAll = (await publicClient.readContract({
+        address: positionManagerAddress as `0x${string}`,
+        abi: PositionManagerAbi,
+        functionName: "isApprovedForAll",
+        args: [ownerResolved as `0x${string}`, spender as `0x${string}`],
+      })) as boolean;
+
+      const alreadyApproved =
+        (approved && approved.toLowerCase() === spender) || approvedForAll;
+
+      if (!alreadyApproved) {
+        await hederaContractExecute({
+          hashConnect: hc,
+          accountId,
+          contractId: positionManagerAddress,
+          abi: PositionManagerAbi,
+          functionName: "approve",
+          args: [spender as `0x${string}`, posTokenId],
+          gas: 2_000_000,
+        });
+      }
 
       // BURN_POSITION removes all remaining liquidity, collects fees, and burns the NFT
       const unlockData = encodeUnlockDataBurn(posTokenId, 0n, 0n);
@@ -102,7 +190,14 @@ export function BurnPositionModal({ pool, onClose }: BurnPositionModalProps) {
     } finally {
       setPending(false);
     }
-  }, [positionManagerAddress, tokenId, isConnected, accountId, hashConnectRef]);
+  }, [
+    positionManagerAddress,
+    tokenId,
+    isConnected,
+    accountId,
+    hashConnectRef,
+    accountEvmAlias,
+  ]);
 
   const buttonText = !isConnected
     ? "Connect wallet"
