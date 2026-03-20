@@ -39,33 +39,14 @@ export function Header({
         {/* Logo */}
         <div className="flex items-center gap-4 sm:gap-6">
           <span className="text-lg sm:text-xl font-bold tracking-tight text-text-primary flex items-center gap-2">
-            <svg
-              width="26"
-              height="26"
+            <img
+              src="/logo.svg"
+              alt="HieroForge"
+              width={26}
+              height={26}
               className="sm:w-7 sm:h-7"
-              viewBox="0 0 32 32"
-              fill="none"
-            >
-              <rect width="32" height="32" rx="8" fill="url(#logo-grad)" />
-              <path
-                d="M10 22V10l6 4 6-4v12l-6-4-6 4z"
-                fill="white"
-                fillOpacity="0.9"
-              />
-              <defs>
-                <linearGradient
-                  id="logo-grad"
-                  x1="0"
-                  y1="0"
-                  x2="32"
-                  y2="32"
-                  gradientUnits="userSpaceOnUse"
-                >
-                  <stop stopColor="#38bdf8" />
-                  <stop offset="1" stopColor="#818cf8" />
-                </linearGradient>
-              </defs>
-            </svg>
+              draggable={false}
+            />
             HieroForge
           </span>
 

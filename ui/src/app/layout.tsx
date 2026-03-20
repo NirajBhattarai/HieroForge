@@ -5,6 +5,9 @@ import "@/styles/globals.css";
 export const metadata: Metadata = {
   title: "HieroForge",
   description: "Concentrated liquidity AMM on Hedera",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
