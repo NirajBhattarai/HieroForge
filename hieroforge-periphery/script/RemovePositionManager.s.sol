@@ -45,6 +45,7 @@ import {Actions} from "../src/libraries/Actions.sol";
 contract RemovePositionManagerScript is Script {
     uint160 internal constant SQRT_PRICE_1_1 = 79228162514264337593543950336;
 
+    // --- Helper: Find latest owned token ---
     function _findLatestOwnedToken(PositionManager pm, address owner) internal view returns (uint256) {
         uint256 nextTokenId = pm.nextTokenId();
         if (nextTokenId <= 1) return 0;
@@ -57,6 +58,7 @@ contract RemovePositionManagerScript is Script {
         return 0;
     }
 
+    // --- Helper: Mint position (mirrors AddLiquidityPositionManager) ---
     function _mintPosition(
         PositionManager pm,
         address sender,
@@ -74,7 +76,6 @@ contract RemovePositionManagerScript is Script {
         require(c0 != address(0) && c1 != address(0), "mint requires currencies");
         require(amount0 > 0 || amount1 > 0, "mint requires AMOUNT0/AMOUNT1");
 
-        // Canonical order required by PoolKey encoding.
         (address currency0, address currency1) = c0 < c1 ? (c0, c1) : (c1, c0);
         address amount0Currency = currency0;
         uint256 amount0ForCurrency0 = amount0Currency == c0 ? amount0 : amount1;
@@ -103,9 +104,11 @@ contract RemovePositionManagerScript is Script {
         if (!skipTransfer) {
             if (amount0ForCurrency0 > 0) {
                 require(IERC20Minimal(currency0).transfer(address(pm), amount0ForCurrency0), "mint: transfer currency0 failed");
+                console.log("Transferred currency0 to PositionManager:", amount0ForCurrency0);
             }
             if (amount1ForCurrency1 > 0) {
                 require(IERC20Minimal(currency1).transfer(address(pm), amount1ForCurrency1), "mint: transfer currency1 failed");
+                console.log("Transferred currency1 to PositionManager:", amount1ForCurrency1);
             }
         } else {
             console.log("SKIP_TRANSFER=1: assuming tokens already sent to PositionManager");
@@ -124,22 +127,21 @@ contract RemovePositionManagerScript is Script {
         calls[0] = abi.encodeWithSelector(IPoolInitializer_v4.initializePool.selector, poolKey, SQRT_PRICE_1_1);
         calls[1] = abi.encodeWithSelector(IPositionManager.modifyLiquidities.selector, unlockData, deadline);
 
-        // broadcast happens by caller
         IMulticall_v4(address(pm)).multicall(calls);
 
         return pm.nextTokenId() - 1;
     }
 
+    // --- Main run() ---
     function run() external {
         Hsc.htsSetup();
 
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address sender = vm.addr(pk);
         address pmAddr = vm.envAddress("POSITION_MANAGER_ADDRESS");
-
-        uint256 tokenId = vm.envOr("TOKEN_ID", uint256(0));
         PositionManager pm = PositionManager(pmAddr);
 
+        uint256 tokenId = vm.envOr("TOKEN_ID", uint256(0));
         address owner = vm.envOr("OWNER", sender);
         uint256 percent = vm.envOr("PERCENT", uint256(100));
         require(percent > 0 && percent <= 100, "PERCENT must be 1..100");
@@ -176,14 +178,21 @@ contract RemovePositionManagerScript is Script {
             }
         }
 
+        // --- Validate position and ownership ---
+        require(tokenId != 0, "No position selected for removal");
+        require(pm.ownerOf(tokenId) == owner, "Not owner of position");
+
         bool burnAfter = percent == 100 ? true : vm.envOr("BURN_AFTER", false);
         uint128 amount0Min = uint128(vm.envOr("AMOUNT0_MIN", uint256(0)));
         uint128 amount1Min = uint128(vm.envOr("AMOUNT1_MIN", uint256(0)));
         uint256 deadlineSeconds = vm.envOr("DEADLINE_SECONDS", uint256(3600));
         uint256 deadline = block.timestamp + deadlineSeconds;
 
-        uint128 totalLiquidity = PositionManager(pmAddr).positionLiquidity(tokenId);
+        uint128 totalLiquidity = pm.positionLiquidity(tokenId);
+        require(totalLiquidity > 0, "Position has no liquidity");
         uint256 decLiquidity = (uint256(totalLiquidity) * percent) / 100;
+        require(decLiquidity > 0, "Nothing to remove");
+        require(decLiquidity <= totalLiquidity, "Cannot remove more than available liquidity");
 
         console.log("PositionManager:", pmAddr);
         console.log("TokenId:", tokenId);
@@ -216,7 +225,20 @@ contract RemovePositionManagerScript is Script {
         IMulticall_v4(pmAddr).multicall(calls);
         vm.stopBroadcast();
 
-        uint128 afterLiquidity = PositionManager(pmAddr).positionLiquidity(tokenId);
+        uint128 afterLiquidity = pm.positionLiquidity(tokenId);
         console.log("Tracked liquidity after:", uint256(afterLiquidity));
+        if (decLiquidity > 0) {
+            console.log("Liquidity removed:", decLiquidity);
+            console.log("Remaining liquidity:", uint256(afterLiquidity));
+        }
+        if (burnAfter) {
+            console.log("Position burned (tokenId):", tokenId);
+        }
     }
 }
+
+// To run this script with typical options (fork, broadcast, ffi, revert on error):
+//
+// forge script script/RemovePositionManager.s.sol --fork-url $RPC_URL --broadcast --ffi --slow --revert-on-error
+//
+// Replace $RPC_URL with your node RPC endpoint.
