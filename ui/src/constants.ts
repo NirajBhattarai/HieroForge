@@ -79,7 +79,7 @@ export function getQuoterAddress(): string {
   return (process.env.NEXT_PUBLIC_QUOTER_ADDRESS ?? "").trim();
 }
 
-/** PositionManager (NEXT_PUBLIC_POSITION_MANAGER_ADDRESS). Required for Add Liquidity. */
+/** PositionManager contract for positions and liquidity (add/remove/burn). */
 export function getPositionManagerAddress(): string {
   return (process.env.NEXT_PUBLIC_POSITION_MANAGER_ADDRESS ?? "").trim();
 }

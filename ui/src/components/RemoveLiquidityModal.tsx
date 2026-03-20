@@ -1,20 +1,31 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { createPublicClient, http } from "viem";
+import { formatUnits } from "viem";
 import { TokenIcon, TokenPairIcon } from "./TokenIcon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ErrorMessage } from "./ErrorMessage";
 import { useHashPack } from "@/context/HashPackContext";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
-import { getTokenDecimals, getPositionManagerAddress } from "@/constants";
+import { usePositionOnChain } from "@/hooks/usePositionOnChain";
+import {
+  getPositionManagerAddress,
+  getPoolManagerAddress,
+  getRpcUrl,
+  HEDERA_TESTNET,
+} from "@/constants";
 import {
   encodeUnlockDataDecrease,
   encodeUnlockDataBurn,
 } from "@/lib/addLiquidity";
 import { hederaContractMulticall } from "@/lib/hederaContract";
 import { PositionManagerAbi } from "@/abis/PositionManager";
+import { PoolManagerAbi } from "@/abis/PoolManager";
+import { amountsForLiquidity, getSqrtPriceAtTick } from "@/lib/sqrtPriceMath";
 import { getFriendlyErrorMessage } from "@/lib/errors";
+import { accountIdToLongZero, getAccountEvmAddress } from "@/lib/hederaAccount";
 import type { PoolInfo } from "./PoolPositions";
 
 interface RemoveLiquidityModalProps {
@@ -27,7 +38,7 @@ function formatFee(fee: number): string {
   return `${(fee / 10000).toFixed(2)}%`;
 }
 
-const PERCENT_OPTIONS = [25, 50, 75, 100] as const;
+const PERCENT_OPTIONS = [10, 25, 50, 75, 100] as const;
 
 const HEDERA_GAS_MODIFY_LIQ = 5_000_000;
 
@@ -41,15 +52,69 @@ export function RemoveLiquidityModal({
   const [tokenId, setTokenId] = useState(
     pool.tokenId != null ? String(pool.tokenId) : "",
   );
-  const [positionLiquidity, setPositionLiquidity] = useState(
-    pool.liquidity ?? "",
-  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [sqrtPriceX96, setSqrtPriceX96] = useState<bigint | null>(null);
+  const [accountEvmAlias, setAccountEvmAlias] = useState<string | null>(null);
 
-  const decimals0 = pool.decimals0 ?? getTokenDecimals(pool.symbol0);
-  const decimals1 = pool.decimals1 ?? getTokenDecimals(pool.symbol1);
+  const network = (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_HEDERA_NETWORK) || "testnet";
+  useEffect(() => {
+    if (!accountId) {
+      setAccountEvmAlias(null);
+      return;
+    }
+    let cancelled = false;
+    getAccountEvmAddress(accountId, network).then((evm) => {
+      if (!cancelled) setAccountEvmAlias(evm ?? null);
+    });
+    return () => { cancelled = true; };
+  }, [accountId, network]);
+
+  const publicClient = useMemo(
+    () =>
+      createPublicClient({
+        chain: HEDERA_TESTNET,
+        transport: http(getRpcUrl()),
+      }),
+    [],
+  );
+
+  // Resolved tokenId: modal input or pool's tokenId — we fetch this position from chain
+  const resolvedTokenId = tokenId.trim() || (pool.tokenId != null ? String(pool.tokenId) : null);
+  const { data: onChain, loading: onChainLoading } = usePositionOnChain(resolvedTokenId, {
+    enabled: !!resolvedTokenId && !!pool,
+  });
+  const onChainLiquidity = onChain?.liquidity != null ? BigInt(onChain.liquidity) : null;
+
+  useEffect(() => {
+    if (!pool.poolId || !publicClient) {
+      setSqrtPriceX96(null);
+      return;
+    }
+    const poolIdHex =
+      pool.poolId.startsWith("0x") ? pool.poolId : `0x${pool.poolId}`;
+    const poolIdBytes32 =
+      poolIdHex.length === 66
+        ? (poolIdHex as `0x${string}`)
+        : (`0x${(poolIdHex.slice(2) || "").padEnd(64, "0")}` as `0x${string}`);
+    publicClient
+      .readContract({
+        address: getPoolManagerAddress() as `0x${string}`,
+        abi: PoolManagerAbi,
+        functionName: "getPoolState",
+        args: [poolIdBytes32],
+      })
+      .then((value: unknown) => {
+        const result = value as [boolean, bigint, number];
+        setSqrtPriceX96(result[1]);
+      })
+      .catch(() => setSqrtPriceX96(null));
+  }, [pool.poolId, publicClient]);
+
+  // HTS tokens use 4 decimals; prefer pool/API decimals, else 4
+  const decimals0 = pool.decimals0 ?? 4;
+  const decimals1 = pool.decimals1 ?? 4;
   const { balanceFormatted: balance0 } = useTokenBalance(
     pool.currency0,
     accountId,
@@ -64,30 +129,59 @@ export function RemoveLiquidityModal({
   const positionManagerAddress = getPositionManagerAddress();
   const hasSelection = percent > 0;
 
-  let liquidityAmount = "";
-  let liquidityWei: bigint = 0n;
-  try {
-    const total = BigInt(positionLiquidity.trim() || "0");
-    if (total > 0n && percent > 0) {
-      liquidityWei = (total * BigInt(percent)) / 100n;
-      liquidityAmount = liquidityWei.toString();
-    }
-  } catch {
-    liquidityWei = 0n;
-    liquidityAmount = "";
-  }
+  // Use only on-chain liquidity as source of truth
+  const liquidityWei =
+    onChainLiquidity != null && percent > 0
+      ? (onChainLiquidity * BigInt(percent)) / 100n
+      : 0n;
+  const liquidityAmount = liquidityWei > 0n ? liquidityWei.toString() : "";
 
-  // Estimate amounts to receive based on percent
-  const bal0Num = parseFloat(balance0) || 0;
-  const bal1Num = parseFloat(balance1) || 0;
-  const estimated0 =
-    bal0Num > 0
-      ? ((bal0Num * percent) / 100).toFixed(decimals0 > 6 ? 6 : decimals0)
-      : "0";
-  const estimated1 =
-    bal1Num > 0
-      ? ((bal1Num * percent) / 100).toFixed(decimals1 > 6 ? 6 : decimals1)
-      : "0";
+  const tickLower = onChain?.tickLower ?? pool.tickLower;
+  const tickUpper = onChain?.tickUpper ?? pool.tickUpper;
+  const hasTicks =
+    typeof tickLower === "number" && typeof tickUpper === "number";
+
+  const { estimated0, estimated1, estimatesReady } = useMemo(() => {
+    if (
+      !sqrtPriceX96 ||
+      !hasTicks ||
+      liquidityWei <= 0n
+    ) {
+      return { estimated0: "—", estimated1: "—", estimatesReady: false };
+    }
+    try {
+      const sqrtPA = getSqrtPriceAtTick(tickLower!);
+      const sqrtPB = getSqrtPriceAtTick(tickUpper!);
+      const { amount0, amount1 } = amountsForLiquidity(
+        sqrtPriceX96,
+        sqrtPA,
+        sqrtPB,
+        liquidityWei,
+      );
+      const e0 = formatUnits(amount0, decimals0);
+      const e1 = formatUnits(amount1, decimals1);
+      const toDisplay = (s: string, d: number) => {
+        const n = parseFloat(s);
+        if (Number.isNaN(n)) return "0";
+        return n.toFixed(Math.min(d, 6));
+      };
+      return {
+        estimated0: toDisplay(e0, decimals0),
+        estimated1: toDisplay(e1, decimals1),
+        estimatesReady: true,
+      };
+    } catch {
+      return { estimated0: "—", estimated1: "—", estimatesReady: false };
+    }
+  }, [
+    sqrtPriceX96,
+    hasTicks,
+    tickLower,
+    tickUpper,
+    liquidityWei,
+    decimals0,
+    decimals1,
+  ]);
 
   const removeLiquidity = useCallback(async () => {
     if (!positionManagerAddress) {
@@ -103,12 +197,12 @@ export function RemoveLiquidityModal({
       setError("HashPack not initialized.");
       return;
     }
-    if (!tokenId.trim()) {
+    if (!resolvedTokenId) {
       setError("Enter the position token ID.");
       return;
     }
-    if (!positionLiquidity.trim()) {
-      setError("Enter your position total liquidity.");
+    if (onChainLiquidity == null) {
+      setError("Load position from chain first.");
       return;
     }
     if (liquidityWei <= 0n) {
@@ -121,15 +215,15 @@ export function RemoveLiquidityModal({
     setTxHash(null);
 
     try {
-      const posTokenId = BigInt(tokenId.trim());
+      const posTokenId = BigInt(resolvedTokenId);
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
+      // Partial (10%, 25%, 50%, 75%): only DECREASE_LIQUIDITY — position keeps the rest.
+      // 100%: BURN_POSITION — removes all remaining liquidity and burns the NFT.
       let unlockData: `0x${string}`;
       if (percent === 100) {
-        // Use BURN_POSITION to fully remove and burn the NFT
         unlockData = encodeUnlockDataBurn(posTokenId, 0n, 0n);
       } else {
-        // Use DECREASE_LIQUIDITY for partial removal
         unlockData = encodeUnlockDataDecrease(posTokenId, liquidityWei, 0n, 0n);
       }
 
@@ -139,6 +233,8 @@ export function RemoveLiquidityModal({
         functionName: "modifyLiquidities",
         args: [unlockData, deadline],
       }) as `0x${string}`;
+
+      console.log("[RemoveLiquidity] tokenId:", posTokenId.toString(), "percent:", percent, "liquidityWei:", liquidityWei.toString(), "unlockData (first 80 chars):", unlockData.slice(0, 80) + "...");
 
       const txId = await hederaContractMulticall({
         hashConnect: hc,
@@ -151,9 +247,13 @@ export function RemoveLiquidityModal({
       setTxHash(txId);
 
       // If 100% removal (burn), delete position record from DynamoDB
-      if (percent === 100 && pool.tokenId != null) {
+      if (percent === 100) {
         try {
-          const positionId = `${pool.currency0}-${pool.currency1}-${pool.fee}-${pool.tickSpacing}-${pool.hooks ?? "0x0000000000000000000000000000000000000000"}-${pool.tokenId}`;
+          // DynamoDB positions table stores positionId as String(tokenId).
+          const positionId =
+            (resolvedTokenId ?? (onChain?.tokenId != null ? String(onChain.tokenId) : "")) ||
+            "";
+          if (!positionId) return;
           await fetch(
             `/api/positions?positionId=${encodeURIComponent(positionId)}`,
             {
@@ -173,8 +273,9 @@ export function RemoveLiquidityModal({
     positionManagerAddress,
     pool,
     percent,
-    tokenId,
-    positionLiquidity,
+    resolvedTokenId,
+    onChainLiquidity,
+    onChain?.tokenId,
     liquidityWei,
     isConnected,
     accountId,
@@ -185,23 +286,25 @@ export function RemoveLiquidityModal({
     ? "Connect wallet"
     : !hasSelection
       ? "Select amount"
-      : !tokenId.trim()
+      : !resolvedTokenId
         ? "Enter position token ID"
-        : !positionLiquidity.trim()
-          ? "Enter total position liquidity"
-          : liquidityWei <= 0n
-            ? "Liquidity to remove is too low"
-            : pending
-              ? "Removing…"
-              : percent === 100
-                ? "Remove all & burn position"
-                : `Remove ${percent}% liquidity`;
+        : onChainLoading
+          ? "Loading position…"
+          : onChainLiquidity == null
+            ? "Position not found on chain"
+            : liquidityWei <= 0n
+              ? "Liquidity to remove is too low"
+              : pending
+                ? "Removing…"
+                : percent === 100
+                  ? "Remove all & burn position"
+                  : `Remove ${percent}% liquidity`;
 
   const canSubmit =
     isConnected &&
     hasSelection &&
-    !!tokenId.trim() &&
-    !!positionLiquidity.trim() &&
+    !!resolvedTokenId &&
+    onChainLiquidity != null &&
     liquidityWei > 0n &&
     !pending &&
     !!positionManagerAddress;
@@ -225,6 +328,59 @@ export function RemoveLiquidityModal({
           In range
         </span>
       </div>
+
+      {/* Position owner vs your account (helps debug Unauthorized) */}
+      {onChain?.owner != null && isConnected && accountId && (
+        <div className="rounded-xl border border-white/[0.06] bg-surface-2/30 p-3">
+          <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1.5">
+            Who can remove
+          </p>
+          <p className="text-xs text-text-secondary font-mono break-all">
+            On-chain owner: {onChain.owner}
+          </p>
+          <p className="text-xs text-text-secondary font-mono break-all mt-1">
+            You: {accountId} → long-zero: {accountIdToLongZero(accountId) ?? "—"}
+          </p>
+          {accountEvmAlias && (
+            <p className="text-xs text-text-secondary font-mono break-all mt-0.5">
+              Your ECDSA address (tx sender): {accountEvmAlias}
+            </p>
+          )}
+          {(() => {
+            const owner = onChain.owner.toLowerCase();
+            const longZero = (accountIdToLongZero(accountId) ?? "").toLowerCase();
+            const evmAlias = (accountEvmAlias ?? "").toLowerCase();
+            const ownerIsLongZero = owner === longZero;
+            const ownerIsEvmAlias = evmAlias && owner === evmAlias;
+            if (ownerIsEvmAlias) {
+              return (
+                <p className="text-xs text-success mt-2">
+                  You can remove — owner matches your tx sender (ECDSA).
+                </p>
+              );
+            }
+            if (ownerIsLongZero && evmAlias) {
+              return (
+                <p className="text-xs text-amber-500 mt-2">
+                  Remove will fail: Hedera sends txs from your ECDSA address, but this position is owned by your long-zero. New positions created from this app now use your ECDSA address so remove works. This position was created with the old flow; use the same sender that created it, or add new liquidity and remove that instead.
+                </p>
+              );
+            }
+            if (owner !== longZero && !ownerIsEvmAlias) {
+              return (
+                <p className="text-xs text-amber-500 mt-2">
+                  Only the on-chain owner can remove. If you see Unauthorized, use the wallet that created this position.
+                </p>
+              );
+            }
+            return (
+              <p className="text-xs text-text-tertiary mt-2">
+                If you get Unauthorized, Hedera may be using your ECDSA address as sender. New positions use that address so remove works.
+              </p>
+            );
+          })()}
+        </div>
+      )}
 
       {/* Current balances */}
       <div className="rounded-xl border border-white/[0.06] bg-surface-2/30 p-4">
@@ -292,6 +448,11 @@ export function RemoveLiquidityModal({
           <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
             Estimated to receive
           </p>
+          {!estimatesReady && (
+            <p className="text-xs text-text-tertiary">
+              — means the app couldn’t estimate yet (needs on-chain pool price + position range).
+            </p>
+          )}
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-sm text-text-secondary">
@@ -315,7 +476,7 @@ export function RemoveLiquidityModal({
         </div>
       )}
 
-      {/* Position token ID + liquidity inputs */}
+      {/* Position token ID + on-chain liquidity (read-only from chain) */}
       {hasSelection && (
         <div className="space-y-3">
           <div className="space-y-1.5">
@@ -333,25 +494,24 @@ export function RemoveLiquidityModal({
               }}
             />
             <p className="text-xs text-text-tertiary">
-              The NFT token ID of your position from the mint transaction
+              NFT token ID — liquidity is loaded from chain
             </p>
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-text-secondary uppercase tracking-wider">
-              Position total liquidity
+              Position liquidity (on-chain)
             </label>
-            <input
-              type="text"
-              className="w-full px-3 py-2.5 bg-surface-2 border border-white/[0.08] rounded-xl text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-colors font-mono"
-              placeholder="e.g. 100000000"
-              value={positionLiquidity}
-              onChange={(e) => {
-                setPositionLiquidity(e.target.value);
-                setError(null);
-              }}
-            />
+            <div className="w-full px-3 py-2.5 bg-surface-2/80 border border-white/[0.08] rounded-xl text-sm font-mono text-text-primary">
+              {onChainLoading
+                ? "Loading…"
+                : onChainLiquidity != null
+                  ? onChainLiquidity.toString()
+                  : resolvedTokenId
+                    ? "Not found"
+                    : "—"}
+            </div>
             <p className="text-xs text-text-tertiary">
-              Multicall will remove{" "}
+              Removing{" "}
               <span className="font-mono text-text-secondary">
                 {liquidityAmount || "0"}
               </span>{" "}

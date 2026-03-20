@@ -397,7 +397,12 @@ export function SwapCard({ selectedPool }: SwapCardProps) {
             : useMatched
               ? (mp.tickSpacing ?? feeTierToTickSpacing(fee))
               : swapTickSpacing;
-          const poolKey = { currency0, currency1, fee, tickSpacing };
+          const hooks = useSelected
+            ? (selectedPool.hooks ?? HOOKS_ZERO)
+            : useMatched
+              ? (mp.hooks ?? HOOKS_ZERO)
+              : HOOKS_ZERO;
+          const poolKey = { currency0, currency1, fee, tickSpacing, hooks };
 
           if (swapMode === "exactIn") {
             let amountInWei: bigint;

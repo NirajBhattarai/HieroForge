@@ -7,7 +7,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "remove-liquidity": "tsx scripts/removeLiquidity.ts",
+    "remove-liquidity-periphery": "PERIPHERY_ENV=../hieroforge-periphery/.env REMOVE_UNTIL_SUCCESS=1 tsx scripts/removeLiquidity.ts",
+    "parse-tx": "tsx scripts/parseTx.ts",
+    "parse-failed-tx": "tsx scripts/parseFailedTx.ts",
+    "position-owner": "tsx scripts/positionOwner.ts",
+    "add-then-remove": "tsx scripts/addThenRemove.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.700.0",

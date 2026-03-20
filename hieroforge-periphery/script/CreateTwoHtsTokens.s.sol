@@ -5,7 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {HTS_ADDRESS} from "hedera-forking/HtsSystemContract.sol";
 import {IHederaTokenService} from "hedera-forking/IHederaTokenService.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 
 /// @notice Create two HTS fungible tokens for use as pool currencies (step 2 HTS path).
 /// Run with --ffi --skip-simulation for testnet:
@@ -13,7 +13,7 @@ import {htsSetup} from "hedera-forking/htsSetup.sol";
 /// Then run scripts/step-2-hts.sh to parse output and update .env with CURRENCY0_ADDRESS, CURRENCY1_ADDRESS, AMOUNT0, AMOUNT1.
 contract CreateTwoHtsTokensScript is Script {
     function run() external {
-        htsSetup();
+        Hsc.htsSetup();
 
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address signer = vm.addr(pk);

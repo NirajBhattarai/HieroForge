@@ -11,7 +11,7 @@ import {Currency} from "hieroforge-core/types/Currency.sol";
 import {ModifyLiquidityParams} from "hieroforge-core/types/ModifyLiquidityParams.sol";
 import {TickMath} from "hieroforge-core/libraries/TickMath.sol";
 import {IERC20} from "hedera-forking/IERC20.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 import {IHederaTokenService} from "hedera-forking/IHederaTokenService.sol";
 import {HederaResponseCodes} from "hedera-forking/HederaResponseCodes.sol";
 
@@ -44,7 +44,7 @@ contract V4RouterMultiHopTest is Test {
         manager = new PoolManager();
         router = new Router(manager);
 
-        htsSetup();
+        Hsc.htsSetup();
         vm.deal(address(this), 1 ether);
         address hts = address(0x167);
 

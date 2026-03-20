@@ -5,7 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {HTS_ADDRESS} from "hedera-forking/HtsSystemContract.sol";
 import {IHederaTokenService} from "hedera-forking/IHederaTokenService.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 
 /**
  * Create an HTS fungible token on Hedera testnet.
@@ -21,7 +21,7 @@ import {htsSetup} from "hedera-forking/htsSetup.sol";
  */
 contract CreateHtsTokenScript is Script {
     function run() external returns (address signer, int64 responseCode, address tokenAddress) {
-        htsSetup();
+        Hsc.htsSetup();
 
         uint256 PRIVATE_KEY = vm.envUint("PRIVATE_KEY");
         signer = vm.addr(PRIVATE_KEY);

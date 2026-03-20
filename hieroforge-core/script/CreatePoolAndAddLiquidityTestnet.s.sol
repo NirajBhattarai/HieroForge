@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 import {IPoolManager} from "../src/interfaces/IPoolManager.sol";
 import {Router} from "../test/utils/Router.sol";
 import {PoolKey} from "../src/types/PoolKey.sol";
@@ -33,7 +33,7 @@ contract CreatePoolAndAddLiquidityTestnetScript is Script {
     uint160 internal constant SQRT_PRICE_1_1 = 79228162514264337593543950336;
 
     function run() external {
-        htsSetup(); // Required for HTS token transfers (0x167) in simulation
+        Hsc.htsSetup(); // Required for HTS token transfers (0x167) in simulation
         address managerAddr = vm.envAddress("POOL_MANAGER_ADDRESS");
         address routerAddr = vm.envAddress("ROUTER_ADDRESS");
         address c0 = vm.envAddress("CURRENCY0_ADDRESS");

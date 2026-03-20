@@ -62,6 +62,40 @@ export const PositionManagerAbi = [
     outputs: [{ name: "", type: "uint128", internalType: "uint128" }],
     stateMutability: "view",
   },
+  {
+    type: "function",
+    name: "positionInfo",
+    inputs: [{ name: "tokenId", type: "uint256", internalType: "uint256" }],
+    outputs: [{ name: "", type: "uint256", internalType: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "poolKeys",
+    inputs: [{ name: "", type: "bytes25", internalType: "bytes25" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        internalType: "struct PoolKey",
+        components: [
+          { name: "currency0", type: "address", internalType: "address" },
+          { name: "currency1", type: "address", internalType: "address" },
+          { name: "fee", type: "uint24", internalType: "uint24" },
+          { name: "tickSpacing", type: "int24", internalType: "int24" },
+          { name: "hooks", type: "address", internalType: "address" },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "ownerOf",
+    inputs: [{ name: "tokenId", type: "uint256", internalType: "uint256" }],
+    outputs: [{ name: "", type: "address", internalType: "address" }],
+    stateMutability: "view",
+  },
 ] as Abi;
 
 // V4 PositionManager action bytes

@@ -11,6 +11,8 @@ Periphery contracts for **HieroForge**: they help users **swap tokens** and **ma
 
 Position NFTs use standard `approve` / `setApprovalForAll` only. EIP-712 has been removed (not supported on Hedera).
 
+**HieroForgeV4Position** is an HTS NFT collection for V4 positions: create collection + mint only, **no royalties** (0% on secondary). Deploy via `DeployHieroForgeV4Position.s.sol` or `./scripts/deploy-hieroforge-v4-position.sh`; requires Hedera ECDSA key and `--ffi --skip-simulation` for HTS precompile.
+
 Deploy **hieroforge-core** first (PoolManager and any pools). Then deploy periphery contracts that point at the core's PoolManager address. The UI or scripts should use periphery to perform token swaps.
 
 ## Folder Structure
@@ -30,6 +32,8 @@ hieroforge-periphery/
 │   │                                       #     MINT_POSITION, INCREASE_LIQUIDITY,
 │   │                                       #     DECREASE_LIQUIDITY, BURN_POSITION
 │   │                                       #     Inherits Multicall_v4 for atomic batching
+│   ├── HieroForgeV4Position.sol            #   HTS NFT collection for V4 positions (no royalties)
+│   │                                       #     createCollection(), mintNFT(to); owner-only
 │   ├── V4Quoter.sol                        #   Off-chain quoter (revert-and-parse pattern)
 │   │                                       #     quoteExactInputSingle, quoteExactOutputSingle
 │   │                                       #     quoteExactInput, quoteExactOutput (multi-hop)
@@ -67,6 +71,7 @@ hieroforge-periphery/
 │   └── types/
 │       └── PositionInfo.sol                #   Bit-packed position: poolId + ticks + subscriber
 ├── test/                                   # Foundry test suite
+│   ├── HieroForgeV4Position.t.sol          #   HieroForgeV4Position: deploy, createCollection, mint, onlyOwner (run with --fork-url testnet --ffi)
 │   ├── Quoter.t.sol                        #   V4Quoter: single-hop quotes, edge cases
 │   ├── V4RouterSwapTest.sol                #   UniversalRouter: exact-in/out single-hop swaps
 │   ├── V4RouterMultiHopTest.sol            #   Multi-hop swaps (A→B→C), settlement actions
@@ -77,10 +82,9 @@ hieroforge-periphery/
 │   │   ├── QuoterTestDeployers.sol         #   HTS-based test setup (PoolManager + tokens + pool)
 │   │   ├── QuoterTestDeployersMock.sol     #   MockERC20-based setup (no HTS node needed)
 │   │   └── MockERC20.sol                   #   Minimal ERC-20 mock
-│   └── mocks/
-│       └── MockHTS.sol                     #   Mock HTS precompile (etched at 0x167)
 ├── script/                                 # Foundry deploy/setup scripts
 │   ├── DeployPositionManager.s.sol         #   Deploy PositionManager(poolManager)
+│   ├── DeployHieroForgeV4Position.s.sol    #   Deploy HieroForgeV4Position(poolManager, operatorAccount) + createCollection (env: POOL_MANAGER; --ffi --skip-simulation)
 │   ├── DeployUniversalRouter.s.sol         #   Deploy UniversalRouter(poolManager, positionManager)
 │   ├── DeployQuoter.s.sol                  #   Deploy V4Quoter(poolManager)
 │   ├── AddLiquidityPositionManager.s.sol   #   Multicall: initializePool + modifyLiquidities
@@ -92,6 +96,7 @@ hieroforge-periphery/
 │   └── DeployAndAddLiquidityLocal.s.sol    #   One-shot local: deploy all + mint position
 ├── scripts/                                # Shell script wrappers
 │   ├── deploy.sh                           #   Full-stack deploy (pool-manager, tokens, PM, etc.)
+│   ├── deploy-hieroforge-v4-position.sh     #   Deploy HieroForgeV4Position (HTS NFT, no royalties) to testnet (--ffi --skip-simulation)
 │   ├── modify.sh                           #   Multicall: initializePool + modifyLiquidities
 │   ├── transfer-to-position-manager.sh     #   Transfer tokens to PositionManager
 │   ├── transfer-hts.sh                     #   Transfer HTS tokens to any recipient
@@ -154,23 +159,22 @@ Same toolchain and libs as the core:
 | What   | Command |
 |--------|--------|
 | Build  | `forge build` |
-| Test   | `forge test` |
-| Quoter tests | `forge test --match-contract QuoterTest --ffi` |
-| Quoter tests vs local Hedera node | `forge test --match-contract QuoterTest --ffi --fork-url http://localhost:7546` |
-| V4Router swap tests (HTS) | `forge test --match-contract V4RouterSwapTest --ffi` |
-| V4Router swap tests vs local Hedera node | `forge test --match-contract V4RouterSwapTest --ffi --fork-url http://localhost:7546` |
+| Test (all vs Hedera testnet fork) | `forge test --fork-url testnet --ffi` |
+| Test vs local Hedera node | `forge test --fork-url http://localhost:7546 --ffi` |
 | Format | `forge fmt`   |
 
 ## Config
 
 `foundry.toml` matches **hieroforge-core** (Cancun EVM, via_ir, optimizer, Hedera RPC endpoints). Use the same `--rpc-url` (e.g. testnet or local) as the core when deploying or calling periphery.
 
-## HTS and local node
+## HTS and fork
 
-Quoter tests use **MockERC20** by default so they pass without a Hedera node. To run against a **local Hedera (Hiero) node**, use:
+All tests use **hedera-forking** `htsSetup()` so HTS at `0x167` is available. Run tests against the **Hedera testnet fork** (or local node) with `--fork-url` and `--ffi`:
 
-- `forge test --match-contract QuoterTest --fork-url http://localhost:7546`
-For tests that create **HTS tokens** (e.g. `htsSetup()` and `createFungibleToken`), run the HTS tests from **hieroforge-core** (e.g. `cd hieroforge-core && forge test --match-test test_addLiquidity_htsHts --ffi`). The periphery Quoter is compatible with pools that use HTS tokens created on the node.
+- **Testnet fork**: `forge test --fork-url testnet --ffi` (or `--fork-url https://testnet.hashio.io/api --ffi`)
+- **Local Hedera node**: `forge test --fork-url http://localhost:7546 --ffi`
+
+For more HTS token tests (e.g. `createFungibleToken`), run **hieroforge-core** tests: `cd hieroforge-core && forge test --match-test test_addLiquidity_htsHts --ffi`.
 
 ## Scripts
 
@@ -180,6 +184,7 @@ Set `PRIVATE_KEY` (or `LOCAL_NODE_OPERATOR_PRIVATE_KEY` for local Hedera) in `.e
 |--------|---------------|
 | `./scripts/verify-contracts.sh` | Verify Quoter / PositionManager (Multicall) on Hedera (HashScan API). Usage: `./scripts/verify-contracts.sh [Quoter\|PositionManager\|Multicall\|all]` |
 | `./scripts/deploy.sh [target]` | Deploy **pool-manager** \| **tokens** \| **position-manager** (with multicall) \| **all** (default). Writes addresses/amounts to `.env`. |
+| `./scripts/deploy-hieroforge-v4-position.sh` | Deploy **HieroForgeV4Position** (HTS NFT collection for V4 positions, no royalties). Requires `PRIVATE_KEY` or `HEDERA_PRIVATE_KEY` in `.env`; optional `OPERATOR_ACCOUNT`, `HTS_VALUE`, `HTS_CREATE_GAS_LIMIT`. Use `--ffi --skip-simulation`. |
 | `./scripts/transfer-to-position-manager.sh` | Transfer AMOUNT0 and AMOUNT1 to PositionManager in one tx. **On testnet run this first**, then `modify.sh`. |
 | `./scripts/modify.sh` | **Multicall**: initialize pool and add liquidity in one tx (initializePool + modifyLiquidities). Run after deploy. On testnet expects tokens already sent (run transfer script first). |
 
@@ -242,8 +247,34 @@ RPC_URL=http://localhost:7546 LOCAL_HTS_EMULATION=1 ./scripts/modify.sh
 - **Local Hedera**: use an Alias ECDSA key from `hedera generate-accounts` (see [Hedera local node](https://docs.hedera.com/hedera/tutorials/local-node/how-to-set-up-a-hedera-local-node)); set `PRIVATE_KEY` or `LOCAL_NODE_OPERATOR_PRIVATE_KEY` in `.env`.
 - **Testnet**: `modify.sh` uses `--ffi --skip-simulation` when not on localhost.
 
+## Troubleshooting: Contract Verification and Address Sync
+
+### Problem: Verification Bytecode Mismatch
+If you encounter a bytecode mismatch when verifying HieroForgeV4Position (or any contract) on HashScan, follow these steps:
+
+1. **Full Clean and Rebuild**: Run `forge clean && forge build --extra-output-files metadata` in both `hieroforge-core` and `hieroforge-periphery` to ensure all dependencies and build artifacts are fresh.
+2. **Redeploy the Contract**: Use the deployment script (e.g. `./scripts/deploy-hieroforge-v4-position.sh`) to deploy a new instance. This will generate a new contract address.
+3. **Update .env Files**: Copy the new contract address from the deployment output to both `hieroforge-periphery/.env` and `ui/.env` (as `NEXT_PUBLIC_HIEROFORGE_V4_POSITION_ADDRESS`).
+4. **Re-run Verification**: Run `./scripts/verify-contracts.sh HieroForgeV4Position` to verify the new deployment. Verification should now succeed if the bytecode matches.
+
+**Root Cause:**
+- The mismatch was due to verifying an old contract address after a new deployment, or stale build artifacts. Always ensure the address in `.env` matches the latest deployment and that all contracts are rebuilt before verification.
+
+**Summary:**
+- Always clean, rebuild, redeploy, and update addresses in all relevant `.env` files before verifying. This keeps all environments in sync and avoids bytecode mismatches.
+
 ## Usage
 
 1. Deploy **hieroforge-core** (PoolManager and optionally create pools).
 2. Deploy periphery contracts, passing the core PoolManager address.
 3. In the UI or scripts, call periphery to execute swaps; periphery will call the core to perform the swap and handle token settlement.
+
+## Syncing Contract Addresses to UI
+
+After deploying or verifying contracts, update the UI's `.env` file with the latest contract addresses. The UI uses **`NEXT_PUBLIC_POSITION_MANAGER_ADDRESS`** for liquidity and position NFTs (standard `PositionManager`). Example:
+
+```
+NEXT_PUBLIC_POSITION_MANAGER_ADDRESS=<latest deployed PositionManager address>
+```
+
+Repeat for `NEXT_PUBLIC_POOL_MANAGER_ADDRESS`, `NEXT_PUBLIC_QUOTER_ADDRESS`, `NEXT_PUBLIC_ROUTER_ADDRESS`, etc., as needed.

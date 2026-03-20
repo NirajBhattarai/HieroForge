@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 import {
     TokenCreateContract
 } from "hedera-smart-contracts/system-contracts/hedera-token-service/examples/token-create/TokenCreateContract.sol";
@@ -17,7 +17,7 @@ contract CreateHtsTokenTest is Test {
     uint256 public treasuryPk;
 
     function setUp() public {
-        htsSetup();
+        Hsc.htsSetup();
         treasuryPk = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80; // Anvil default #0
         treasury = vm.addr(treasuryPk);
         vm.deal(treasury, 100 ether);

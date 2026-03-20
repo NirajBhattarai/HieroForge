@@ -1,0 +1,913 @@
+{
+  "compiler": {
+    "version": "0.8.33+commit.64118f21"
+  },
+  "language": "Solidity",
+  "output": {
+    "abi": [
+      {
+        "inputs": [
+          {
+            "internalType": "contract IPoolManager",
+            "name": "_poolManager",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "_operatorAccount",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "constructor"
+      },
+      {
+        "inputs": [],
+        "type": "error",
+        "name": "CollectionAlreadyCreated"
+      },
+      {
+        "inputs": [],
+        "type": "error",
+        "name": "CollectionNotCreated"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "deadline",
+            "type": "uint256"
+          }
+        ],
+        "type": "error",
+        "name": "DeadlinePassed"
+      },
+      {
+        "inputs": [],
+        "type": "error",
+        "name": "HtsCreationFailed"
+      },
+      {
+        "inputs": [],
+        "type": "error",
+        "name": "HtsMintFailed"
+      },
+      {
+        "inputs": [],
+        "type": "error",
+        "name": "InputLengthMismatch"
+      },
+      {
+        "inputs": [],
+        "type": "error",
+        "name": "NotPoolManager"
+      },
+      {
+        "inputs": [],
+        "type": "error",
+        "name": "NotPositionOwner"
+      },
+      {
+        "inputs": [],
+        "type": "error",
+        "name": "OnlyOwner"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint128",
+            "name": "amount0",
+            "type": "uint128"
+          },
+          {
+            "internalType": "uint128",
+            "name": "amount1",
+            "type": "uint128"
+          },
+          {
+            "internalType": "uint128",
+            "name": "limit0",
+            "type": "uint128"
+          },
+          {
+            "internalType": "uint128",
+            "name": "limit1",
+            "type": "uint128"
+          }
+        ],
+        "type": "error",
+        "name": "SlippageCheckFailed"
+      },
+      {
+        "inputs": [],
+        "type": "error",
+        "name": "TokenDoesNotExist"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "action",
+            "type": "uint256"
+          }
+        ],
+        "type": "error",
+        "name": "UnsupportedAction"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "token",
+            "type": "address",
+            "indexed": true
+          }
+        ],
+        "type": "event",
+        "name": "NFTCollectionCreated",
+        "anonymous": false
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "to",
+            "type": "address",
+            "indexed": true
+          },
+          {
+            "internalType": "uint256",
+            "name": "tokenId",
+            "type": "uint256",
+            "indexed": true
+          }
+        ],
+        "type": "event",
+        "name": "NFTMinted",
+        "anonymous": false
+      },
+      {
+        "inputs": [],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "HTS_NAME",
+        "outputs": [
+          {
+            "internalType": "string",
+            "name": "",
+            "type": "string"
+          }
+        ]
+      },
+      {
+        "inputs": [],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "HTS_SYMBOL",
+        "outputs": [
+          {
+            "internalType": "string",
+            "name": "",
+            "type": "string"
+          }
+        ]
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "to",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "tokenId",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function",
+        "name": "approve"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "account",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "balanceOf",
+        "outputs": [
+          {
+            "internalType": "uint256",
+            "name": "",
+            "type": "uint256"
+          }
+        ]
+      },
+      {
+        "inputs": [],
+        "stateMutability": "payable",
+        "type": "function",
+        "name": "createCollection"
+      },
+      {
+        "inputs": [],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "htsTokenAddress",
+        "outputs": [
+          {
+            "internalType": "address",
+            "name": "",
+            "type": "address"
+          }
+        ]
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "struct PoolKey",
+            "name": "key",
+            "type": "tuple",
+            "components": [
+              {
+                "internalType": "Currency",
+                "name": "currency0",
+                "type": "address"
+              },
+              {
+                "internalType": "Currency",
+                "name": "currency1",
+                "type": "address"
+              },
+              {
+                "internalType": "uint24",
+                "name": "fee",
+                "type": "uint24"
+              },
+              {
+                "internalType": "int24",
+                "name": "tickSpacing",
+                "type": "int24"
+              },
+              {
+                "internalType": "address",
+                "name": "hooks",
+                "type": "address"
+              }
+            ]
+          },
+          {
+            "internalType": "uint160",
+            "name": "sqrtPriceX96",
+            "type": "uint160"
+          }
+        ],
+        "stateMutability": "payable",
+        "type": "function",
+        "name": "initializePool",
+        "outputs": [
+          {
+            "internalType": "int24",
+            "name": "",
+            "type": "int24"
+          }
+        ]
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "to",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function",
+        "name": "mintNFT",
+        "outputs": [
+          {
+            "internalType": "uint256",
+            "name": "",
+            "type": "uint256"
+          }
+        ]
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "bytes",
+            "name": "unlockData",
+            "type": "bytes"
+          },
+          {
+            "internalType": "uint256",
+            "name": "deadline",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "payable",
+        "type": "function",
+        "name": "modifyLiquidities"
+      },
+      {
+        "inputs": [],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "msgSender",
+        "outputs": [
+          {
+            "internalType": "address",
+            "name": "",
+            "type": "address"
+          }
+        ]
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "bytes[]",
+            "name": "data",
+            "type": "bytes[]"
+          }
+        ],
+        "stateMutability": "payable",
+        "type": "function",
+        "name": "multicall",
+        "outputs": [
+          {
+            "internalType": "bytes[]",
+            "name": "results",
+            "type": "bytes[]"
+          }
+        ]
+      },
+      {
+        "inputs": [],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "nextTokenId",
+        "outputs": [
+          {
+            "internalType": "uint256",
+            "name": "",
+            "type": "uint256"
+          }
+        ]
+      },
+      {
+        "inputs": [],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "operatorAccount",
+        "outputs": [
+          {
+            "internalType": "address",
+            "name": "",
+            "type": "address"
+          }
+        ]
+      },
+      {
+        "inputs": [],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "owner",
+        "outputs": [
+          {
+            "internalType": "address",
+            "name": "",
+            "type": "address"
+          }
+        ]
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "tokenId",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "ownerOf",
+        "outputs": [
+          {
+            "internalType": "address",
+            "name": "",
+            "type": "address"
+          }
+        ]
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "bytes25",
+            "name": "poolId",
+            "type": "bytes25"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "poolKeys",
+        "outputs": [
+          {
+            "internalType": "Currency",
+            "name": "currency0",
+            "type": "address"
+          },
+          {
+            "internalType": "Currency",
+            "name": "currency1",
+            "type": "address"
+          },
+          {
+            "internalType": "uint24",
+            "name": "fee",
+            "type": "uint24"
+          },
+          {
+            "internalType": "int24",
+            "name": "tickSpacing",
+            "type": "int24"
+          },
+          {
+            "internalType": "address",
+            "name": "hooks",
+            "type": "address"
+          }
+        ]
+      },
+      {
+        "inputs": [],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "poolManager",
+        "outputs": [
+          {
+            "internalType": "contract IPoolManager",
+            "name": "",
+            "type": "address"
+          }
+        ]
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "tokenId",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "positionInfo",
+        "outputs": [
+          {
+            "internalType": "PositionInfo",
+            "name": "",
+            "type": "uint256"
+          }
+        ]
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "tokenId",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "positionLiquidity",
+        "outputs": [
+          {
+            "internalType": "uint128",
+            "name": "",
+            "type": "uint128"
+          }
+        ]
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "bytes",
+            "name": "data",
+            "type": "bytes"
+          }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function",
+        "name": "unlockCallback",
+        "outputs": [
+          {
+            "internalType": "bytes",
+            "name": "",
+            "type": "bytes"
+          }
+        ]
+      }
+    ],
+    "devdoc": {
+      "kind": "dev",
+      "methods": {
+        "initializePool((address,address,uint24,int24,address),uint160)": {
+          "details": "If the pool is already initialized, this function will not revert and just return type(int24).max",
+          "params": {
+            "key": "The PoolKey of the pool to initialize",
+            "sqrtPriceX96": "The initial starting price of the pool, expressed as a sqrtPriceX96"
+          },
+          "returns": {
+            "_0": "The current tick of the pool, or type(int24).max if the pool creation failed, or the pool already existed"
+          }
+        },
+        "modifyLiquidities(bytes,uint256)": {
+          "details": "This is the standard entrypoint for the PositionManager",
+          "params": {
+            "deadline": "is the deadline for the batched actions to be executed",
+            "unlockData": "is an encoding of actions, and parameters for those actions"
+          }
+        },
+        "multicall(bytes[])": {
+          "details": "The `msg.value` is passed onto all subcalls, even if a previous subcall has consumed the ether. Subcalls can instead use `address(this).balance` to see the available ETH, and consume it using {value: x}.",
+          "params": {
+            "data": "The encoded function data for each of the calls to make to this contract"
+          },
+          "returns": {
+            "results": "The results from each of the calls passed in via data"
+          }
+        },
+        "unlockCallback(bytes)": {
+          "details": "We force the onlyPoolManager modifier by exposing a virtual function after the onlyPoolManager check.",
+          "params": {
+            "data": "Data passed to unlock()"
+          },
+          "returns": {
+            "_0": "Return value from the callback"
+          }
+        }
+      },
+      "version": 1
+    },
+    "userdoc": {
+      "kind": "user",
+      "methods": {
+        "approve(address,uint256)": {
+          "notice": "ERC721-style approve for compatibility with existing tests and tooling.         This delegates to the underlying HTS ERC721 mirror contract."
+        },
+        "balanceOf(address)": {
+          "notice": "ERC721-style balanceOf for a user, backed by the HTS NFT collection."
+        },
+        "createCollection()": {
+          "notice": "One-time HTS NFT collection creation. Call from deploy script with {value: HTS_VALUE, gas: HTS_CREATE_GAS_LIMIT}.         expiry.autoRenewAccount must be the Hedera ECDSA account that signs the tx (operatorAccount)."
+        },
+        "htsTokenAddress()": {
+          "notice": "HTS NFT collection address (optional; set after createCollection)"
+        },
+        "initializePool((address,address,uint24,int24,address),uint160)": {
+          "notice": "Initialize a pool on the PoolManager (no-op if already initialized; returns type(int24).max)."
+        },
+        "mintNFT(address)": {
+          "notice": "Mint an HTS NFT to a recipient (standalone HTS mint; not a pool position). For pool positions use modifyLiquidities(MINT_POSITION, ...)."
+        },
+        "modifyLiquidities(bytes,uint256)": {
+          "notice": "Unlocks Uniswap v4 PoolManager and batches actions for modifying liquidity"
+        },
+        "msgSender()": {
+          "notice": "Returns the address that initiated the current flow. During unlock callback, returns the modifyLiquidities caller; otherwise msg.sender."
+        },
+        "multicall(bytes[])": {
+          "notice": "Call multiple functions in the current contract and return the data from all of them if they all succeed"
+        },
+        "operatorAccount()": {
+          "notice": "Hedera ECDSA account used for token expiry autoRenew. Must match PRIVATE_KEY signer so precompile signature is valid."
+        },
+        "owner()": {
+          "notice": "Contract owner (controls HTS collection)"
+        },
+        "ownerOf(uint256)": {
+          "notice": "ERC721-style ownerOf for a position tokenId, backed by the HTS NFT collection."
+        },
+        "poolManager()": {
+          "notice": "The Uniswap v4 PoolManager contract"
+        }
+      },
+      "version": 1
+    }
+  },
+  "settings": {
+    "remappings": [
+      "@openzeppelin/=lib/hedera-smart-contracts/node_modules/@openzeppelin/",
+      "ds-test/=lib/solmate/lib/ds-test/src/",
+      "forge-std/=lib/forge-std/src/",
+      "hardhat/=lib/hedera-smart-contracts/node_modules/hardhat/",
+      "hedera-forking/=../hieroforge-core/lib/hedera-forking/contracts/",
+      "hedera-smart-contracts/=lib/hedera-smart-contracts/contracts/",
+      "hieroforge-core-test/=../hieroforge-core/test/",
+      "hieroforge-core/=../hieroforge-core/src/",
+      "solmate/=lib/solmate/src/"
+    ],
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    },
+    "metadata": {
+      "bytecodeHash": "ipfs"
+    },
+    "compilationTarget": {
+      "src/HieroForgeV4Position.sol": "HieroForgeV4Position"
+    },
+    "evmVersion": "cancun",
+    "libraries": {},
+    "viaIR": true
+  },
+  "sources": {
+    "../hieroforge-core/lib/hedera-forking/contracts/HederaResponseCodes.sol": {
+      "keccak256": "0x635d72d9214ccc915f3ecb0ea0fedafd98c6992518e48cf8e07451dbd7964c22",
+      "urls": [
+        "bzz-raw://2777f5f70649100c98df85828d0e31cd31832fdf18e38f6de380efe34f7655fe",
+        "dweb:/ipfs/QmbGSxEoonE9i6mpvRMjvZ8DtqTs49sKWGWtFfdoqsVm2q"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/lib/hedera-forking/contracts/HtsSystemContract.sol": {
+      "keccak256": "0x8fbc77d1bec6e3c687d7f3bd7c754bb9de68be6deb610efb52d317eee4abd6bf",
+      "urls": [
+        "bzz-raw://23b4245495b5846eeb229ae12b97d3d369f547233d8e01a24af7523ea7bcd99d",
+        "dweb:/ipfs/QmThnMBRdAEGn9qn6ua4RVcSZQCsAhegt3AXbsuSKM8wzf"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/lib/hedera-forking/contracts/IERC20.sol": {
+      "keccak256": "0xd8be8782375e9d4d8a2419bf4c778f2c1bb0a0387043de05d6fdddfe9f98a96a",
+      "urls": [
+        "bzz-raw://77e8ebe78b55e844de7262d3c8db345db37c705922b1296e3f9aaf95e4d6293b",
+        "dweb:/ipfs/Qmbm92mPRbzXc2aUV6AxoUhCpEsyQoK3dk34ZNkJJRftR5"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/lib/hedera-forking/contracts/IERC721.sol": {
+      "keccak256": "0x77851a5f37f37b98d062b9e9c6eb1cee1fe9bcaeb0229de0a1941b04f1011f9a",
+      "urls": [
+        "bzz-raw://7eb684ca15eaf29cb9f0a2464a8e1006fb93c48bf05180444d57801b072f25ff",
+        "dweb:/ipfs/QmTWzfsvTqnZJMzEPQ8CJDNQupssJNjUg2Gj1iiSQqzsX7"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/lib/hedera-forking/contracts/IHRC719.sol": {
+      "keccak256": "0xfcb360b093598823faf2adec5558a7140d0b0edc7d0836dfe97888535abb25fd",
+      "urls": [
+        "bzz-raw://9a5f3ec2697152fb41e9903aee844c2e0bf6456fa1d48214d151742bdee06a4d",
+        "dweb:/ipfs/QmS7msTEpaWWiyKRCK3CqX9Bzp5WzoS1ZQ26ACxdWrvXBD"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/lib/hedera-forking/contracts/IHederaTokenService.sol": {
+      "keccak256": "0x2c702a4ff543d4cac362622fec0a3038d48d05f88505f04da40eca5fc81444b9",
+      "urls": [
+        "bzz-raw://53d05e294c773427e08d9c7b3d4e1c17f26569619f62a84073ad498a8556cd26",
+        "dweb:/ipfs/QmXknNMxfwe85Qg2y96hLXGrS4GstwGKsGukeZygeUjUZv"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/lib/hedera-forking/contracts/KeyLib.sol": {
+      "keccak256": "0x3d1b2dec519060ddcb40bf3bb7f1d4c22b8ace1edfb46edee501a06c27edf168",
+      "urls": [
+        "bzz-raw://0973cb0874908e639677808cb3a70d212b990dd71814ccad3def4eb293835eb9",
+        "dweb:/ipfs/QmdTeVAw834k58pGpzoJv8DEKm83tUTd9kxYQXJFGRnuMN"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/src/callback/IUnlockCallback.sol": {
+      "keccak256": "0x5e0664c61a3ed8ec27278fe0c014607cd679a859a124ec47d34cb320465c39c2",
+      "urls": [
+        "bzz-raw://faf0aef5bda024673c5d296e2f1498ab650fa12359465f18a7107bc28900ff9e",
+        "dweb:/ipfs/QmYNkz6q2dzvKXSGcF2yKbt2xzJ1RGQrJkdcWkqw9FkN14"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/src/constants.sol": {
+      "keccak256": "0x449082da58600d56a7394d2be43bd08bde887d81cff64a9e71de3d46f83a6d4e",
+      "urls": [
+        "bzz-raw://790647c331ba8beb201ea5ec8ba06966ceb8e53c5f3baab5612b738d04c22062",
+        "dweb:/ipfs/QmXXvSy2MJ5S5Y7MKD5UCq9Xd7o8Ng67fmveWiBi4b9z7w"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/src/interfaces/IERC20Minimal.sol": {
+      "keccak256": "0x9fb1fa7637f633e25744505446ec76c29bb8242f74bc44957a8e9df582fa045b",
+      "urls": [
+        "bzz-raw://56230fc2bc65162add39087407ce6cf79f4c6d1e65f18466c090a3129a0d3084",
+        "dweb:/ipfs/QmSq7SQYjS6d34LPNyTdTKHiB27UMi6W3Urq2wNYbwvDag"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/src/interfaces/IPoolManager.sol": {
+      "keccak256": "0x1157517f4e93354087806fc5238a1755ecf5e84183898195a64b8bafe6896661",
+      "urls": [
+        "bzz-raw://2edfc30289d7e9d9da4bfb447dad5663405ecc01ad7a5f3e71060745b99ac432",
+        "dweb:/ipfs/QmYYyEQ7GxJtBbjffFzg52RmM2neCeSftpj7h9WzAHjhb1"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/src/libraries/CustomRevert.sol": {
+      "keccak256": "0xb96d7154d5617295aeb2c2b29f8dc9751c3aba19bd974fef1d3a62a7ea98460e",
+      "urls": [
+        "bzz-raw://80e34c933792c4dbf2a7ff58b8c5772423da7480fc374788bad5fdb9a3429652",
+        "dweb:/ipfs/QmeiHsyKNXc8AHzbUEKauaBenwuFNmFxhZAoMcafY6daq9"
+      ],
+      "license": "MIT"
+    },
+    "../hieroforge-core/src/libraries/SafeCast.sol": {
+      "keccak256": "0x42c4a24f996a14d358be397b71f7ec9d7daf666aaec78002c63315a6ee67aa86",
+      "urls": [
+        "bzz-raw://c3db86e2ba3679105fc32edec656c70282e1fede6cab11217702443f6c26fa59",
+        "dweb:/ipfs/QmX4yaaSPdKQzYNRsezjTvZKsubzS8JRTEGFD3fPpTTCcj"
+      ],
+      "license": "MIT"
+    },
+    "../hieroforge-core/src/types/BalanceDelta.sol": {
+      "keccak256": "0xff99fe89aaab9bf63c97f2a4de030878867cbc9ed5772de86986cc6e102e2432",
+      "urls": [
+        "bzz-raw://032b45c2cb0b4cc5e55c1a70b1c57821abaf2aadde42eae35e248fdfb1b4b22b",
+        "dweb:/ipfs/QmdKiGeikSxrwX3txJoTABWLQpYVaxnuZxU8vwDKjUS5av"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/src/types/Currency.sol": {
+      "keccak256": "0xd33bfc7123c06991d0e7b9564cf35195e1a76d4e45586cddee936bd91772d672",
+      "urls": [
+        "bzz-raw://43927973f170a0f0b104aeb2e22a53d57e2b6690f866ee380a1c6cdd3f666d91",
+        "dweb:/ipfs/QmNhQvVxqa21Jj2innhKaT3YSbSXdnzv1wCu1fmfiQCtv3"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/src/types/ModifyLiquidityParams.sol": {
+      "keccak256": "0x979473a65b040d6186103ca4e434481c283500aa4a8da7765e562bdf93a3db82",
+      "urls": [
+        "bzz-raw://77c2c512a939ef8dd391f1b76ef2883285ba90b3596b187102b50aa567eca75d",
+        "dweb:/ipfs/QmQrm4z1oF62NWwtQKBtpTmn8J6bG3wcEnWg5mpbHf5r31"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/src/types/PoolId.sol": {
+      "keccak256": "0x7c8cf907f8f4aab623439cdd8d419e1e68b00d4f90c567939593c7dab9fa0e73",
+      "urls": [
+        "bzz-raw://91d26dd18b0de163f780a2278bcdaadaf6de53aa17f1a927dba96b01e853e74e",
+        "dweb:/ipfs/QmPk9S1vGWXCf8BCghFpXNGGqhrMiTrxUnLKTP8DtYhmAG"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/src/types/PoolKey.sol": {
+      "keccak256": "0x7ff64bc992d6e5ec2338eb8810b9d19cf1fcd4469e2cde8f01b0d5141c14776e",
+      "urls": [
+        "bzz-raw://f9e54b6e201a7f72f4fe5e22cd996106bc16973a8db8ab47648e720dc7a62153",
+        "dweb:/ipfs/QmRUUKws18BQEyGMbbraUNWJ1K6WpdEFuVk3pk6RKD2cH7"
+      ],
+      "license": "Apache-2.0"
+    },
+    "../hieroforge-core/src/types/SwapParams.sol": {
+      "keccak256": "0xd162714261316dca04a657e18537d0a688613f558083a2c82ed058c2f1c16f82",
+      "urls": [
+        "bzz-raw://95495ac6c9418690da71df5426abea79c844334600b816b0496201701f55d150",
+        "dweb:/ipfs/QmY42sokMr28fax1CMygWpuTMyfCawt9dDLMQ1Z6KSKHsG"
+      ],
+      "license": "Apache-2.0"
+    },
+    "src/HieroForgeV4Position.sol": {
+      "keccak256": "0x6bc7698b4ec6441112c7dd06cbfde40bd3cebd4a876e2fd1ac8ab941bc31e6f9",
+      "urls": [
+        "bzz-raw://f8173226a8447b37e44f0897260536c385754288b177c554e325a8eb4d4767a2",
+        "dweb:/ipfs/QmRd1K4J3pgSAXBAFaLF6TaN6NWo2fL2XpENSTX1NCDV4i"
+      ],
+      "license": "Apache-2.0"
+    },
+    "src/base/BaseActionsRouter.sol": {
+      "keccak256": "0x66c4f74a2f351f06f4c1990b8896d30220ecf542c82623fa3d66b08d677f6de5",
+      "urls": [
+        "bzz-raw://8ef6467cbd868acc00f18ab9ea8a3482bbbc03b2d4decafb625d76a431f102f6",
+        "dweb:/ipfs/QmcbFzFBrkHQenQGdC4q9ESV6Xg8UNqT4vhchQwKBuK8MR"
+      ],
+      "license": "Apache-2.0"
+    },
+    "src/base/ImmutableState.sol": {
+      "keccak256": "0xaf9389131278d090efaac5d8cc9cc7fa6798ff86696b93f9f9002bdc1a456baf",
+      "urls": [
+        "bzz-raw://97156a6b7cf22b9f65fd1481393b5310ef2c8fdce623b7403344c4d7aaf3b015",
+        "dweb:/ipfs/QmT1SRQtvU8P6whh3PoqRGCKkJSd6UDSeDEhqBQs3P3Q2v"
+      ],
+      "license": "MIT"
+    },
+    "src/base/Multicall_v4.sol": {
+      "keccak256": "0x7a90effcf37284e6c59f68f588c5a4ff55f129b969264a097596d3fd4fab614f",
+      "urls": [
+        "bzz-raw://af15b94ceeba8acd85312a191af3e88f0440b9f6a6f550ab433cf50ab51ce124",
+        "dweb:/ipfs/QmPrGVqpgEFyMg29DGoroCoKnush6u7ZY7EGKFXTXFkJPD"
+      ],
+      "license": "MIT"
+    },
+    "src/base/SafeCallback.sol": {
+      "keccak256": "0x4a6d61a0dc158dde30a7dc310e8d5f6cbea99bd830d8d8865b5f181f05bf3f87",
+      "urls": [
+        "bzz-raw://1034091bc8bd5ab150abc80860826e25140768f95635a446e2996bcbc9354afd",
+        "dweb:/ipfs/Qmcuau8KPRr6u4mM2QLk1FeoURmrdTJgwjJs5kLD85Rsda"
+      ],
+      "license": "MIT"
+    },
+    "src/interfaces/IImmutableState.sol": {
+      "keccak256": "0xd24e0f6457d4f09f2c7380282146325e0c064c1224f2c6867a3f986035451b2c",
+      "urls": [
+        "bzz-raw://102f283fd5300dde2469f9bc0ab52702968a5c15a78f9f56d82a64bae7df0ca0",
+        "dweb:/ipfs/QmcUzSAaAn5iGygqwtByVMUVKEAPi4nPKZBADbGfbeHvVX"
+      ],
+      "license": "MIT"
+    },
+    "src/interfaces/IMsgSender.sol": {
+      "keccak256": "0x51eca52c2ee995164f011015b32e2c7150a8c10ca58ec47c9e70649e09093629",
+      "urls": [
+        "bzz-raw://4277bbb19619ab56718c57a028b14192d6f4e9ce7b316abae539fd2fd2375348",
+        "dweb:/ipfs/QmQroK4BXUALrzCum83XPZNzJGm7XTHdsB6ywNArkgxSbo"
+      ],
+      "license": "Apache-2.0"
+    },
+    "src/interfaces/IMulticall_v4.sol": {
+      "keccak256": "0xead07028a5a1c34d2f61df125021f5e93a5d5a140f1ef4bcc635dfd0c91477f6",
+      "urls": [
+        "bzz-raw://1fd2ad5258820edb27048e4db7614cc562f4fca9b4f82e5a57063b7895d4678c",
+        "dweb:/ipfs/QmSQcCroeofguGDk7ViccfkVmbpeRzzzvRF6gUMU1yuE6G"
+      ],
+      "license": "MIT"
+    },
+    "src/interfaces/IPoolInitializer_v4.sol": {
+      "keccak256": "0xc0f13b72e18bfc82dc16f5c7249b40bb5246491b3c432ad4a31e431e2a724845",
+      "urls": [
+        "bzz-raw://50f1927bed1bfaba16d65721d21fbdc61c197ed44f294f57a65dbbc5ac2fbfe2",
+        "dweb:/ipfs/QmfCvfDL1SjDHHUbiswpfaLxPNiNphEJZmpCJRu5HWTFBq"
+      ],
+      "license": "MIT"
+    },
+    "src/interfaces/IPositionManager.sol": {
+      "keccak256": "0x08710a72e0798c4dc37d7fb8a79eec86433ce139f3020612284f5aed12c54e87",
+      "urls": [
+        "bzz-raw://b53f8ea4077e801ece17b66760f4ea827cf173dc086794469bcd2d6d2e2bbc18",
+        "dweb:/ipfs/QmRQbi3tYLUt5DheGvTTP3gex2pJRfof6ZAHoMcHNRrS6b"
+      ],
+      "license": "MIT"
+    },
+    "src/interfaces/IV4Router.sol": {
+      "keccak256": "0x01db35484397a3a22089273e19f114d1c50d6acba4b9288801f2bdc99a2bca84",
+      "urls": [
+        "bzz-raw://50f14a235d804e3386d5c11e07f026fa3ff45089e5d14b185f68ce3274dc31be",
+        "dweb:/ipfs/QmXSyKj9zqmPWUvVc26P6Z9E3vBzu6E5y3mDZQ7dZmN9kz"
+      ],
+      "license": "Apache-2.0"
+    },
+    "src/libraries/ActionConstants.sol": {
+      "keccak256": "0x3d6f0e5b4a7b1e60bad93e73dce5db67fb66bebef11c31ed8355014a79aa03b3",
+      "urls": [
+        "bzz-raw://6dfa42e24b1b5c7f66e75304ab034fbb6768518eb2410ccfff8b3defdd1658f2",
+        "dweb:/ipfs/QmQQ7fud9mmv7PEWPAQiNzeZhNkWf28Z6nCHc2e6WJFfa7"
+      ],
+      "license": "MIT"
+    },
+    "src/libraries/Actions.sol": {
+      "keccak256": "0x8efd4b8b289177ee27e557d9d0a5a9f973d66fe1eb1ef8959d316b11987ca830",
+      "urls": [
+        "bzz-raw://07fe35f194eb99465028f0546359befea574d844da53767d32f22b233c3bcc98",
+        "dweb:/ipfs/Qmc19631uFxABTHAbGrDrroexi9GdyxWntaum1v8npPYz5"
+      ],
+      "license": "MIT"
+    },
+    "src/libraries/CalldataDecoder.sol": {
+      "keccak256": "0xff9bad4c10756a4c5adfaa5753b3f9e9f5fc524ef2ace963276283fed98f5c72",
+      "urls": [
+        "bzz-raw://c4ff4706bcf6db3a954f52d0ed5b80408cde1d1458ee7da91a4890c5fce716c0",
+        "dweb:/ipfs/QmXLp9FabVkyYgr1dNSAbWGuZEvJ3UNaV8sC9bioCtEgxb"
+      ],
+      "license": "Apache-2.0"
+    },
+    "src/libraries/PathKey.sol": {
+      "keccak256": "0x8e14f67acdde9ac27a8fe522a84d06dad149328a4acf58803928184bd9ddcd25",
+      "urls": [
+        "bzz-raw://3ebee12048819560b4c3cac94d10ca13d63a9c230092fd63be502a64128a19d7",
+        "dweb:/ipfs/QmTQzYy9CVgjGbrEAmdkSxATRSxemkWNDR874S2y6Z5UVv"
+      ],
+      "license": "Apache-2.0"
+    },
+    "src/types/PositionInfo.sol": {
+      "keccak256": "0x43906a50c5e74f5e21b525ea2266c6fada384e852fa5eeb6f3a4cefd20c7f5fb",
+      "urls": [
+        "bzz-raw://323f1aacd43f16634dc286ad1ec7f79f3996a605c53e249b1c6ef8229e5926c4",
+        "dweb:/ipfs/QmQkucWaX7NMhCenNcq6F55w7YYP8DZRWnAKi9Hf8j2wby"
+      ],
+      "license": "Apache-2.0"
+    }
+  },
+  "version": 1
+}

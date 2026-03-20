@@ -127,4 +127,9 @@ export interface PoolKeyForQuote {
   currency1: string;
   fee: number;
   tickSpacing: number;
+  /**
+   * v4 pool hooks contract address.
+   * If omitted, quote code falls back to 0x0 (no hooks).
+   */
+  hooks?: string;
 }

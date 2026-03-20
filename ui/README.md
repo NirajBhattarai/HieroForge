@@ -148,7 +148,7 @@ npm run dev
 
 1. Copy `ui/.env.example` to `ui/.env.local`.
 2. Set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (get from [cloud.walletconnect.com](https://cloud.walletconnect.com/)).
-3. Set contract addresses: `NEXT_PUBLIC_POOL_MANAGER_ADDRESS`, `NEXT_PUBLIC_QUOTER_ADDRESS`, `NEXT_PUBLIC_POSITION_MANAGER_ADDRESS`.
+3. Set contract addresses: `NEXT_PUBLIC_POOL_MANAGER_ADDRESS`, `NEXT_PUBLIC_QUOTER_ADDRESS`, `NEXT_PUBLIC_POSITION_MANAGER_ADDRESS` (PositionManager for add/remove liquidity and NFT positions).
 4. Optionally set `NEXT_PUBLIC_HEDERA_NETWORK` (`testnet` | `mainnet` | `previewnet`).
 
 ### Pools from DynamoDB (no hardcoded list)

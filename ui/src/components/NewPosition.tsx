@@ -66,17 +66,8 @@ import { useTokens, type DynamicToken } from "@/hooks/useTokens";
 import { useTokenLookup } from "@/hooks/useTokenLookup";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
 import { useHashPack } from "@/context/HashPackContext";
+import { accountIdToLongZero, getPositionOwnerAddress } from "@/lib/hederaAccount";
 import type { PoolInfo } from "./PoolPositions";
-
-/** Convert Hedera accountId (0.0.XXXXX) to EVM address for balance/contract calls. */
-function accountIdToEvmAddress(accountId: string | null): string | null {
-  if (!accountId) return null;
-  const m = String(accountId)
-    .trim()
-    .match(/^(\d+)\.(\d+)\.(\d+)$/);
-  if (!m) return null;
-  return "0x" + BigInt(m[3]!).toString(16).padStart(40, "0");
-}
 
 type Step = 1 | 2;
 type RangeMode = "full" | "custom";
@@ -200,7 +191,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
   }
 
   const { accountId, isConnected, hashConnectRef } = useHashPack();
-  const userEvmFromAccountId = accountIdToEvmAddress(accountId);
+  const userEvmFromAccountId = accountIdToLongZero(accountId);
 
   const userEvmAddress = userEvmFromAccountId;
   // Prefer accountId (0.0.X) for balance so Mirror Node accepts it; fallback to EVM address
@@ -720,7 +711,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
             stateMutability: "view",
           },
         ] as const;
-        const userAddr = accountIdToEvmAddress(accountId) as `0x${string}`;
+        const userAddr = accountIdToLongZero(accountId) as `0x${string}`;
         const [bal0, bal1] = await Promise.all([
           amount0Wei > 0n
             ? (pc.readContract({
@@ -767,12 +758,14 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     setTxHash(null);
     try {
       console.log("[Add liquidity] HashPack accountId:", accountId);
-      const ownerEvmAddress = accountIdToEvmAddress(accountId);
+      const network = (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_HEDERA_NETWORK) || "testnet";
+      const ownerEvmAddress = (await getPositionOwnerAddress(accountId, network)) ?? accountIdToLongZero(accountId);
       if (!ownerEvmAddress) {
         setError("Cannot derive EVM address from account ID.");
         setPending(false);
         return;
       }
+      console.log("[Add liquidity] position owner (use ECDSA so remove works):", ownerEvmAddress);
 
       const hookAddr = getHookAddress(selectedHook) as `0x${string}`;
       const poolKey = buildPoolKey(
@@ -1010,7 +1003,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
       // Save position to DynamoDB so it shows up in "Your positions" (covers both existing and newly initialized pool; single multicall handles both)
       if (mintedTokenId != null) {
         try {
-          await fetch("/api/positions", {
+          const resp = await fetch("/api/positions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1033,6 +1026,16 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
                 ?.name,
             }),
           });
+          if (!resp.ok) {
+            const j = (await resp.json().catch(() => null)) as
+              | { error?: string; persisted?: boolean }
+              | null;
+            console.warn(
+              "[Add liquidity] save position failed:",
+              resp.status,
+              j?.error ?? "(no error body)",
+            );
+          }
           console.log(
             "[Add liquidity] position saved, tokenId:",
             mintedTokenId,
@@ -1089,14 +1092,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     );
     const poolId = getPoolId(poolKey);
 
-    // Derive deployer EVM address from Hedera accountId
-    let deployedBy: string | undefined;
-    if (accountId) {
-      const m = String(accountId).match(/^(\d+)\.(\d+)\.(\d+)$/);
-      if (m) {
-        deployedBy = "0x" + BigInt(m[3]!).toString(16).padStart(40, "0");
-      }
-    }
+    const deployedBy = accountIdToLongZero(accountId) ?? undefined;
 
     const dec0 = resolveDecimals(token0);
     const dec1 = resolveDecimals(token1);

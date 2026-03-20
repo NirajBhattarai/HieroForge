@@ -277,8 +277,22 @@ async function waitForTransactionSuccess(
       if (result === "SUCCESS") {
         return; // Transaction confirmed successful
       }
-      // Transaction reached consensus but failed
-      throw new Error(`Transaction failed on-chain: ${result}`);
+      // Transaction reached consensus but failed — fetch contract revert reason if any
+      let revertDetail = result;
+      try {
+        const contractRes = await fetch(
+          `${MIRROR_NODE}/api/v1/contracts/results/${mirrorTxId}`,
+        );
+        if (contractRes.ok) {
+          const cr = await contractRes.json();
+          if (cr?.error_message) {
+            revertDetail = `${result}: ${cr.error_message}`;
+          }
+        }
+      } catch {
+        // ignore
+      }
+      throw new Error(`Transaction failed on-chain: ${revertDetail}`);
     } catch (err) {
       // Re-throw our own errors (transaction failures)
       if (

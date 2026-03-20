@@ -5,7 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {HTS_ADDRESS} from "hedera-forking/HtsSystemContract.sol";
 import {IHederaTokenService} from "hedera-forking/IHederaTokenService.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 
 /**
  * Mint additional supply of an HTS fungible token and optionally send to an address.
@@ -24,7 +24,7 @@ import {htsSetup} from "hedera-forking/htsSetup.sol";
  */
 contract MintHtsTokenScript is Script {
     function run() external {
-        htsSetup();
+        Hsc.htsSetup();
 
         uint256 PRIVATE_KEY = vm.envUint("PRIVATE_KEY");
         address signer = vm.addr(PRIVATE_KEY);

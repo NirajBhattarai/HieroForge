@@ -5,7 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {HTS_ADDRESS} from "hedera-forking/HtsSystemContract.sol";
 import {IHederaTokenService} from "hedera-forking/IHederaTokenService.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 
 /// @notice Create an HTS NON_FUNGIBLE_UNIQUE token for PositionManager (position receipt NFTs).
 /// The PositionManager contract must be the treasury and have supply key so it can mint.
@@ -22,7 +22,7 @@ import {htsSetup} from "hedera-forking/htsSetup.sol";
 /// Or: ./scripts/create-hts-nft-token.sh
 contract CreateHtsNftTokenScript is Script {
     function run() external returns (int64 responseCode, address tokenAddress) {
-        htsSetup();
+        Hsc.htsSetup();
 
         uint256 PRIVATE_KEY = vm.envUint("PRIVATE_KEY");
         address positionManager = vm.envAddress("POSITION_MANAGER_ADDRESS");

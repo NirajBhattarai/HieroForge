@@ -12,14 +12,13 @@ import {MockERC20} from "../utils/MockERC20.sol";
 import {PositionManager} from "../../src/PositionManager.sol";
 import {IPositionManager} from "../../src/interfaces/IPositionManager.sol";
 import {Actions} from "../../src/libraries/Actions.sol";
-import {MockHTS} from "../mocks/MockHTS.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 
-/// @notice Tests for FROM_DELTAS actions and settlement actions in PositionManager.
+/// @notice Tests for FROM_DELTAS actions and settlement actions in PositionManager. Run with --fork-url testnet --ffi.
 contract PositionManagerFromDeltasTest is Test {
     IPoolManager public manager;
     PositionManager public lpm;
 
-    address constant HTS_PRECOMPILE = address(0x167);
     uint160 constant SQRT_PRICE_1_1 = 79228162514264337593543950336;
 
     PoolKey internal key;
@@ -27,9 +26,8 @@ contract PositionManagerFromDeltasTest is Test {
     MockERC20 internal token1;
 
     function setUp() public {
+        Hsc.htsSetup();
         manager = new PoolManager();
-        MockHTS mockHts = new MockHTS();
-        vm.etch(HTS_PRECOMPILE, address(mockHts).code);
         lpm = new PositionManager(manager);
 
         token0 = new MockERC20();

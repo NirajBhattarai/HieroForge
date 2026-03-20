@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { TokenIcon, TokenPairIcon } from "./TokenIcon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -10,6 +10,7 @@ import { usePositions, type Position } from "@/hooks/usePositions";
 import { useHashPack } from "@/context/HashPackContext";
 import { getTokenDecimals } from "@/constants";
 import { tickToPrice } from "@/lib/priceUtils";
+import { accountIdToLongZero, getAccountEvmAddress } from "@/lib/hederaAccount";
 
 export interface PoolInfo {
   poolId: string;
@@ -182,13 +183,27 @@ export function PoolPositions({
 
   const { accountId, isConnected } = useHashPack();
 
-  // Derive deployer EVM address from Hedera accountId for filtering
-  const deployerEvmAddress = (() => {
-    if (!accountId) return null;
-    const m = String(accountId).match(/^(\d+)\.(\d+)\.(\d+)$/);
-    if (!m) return null;
-    return "0x" + BigInt(m[3]!).toString(16).padStart(40, "0");
-  })();
+  const deployerEvmAddress = accountId ? accountIdToLongZero(accountId) : null;
+
+  // Positions may be owned by the Hedera ECDSA alias (tx sender) or the long-zero address.
+  // Query both so old + new positions show under "Your positions".
+  const [accountEvmAlias, setAccountEvmAlias] = useState<string | null>(null);
+  const network =
+    (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_HEDERA_NETWORK) ||
+    "testnet";
+  useEffect(() => {
+    if (!accountId) {
+      setAccountEvmAlias(null);
+      return;
+    }
+    let cancelled = false;
+    getAccountEvmAddress(accountId, network).then((evm) => {
+      if (!cancelled) setAccountEvmAlias(evm ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId, network]);
 
   const { tokens: dynamicTokens } = useTokens();
   const tokenByAddr = new Map(
@@ -200,7 +215,13 @@ export function PoolPositions({
     positions: userPositions,
     loading: positionsLoading,
     refetch: refetchPositions,
-  } = usePositions(deployerEvmAddress);
+  } = usePositions(
+    useMemo(
+      () =>
+        [accountEvmAlias, deployerEvmAddress].filter(Boolean) as string[],
+      [accountEvmAlias, deployerEvmAddress],
+    ),
+  );
 
   useEffect(() => {
     // For "positions" tab, we use the usePositions hook instead

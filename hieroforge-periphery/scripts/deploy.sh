@@ -178,6 +178,35 @@ run_router() {
   echo "  ROUTER_ADDRESS=$ROUTER_ADDRESS"
 }
 
+run_hieroforge_v4_position() {
+  if [[ -z "$POOL_MANAGER_ADDRESS" ]]; then
+    echo "Error: POOL_MANAGER_ADDRESS not set. Run: ./scripts/deploy.sh pool-manager"
+    exit 1
+  fi
+  echo "[deploy] Deploying HieroForgeV4Position (HTS NFT, no royalties)..."
+  forge build -q
+  OUT=$(forge script script/DeployHieroForgeV4Position.s.sol:DeployHieroForgeV4Position \
+    --rpc-url "$RPC" \
+    --private-key "$KEY" \
+    --broadcast \
+    --ffi \
+    --skip-simulation \
+    -vv --no-block-gas-limit 2>&1)
+  echo "$OUT"
+  HIEROFORGE_V4_POSITION_ADDRESS=$(echo "$OUT" | grep -oE 'HieroForgeV4Position deployed at: 0x[a-fA-F0-9]{40}' | head -1 | sed 's/HieroForgeV4Position deployed at: //')
+  OPERATOR_ACCOUNT=$(echo "$OUT" | grep -oE 'OPERATOR_ACCOUNT=[0x[a-fA-F0-9]{40}]' | head -1 | sed 's/OPERATOR_ACCOUNT=//')
+  if [[ -z "$HIEROFORGE_V4_POSITION_ADDRESS" ]]; then
+    echo "Failed to parse HIEROFORGE_V4_POSITION_ADDRESS."
+    exit 1
+  fi
+  env_set "HIEROFORGE_V4_POSITION_ADDRESS" "$HIEROFORGE_V4_POSITION_ADDRESS"
+  if [[ -n "$OPERATOR_ACCOUNT" ]]; then
+    env_set "OPERATOR_ACCOUNT" "$OPERATOR_ACCOUNT"
+  fi
+  echo "  HIEROFORGE_V4_POSITION_ADDRESS=$HIEROFORGE_V4_POSITION_ADDRESS"
+  [[ -n "$OPERATOR_ACCOUNT" ]] && echo "  OPERATOR_ACCOUNT=$OPERATOR_ACCOUNT"
+}
+
 export PRIVATE_KEY="$KEY"
 
 case "$TARGET" in
@@ -205,14 +234,26 @@ case "$TARGET" in
     echo "[deploy] Done. Next: ./scripts/modify.sh to add liquidity."
     echo "  Verify contracts: ./scripts/verify-contracts.sh all"
     ;;
+  contracts|no-tokens)
+    run_pool_manager
+    run_position_manager
+    run_quoter
+    run_router
+    echo "[deploy] Done (no tokens). Copy .env addresses to ui and core (see ENV.md)."
+    echo "  Verify contracts: ./scripts/verify-contracts.sh all"
+    ;;
+  hieroforge-v4-position)
+    run_hieroforge_v4_position
+    ;;
   *)
-    echo "Usage: $0 [pool-manager|tokens|position-manager|router|quoter|all]"
+    echo "Usage: $0 [pool-manager|tokens|position-manager|router|quoter|all|contracts]"
     echo "  pool-manager     - deploy PoolManager (core)"
     echo "  tokens           - deploy mock ERC20 or HTS tokens (USE_HTS=1 for HTS)"
     echo "  position-manager - deploy PositionManager (requires POOL_MANAGER_ADDRESS)"
     echo "  router           - deploy UniversalRouter (requires POOL_MANAGER_ADDRESS + POSITION_MANAGER_ADDRESS)"
     echo "  quoter           - deploy Quoter/V4Quoter (requires POOL_MANAGER_ADDRESS)"
     echo "  all              - deploy full stack (default)"
+    echo "  contracts        - deploy pool-manager + position-manager + quoter + router (no tokens)"
     exit 1
     ;;
 esac

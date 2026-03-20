@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 
 import {PoolManager} from "../src/PoolManager.sol";
 import {IPoolManager} from "../src/interfaces/IPoolManager.sol";
@@ -52,7 +52,7 @@ contract DeployHooksTestnetScript is Script {
     uint160 internal constant TWAP_FLAGS = Hooks.AFTER_INITIALIZE_FLAG | Hooks.AFTER_SWAP_FLAG;
 
     function run() external {
-        htsSetup();
+        Hsc.htsSetup();
 
         uint256 deployerPk = vm.envUint("PRIVATE_KEY");
         address c0 = vm.envAddress("CURRENCY0_ADDRESS");

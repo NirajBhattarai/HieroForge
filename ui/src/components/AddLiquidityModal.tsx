@@ -35,6 +35,7 @@ import {
 import { PositionManagerAbi } from "@/abis/PositionManager";
 import { PoolManagerAbi } from "@/abis/PoolManager";
 import { getFriendlyErrorMessage } from "@/lib/errors";
+import { accountIdToLongZero, getPositionOwnerAddress } from "@/lib/hederaAccount";
 import type { PoolInfo } from "./PoolPositions";
 
 /** Gas limits for Hedera ContractExecuteTransaction */
@@ -49,15 +50,6 @@ interface AddLiquidityModalProps {
 
 function formatFee(fee: number): string {
   return `${(fee / 10000).toFixed(2)}%`;
-}
-
-function accountIdToEvmAddress(accountId: string | null): string | null {
-  if (!accountId) return null;
-  const m = String(accountId)
-    .trim()
-    .match(/^(\d+)\.(\d+)\.(\d+)$/);
-  if (!m) return null;
-  return "0x" + BigInt(m[3]!).toString(16).padStart(40, "0");
 }
 
 export function AddLiquidityModal({
@@ -212,7 +204,8 @@ export function AddLiquidityModal({
     setTxHash(null);
 
     try {
-      const ownerEvmAddress = accountIdToEvmAddress(accountId);
+      const network = (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_HEDERA_NETWORK) || "testnet";
+      const ownerEvmAddress = (await getPositionOwnerAddress(accountId, network)) ?? accountIdToLongZero(accountId);
       if (!ownerEvmAddress) {
         setError("Cannot derive EVM address.");
         setPending(false);

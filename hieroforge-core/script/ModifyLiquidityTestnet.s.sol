@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
-import {htsSetup} from "hedera-forking/htsSetup.sol";
+import {Hsc} from "hedera-forking/Hsc.sol";
 import {Router} from "../test/utils/Router.sol";
 import {PoolKey} from "../src/types/PoolKey.sol";
 import {ModifyLiquidityParams} from "../src/types/ModifyLiquidityParams.sol";
@@ -44,7 +44,7 @@ contract ModifyLiquidityTestnetScript is Script {
     }
 
     function run() external {
-        htsSetup();
+        Hsc.htsSetup();
 
         uint256 PRIVATE_KEY = vm.envUint("PRIVATE_KEY");
 
