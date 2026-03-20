@@ -79,14 +79,8 @@ export function getQuoterAddress(): string {
   return (process.env.NEXT_PUBLIC_QUOTER_ADDRESS ?? "").trim();
 }
 
-/**
- * Contract used for positions and liquidity (add/remove/burn).
- * When NEXT_PUBLIC_HIEROFORGE_V4_POSITION_ADDRESS is set, it replaces PositionManager for all position/liquidity flows.
- * Otherwise falls back to NEXT_PUBLIC_POSITION_MANAGER_ADDRESS.
- */
+/** PositionManager contract for positions and liquidity (add/remove/burn). */
 export function getPositionManagerAddress(): string {
-  const hfv4p = (process.env.NEXT_PUBLIC_HIEROFORGE_V4_POSITION_ADDRESS ?? "").trim();
-  if (hfv4p) return hfv4p;
   return (process.env.NEXT_PUBLIC_POSITION_MANAGER_ADDRESS ?? "").trim();
 }
 

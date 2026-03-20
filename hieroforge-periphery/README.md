@@ -271,15 +271,10 @@ If you encounter a bytecode mismatch when verifying HieroForgeV4Position (or any
 
 ## Syncing Contract Addresses to UI
 
-After deploying or verifying contracts, update the UI's `.env` file with the latest contract addresses to keep the frontend in sync. For HieroForgeV4Position, add or update the following line in `ui/.env`:
+After deploying or verifying contracts, update the UI's `.env` file with the latest contract addresses. The UI uses **`NEXT_PUBLIC_POSITION_MANAGER_ADDRESS`** for liquidity and position NFTs (standard `PositionManager`). Example:
 
 ```
-NEXT_PUBLIC_HIEROFORGE_V4_POSITION_ADDRESS=<latest deployed address>
+NEXT_PUBLIC_POSITION_MANAGER_ADDRESS=<latest deployed PositionManager address>
 ```
 
-Example:
-```
-NEXT_PUBLIC_HIEROFORGE_V4_POSITION_ADDRESS=0x03401a54406740040d34ee3d698064f7199a535d
-```
-
-This ensures the UI always points to the correct contract instance. Repeat this step for other contract addresses as needed after deployment or verification.
+Repeat for `NEXT_PUBLIC_POOL_MANAGER_ADDRESS`, `NEXT_PUBLIC_QUOTER_ADDRESS`, `NEXT_PUBLIC_ROUTER_ADDRESS`, etc., as needed.

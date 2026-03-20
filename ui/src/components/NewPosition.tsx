@@ -66,17 +66,8 @@ import { useTokens, type DynamicToken } from "@/hooks/useTokens";
 import { useTokenLookup } from "@/hooks/useTokenLookup";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
 import { useHashPack } from "@/context/HashPackContext";
+import { accountIdToLongZero, getPositionOwnerAddress } from "@/lib/hederaAccount";
 import type { PoolInfo } from "./PoolPositions";
-
-/** Convert Hedera accountId (0.0.XXXXX) to EVM address for balance/contract calls. */
-function accountIdToEvmAddress(accountId: string | null): string | null {
-  if (!accountId) return null;
-  const m = String(accountId)
-    .trim()
-    .match(/^(\d+)\.(\d+)\.(\d+)$/);
-  if (!m) return null;
-  return "0x" + BigInt(m[3]!).toString(16).padStart(40, "0");
-}
 
 type Step = 1 | 2;
 type RangeMode = "full" | "custom";
@@ -200,7 +191,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
   }
 
   const { accountId, isConnected, hashConnectRef } = useHashPack();
-  const userEvmFromAccountId = accountIdToEvmAddress(accountId);
+  const userEvmFromAccountId = accountIdToLongZero(accountId);
 
   const userEvmAddress = userEvmFromAccountId;
   // Prefer accountId (0.0.X) for balance so Mirror Node accepts it; fallback to EVM address
@@ -720,7 +711,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
             stateMutability: "view",
           },
         ] as const;
-        const userAddr = accountIdToEvmAddress(accountId) as `0x${string}`;
+        const userAddr = accountIdToLongZero(accountId) as `0x${string}`;
         const [bal0, bal1] = await Promise.all([
           amount0Wei > 0n
             ? (pc.readContract({
@@ -767,9 +758,8 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     setTxHash(null);
     try {
       console.log("[Add liquidity] HashPack accountId:", accountId);
-      const { getPositionOwnerAddress } = await import("@/lib/hederaAccount");
       const network = (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_HEDERA_NETWORK) || "testnet";
-      const ownerEvmAddress = (await getPositionOwnerAddress(accountId, network)) ?? accountIdToEvmAddress(accountId);
+      const ownerEvmAddress = (await getPositionOwnerAddress(accountId, network)) ?? accountIdToLongZero(accountId);
       if (!ownerEvmAddress) {
         setError("Cannot derive EVM address from account ID.");
         setPending(false);
@@ -1102,14 +1092,7 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
     );
     const poolId = getPoolId(poolKey);
 
-    // Derive deployer EVM address from Hedera accountId
-    let deployedBy: string | undefined;
-    if (accountId) {
-      const m = String(accountId).match(/^(\d+)\.(\d+)\.(\d+)$/);
-      if (m) {
-        deployedBy = "0x" + BigInt(m[3]!).toString(16).padStart(40, "0");
-      }
-    }
+    const deployedBy = accountIdToLongZero(accountId) ?? undefined;
 
     const dec0 = resolveDecimals(token0);
     const dec1 = resolveDecimals(token1);

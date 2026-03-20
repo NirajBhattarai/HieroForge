@@ -25,7 +25,7 @@ import { PositionManagerAbi } from "@/abis/PositionManager";
 import { PoolManagerAbi } from "@/abis/PoolManager";
 import { amountsForLiquidity, getSqrtPriceAtTick } from "@/lib/sqrtPriceMath";
 import { getFriendlyErrorMessage } from "@/lib/errors";
-import { getAccountEvmAddress } from "@/lib/hederaAccount";
+import { accountIdToLongZero, getAccountEvmAddress } from "@/lib/hederaAccount";
 import type { PoolInfo } from "./PoolPositions";
 
 interface RemoveLiquidityModalProps {
@@ -36,14 +36,6 @@ interface RemoveLiquidityModalProps {
 
 function formatFee(fee: number): string {
   return `${(fee / 10000).toFixed(2)}%`;
-}
-
-/** Hedera accountId (0.0.X) → long-zero EVM address (0x...padStart(40)). */
-function accountIdToEvmAddress(accountId: string | null): string | null {
-  if (!accountId) return null;
-  const m = String(accountId).trim().match(/^(\d+)\.(\d+)\.(\d+)$/);
-  if (!m) return null;
-  return ("0x" + BigInt(m[3]!).toString(16).padStart(40, "0")).toLowerCase();
 }
 
 const PERCENT_OPTIONS = [10, 25, 50, 75, 100] as const;
@@ -347,7 +339,7 @@ export function RemoveLiquidityModal({
             On-chain owner: {onChain.owner}
           </p>
           <p className="text-xs text-text-secondary font-mono break-all mt-1">
-            You: {accountId} → long-zero: {accountIdToEvmAddress(accountId) ?? "—"}
+            You: {accountId} → long-zero: {accountIdToLongZero(accountId) ?? "—"}
           </p>
           {accountEvmAlias && (
             <p className="text-xs text-text-secondary font-mono break-all mt-0.5">
@@ -356,7 +348,7 @@ export function RemoveLiquidityModal({
           )}
           {(() => {
             const owner = onChain.owner.toLowerCase();
-            const longZero = (accountIdToEvmAddress(accountId) ?? "").toLowerCase();
+            const longZero = (accountIdToLongZero(accountId) ?? "").toLowerCase();
             const evmAlias = (accountEvmAlias ?? "").toLowerCase();
             const ownerIsLongZero = owner === longZero;
             const ownerIsEvmAlias = evmAlias && owner === evmAlias;

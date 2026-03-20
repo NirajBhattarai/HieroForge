@@ -89,7 +89,7 @@ async function main() {
   const amount0 = (amount0Full * 101n) / 100n + 1n;
   const amount1 = (amount1Full * 101n) / 100n + 1n;
 
-  const poolKey = buildPoolKey(c0, c1, 3000, 60);
+  const poolKey = buildPoolKey(c0 as `0x${string}`, c1 as `0x${string}`, 3000, 60);
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
   console.log("1. Approving tokens for PositionManager...");

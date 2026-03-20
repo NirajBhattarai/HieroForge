@@ -1,9 +1,4 @@
-/**
- * Resolve the EVM address that Hedera uses as msg.sender for a given account.
- * ECDSA accounts have an evm_address (alias); id-only accounts use long-zero.
- * Using this as the position owner when minting ensures remove/decrease works
- * (same address will be msg.sender when the user sends the remove tx).
- */
+import { AccountId } from "@hashgraph/sdk";
 
 const MIRROR_NODE_BY_NETWORK: Record<string, string> = {
   testnet: "https://testnet.mirrornode.hedera.com",
@@ -11,12 +6,25 @@ const MIRROR_NODE_BY_NETWORK: Record<string, string> = {
   previewnet: "https://previewnet.mirrornode.hedera.com",
 };
 
-/** Hedera accountId (0.0.X) → long-zero EVM address. */
+/** `0.0.n` (optional Hedera checksum suffix); excludes alias-style third segments. */
+const NUMERIC_HEDERA_ACCOUNT_ID = /^\d+\.\d+\.\d+(?:-[a-z]{5})?$/i;
+
+/**
+ * Hedera account id (e.g. from HashPack: `0.0.n`, optional checksum) → long-zero EVM address.
+ * Uses @hashgraph/sdk encoding so shard/realm/num map to Solidity address the same way as the network.
+ */
 export function accountIdToLongZero(accountId: string | null): string | null {
   if (!accountId) return null;
-  const m = String(accountId).trim().match(/^(\d+)\.(\d+)\.(\d+)$/);
-  if (!m) return null;
-  return ("0x" + BigInt(m[3]!).toString(16).padStart(40, "0")).toLowerCase();
+  const t = accountId.trim();
+  if (!NUMERIC_HEDERA_ACCOUNT_ID.test(t)) return null;
+  try {
+    const raw = AccountId.fromString(t).toSolidityAddress();
+    const hex = raw.startsWith("0x") ? raw.slice(2) : raw;
+    if (!/^[0-9a-fA-F]{40}$/.test(hex)) return null;
+    return ("0x" + hex.toLowerCase()) as `0x${string}`;
+  } catch {
+    return null;
+  }
 }
 
 /**

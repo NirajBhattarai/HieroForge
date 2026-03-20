@@ -10,7 +10,7 @@ import { usePositions, type Position } from "@/hooks/usePositions";
 import { useHashPack } from "@/context/HashPackContext";
 import { getTokenDecimals } from "@/constants";
 import { tickToPrice } from "@/lib/priceUtils";
-import { getAccountEvmAddress } from "@/lib/hederaAccount";
+import { accountIdToLongZero, getAccountEvmAddress } from "@/lib/hederaAccount";
 
 export interface PoolInfo {
   poolId: string;
@@ -183,13 +183,7 @@ export function PoolPositions({
 
   const { accountId, isConnected } = useHashPack();
 
-  // Derive deployer EVM address from Hedera accountId for filtering
-  const deployerEvmAddress = (() => {
-    if (!accountId) return null;
-    const m = String(accountId).match(/^(\d+)\.(\d+)\.(\d+)$/);
-    if (!m) return null;
-    return "0x" + BigInt(m[3]!).toString(16).padStart(40, "0");
-  })();
+  const deployerEvmAddress = accountId ? accountIdToLongZero(accountId) : null;
 
   // Positions may be owned by the Hedera ECDSA alias (tx sender) or the long-zero address.
   // Query both so old + new positions show under "Your positions".
