@@ -48,6 +48,27 @@ else
 fi
 
 echo "[remove-position-manager] tokenId=${TOKEN_ID:-latest} percent=$PERCENT positionManager=$POSITION_MANAGER_ADDRESS"
+
+SIGNER_ADDR="$(cast wallet address --private-key "$KEY" 2>/dev/null || true)"
+if [[ -n "$SIGNER_ADDR" ]]; then
+  echo "[remove-position-manager] signer=$SIGNER_ADDR"
+fi
+
+if [[ -n "${TOKEN_ID:-}" ]]; then
+  OWNER_ADDR="$(cast call "$POSITION_MANAGER_ADDRESS" "ownerOf(uint256)(address)" "$TOKEN_ID" --rpc-url "$RPC" 2>/dev/null || true)"
+  if [[ -n "$OWNER_ADDR" ]]; then
+    echo "[remove-position-manager] ownerOf($TOKEN_ID)=$OWNER_ADDR"
+    SIGNER_LOWER="$(printf "%s" "$SIGNER_ADDR" | tr '[:upper:]' '[:lower:]')"
+    OWNER_LOWER="$(printf "%s" "$OWNER_ADDR" | tr '[:upper:]' '[:lower:]')"
+    if [[ -n "$SIGNER_ADDR" ]] && [[ "$SIGNER_LOWER" != "$OWNER_LOWER" ]]; then
+      echo "[remove-position-manager] signer is not token owner."
+      echo "  Use owner wallet private key, or have owner approve this signer for token $TOKEN_ID."
+      echo "  Approve methods: approve(signer, tokenId) or setApprovalForAll(signer, true)."
+      exit 1
+    fi
+  fi
+fi
+
 forge build -q
 forge script script/RemovePositionManager.s.sol:RemovePositionManagerScript \
   --rpc-url "$RPC" \

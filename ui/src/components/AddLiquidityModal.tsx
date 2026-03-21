@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { parseUnits } from "viem";
-import { createPublicClient, http } from "viem";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { parseUnits, createPublicClient, http, getAddress } from "viem";
 import { TokenIcon, TokenPairIcon } from "./TokenIcon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -15,27 +14,29 @@ import {
   getPoolManagerAddress,
   getRpcUrl,
   HEDERA_TESTNET,
+  HOOKS_ZERO,
 } from "@/constants";
 import {
   buildPoolKey,
   getPoolId,
-  encodeUnlockDataMint,
-  encodeUnlockDataMintFromDeltas,
+  encodeUnlockDataIncrease,
+  encodeUnlockDataIncreaseFromDeltas,
 } from "@/lib/addLiquidity";
 import { encodePriceSqrt, sqrtPriceX96ToPrice } from "@/lib/priceUtils";
 import {
   getSqrtPriceAtTick,
   maxLiquidityForAmounts,
   amountsForLiquidity,
+  clampTick,
 } from "@/lib/sqrtPriceMath";
 import {
   hederaTokenTransfer,
+  hederaTokenApprove,
   hederaContractMulticall,
 } from "@/lib/hederaContract";
 import { PositionManagerAbi } from "@/abis/PositionManager";
 import { PoolManagerAbi } from "@/abis/PoolManager";
 import { getFriendlyErrorMessage } from "@/lib/errors";
-import { accountIdToLongZero, getPositionOwnerAddress } from "@/lib/hederaAccount";
 import type { PoolInfo } from "./PoolPositions";
 
 /** Gas limits for Hedera ContractExecuteTransaction */
@@ -90,6 +91,13 @@ export function AddLiquidityModal({
   /** Price used for auto-calculation: live pool price when available, else initial/reference */
   const effectivePrice = poolPrice != null && poolPrice > 0 ? poolPrice : referencePrice;
 
+  const hooksForPool = useMemo(() => {
+    const h = pool.hooks?.trim();
+    if (h && /^0x[a-fA-F0-9]{40}$/.test(h))
+      return getAddress(h as `0x${string}`);
+    return HOOKS_ZERO as `0x${string}`;
+  }, [pool.hooks]);
+
   // Fetch on-chain sqrtPriceX96 when modal opens so we can show "rate from pool" and auto-calc the other token amount
   useEffect(() => {
     if (!poolManagerAddress || !pool.currency0 || !pool.currency1) return;
@@ -99,6 +107,7 @@ export function AddLiquidityModal({
       pool.currency1 as `0x${string}`,
       pool.fee,
       pool.tickSpacing,
+      hooksForPool,
     );
     const poolId = getPoolId(poolKey);
     const pc = createPublicClient({
@@ -123,7 +132,16 @@ export function AddLiquidityModal({
     return () => {
       cancelled = true;
     };
-  }, [poolManagerAddress, pool.currency0, pool.currency1, pool.fee, pool.tickSpacing, decimals0, decimals1]);
+  }, [
+    poolManagerAddress,
+    pool.currency0,
+    pool.currency1,
+    pool.fee,
+    pool.tickSpacing,
+    hooksForPool,
+    decimals0,
+    decimals1,
+  ]);
 
   const amount0Num = parseFloat(amount0) || 0;
   const amount1Num = parseFloat(amount1) || 0;
@@ -138,8 +156,19 @@ export function AddLiquidityModal({
     parseFloat(balance1) > 0 &&
     amount1Num > parseFloat(balance1);
 
-  const tickLower = -887220;
-  const tickUpper = 887220;
+  /** Must match the on-chain position's tick range (increase liquidity only). */
+  const tickLower = useMemo(() => {
+    if (pool.tokenId != null && pool.tickLower != null) {
+      return clampTick(pool.tickLower, pool.tickSpacing);
+    }
+    return clampTick(-887220, pool.tickSpacing);
+  }, [pool.tokenId, pool.tickLower, pool.tickSpacing]);
+  const tickUpper = useMemo(() => {
+    if (pool.tokenId != null && pool.tickUpper != null) {
+      return clampTick(pool.tickUpper, pool.tickSpacing);
+    }
+    return clampTick(887220, pool.tickSpacing);
+  }, [pool.tokenId, pool.tickUpper, pool.tickSpacing]);
 
   const formatEquivalent = (value: number, decimals: number): string => {
     if (!Number.isFinite(value) || value <= 0) return "";
@@ -199,33 +228,36 @@ export function AddLiquidityModal({
       return;
     }
 
+    if (pool.tokenId == null) {
+      setError("Select an existing position or create one first.");
+      return;
+    }
+    if (pool.tickLower == null || pool.tickUpper == null) {
+      setError(
+        "This position is missing tick range data. Open it from Your positions or refresh.",
+      );
+      return;
+    }
+
     setError(null);
     setPending(true);
     setTxHash(null);
 
     try {
-      const network = (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_HEDERA_NETWORK) || "testnet";
-      const ownerEvmAddress = (await getPositionOwnerAddress(accountId, network)) ?? accountIdToLongZero(accountId);
-      if (!ownerEvmAddress) {
-        setError("Cannot derive EVM address.");
-        setPending(false);
-        return;
-      }
-
       const poolKey = buildPoolKey(
         pool.currency0 as `0x${string}`,
         pool.currency1 as `0x${string}`,
         pool.fee,
         pool.tickSpacing,
+        hooksForPool,
       );
 
       const pmAddr = positionManagerAddress;
-      const poolManagerAddress = getPoolManagerAddress();
+      const poolMgr = getPoolManagerAddress();
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
-      // Read on-chain sqrtPriceX96
       let onChainSqrtPrice: bigint | null = null;
-      if (poolManagerAddress) {
+      if (poolMgr) {
         try {
           const { createPublicClient, http } = await import("viem");
           const pc = createPublicClient({
@@ -234,7 +266,7 @@ export function AddLiquidityModal({
           });
           const poolId = getPoolId(poolKey);
           const state = (await pc.readContract({
-            address: poolManagerAddress as `0x${string}`,
+            address: poolMgr as `0x${string}`,
             abi: PoolManagerAbi,
             functionName: "getPoolState",
             args: [poolId],
@@ -243,7 +275,7 @@ export function AddLiquidityModal({
             onChainSqrtPrice = state[1];
           }
           console.log(
-            "[AddLiq modal] on-chain sqrtPriceX96:",
+            "[AddLiq modal] sqrtPriceX96:",
             onChainSqrtPrice?.toString(),
           );
         } catch (e) {
@@ -300,50 +332,60 @@ export function AddLiquidityModal({
         amount1Max.toString(),
       );
 
+      const tokenIdBn = BigInt(pool.tokenId);
       const unlockData = useFromDeltas
-        ? encodeUnlockDataMintFromDeltas(
-            poolKey,
-            tickLower,
-            tickUpper,
+        ? encodeUnlockDataIncreaseFromDeltas(
+            tokenIdBn,
             liquidityBigInt,
             amount0Max,
             amount1Max,
-            ownerEvmAddress as `0x${string}`,
+            poolKey.currency0,
+            poolKey.currency1,
           )
-        : encodeUnlockDataMint(
-            poolKey,
-            tickLower,
-            tickUpper,
+        : encodeUnlockDataIncrease(
+            tokenIdBn,
             liquidityBigInt,
             amount0Max,
             amount1Max,
-            ownerEvmAddress as `0x${string}`,
           );
 
-      // Transfer tokens to PositionManager (use buffered amounts)
-      for (const [currency, amtWei] of [
-        [poolKey.currency0, amount0Max],
-        [poolKey.currency1, amount1Max],
-      ] as const) {
-        if (amtWei > 0n) {
-          await hederaTokenTransfer({
-            hashConnect: hc,
-            accountId,
-            tokenAddress: currency,
-            to: pmAddr,
-            amount: amtWei,
-            gas: HEDERA_GAS_ERC20,
-          });
+      // Plain INCREASE: PM settles from its ERC20 balance (transfer to PM first).
+      // INCREASE_FROM_DELTAS + SETTLE_PAIR: approve PM so it can transferFrom your wallet.
+      if (useFromDeltas) {
+        for (const [currency, amtWei] of [
+          [poolKey.currency0, amount0Max],
+          [poolKey.currency1, amount1Max],
+        ] as const) {
+          if (amtWei > 0n) {
+            await hederaTokenApprove({
+              hashConnect: hc,
+              accountId,
+              tokenAddress: currency,
+              spender: pmAddr,
+              amount: amtWei,
+              gas: HEDERA_GAS_ERC20,
+            });
+          }
+        }
+      } else {
+        for (const [currency, amtWei] of [
+          [poolKey.currency0, amount0Max],
+          [poolKey.currency1, amount1Max],
+        ] as const) {
+          if (amtWei > 0n) {
+            await hederaTokenTransfer({
+              hashConnect: hc,
+              accountId,
+              tokenAddress: currency,
+              to: pmAddr,
+              amount: amtWei,
+              gas: HEDERA_GAS_ERC20,
+            });
+          }
         }
       }
 
-      // Multicall: initializePool (no-op if exists) + modifyLiquidities
       const { encodeFunctionData: encFn } = await import("viem");
-      const initializeCalldata = encFn({
-        abi: PositionManagerAbi,
-        functionName: "initializePool",
-        args: [poolKey, sqrtPriceX96ForInit],
-      }) as `0x${string}`;
       const modifyCalldata = encFn({
         abi: PositionManagerAbi,
         functionName: "modifyLiquidities",
@@ -354,7 +396,7 @@ export function AddLiquidityModal({
         hashConnect: hc,
         accountId,
         contractId: pmAddr,
-        calls: [initializeCalldata, modifyCalldata],
+        calls: [modifyCalldata],
         gas: HEDERA_GAS_MODIFY_LIQ,
       });
 
@@ -367,6 +409,12 @@ export function AddLiquidityModal({
   }, [
     positionManagerAddress,
     pool,
+    pool.tokenId,
+    pool.tickLower,
+    pool.tickUpper,
+    hooksForPool,
+    tickLower,
+    tickUpper,
     amount0,
     amount1,
     decimals0,
@@ -388,15 +436,44 @@ export function AddLiquidityModal({
           ? `Insufficient ${pool.symbol1}`
           : pending
             ? "Adding liquidity…"
-            : "Add liquidity";
+            : "Add to position";
 
   const canSubmit =
     isConnected &&
+    pool.tokenId != null &&
     hasAmount &&
     !amount0Exceeds &&
     !amount1Exceeds &&
     !pending &&
     !!positionManagerAddress;
+
+  if (pool.tokenId == null) {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-text-secondary leading-relaxed">
+          Liquidity is always tied to a position NFT. Create a position first
+          (you choose the price range); then you can add more liquidity to it
+          here.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {onOpenFullFlow && (
+            <Button
+              variant="primary"
+              onClick={() => {
+                onClose();
+                onOpenFullFlow();
+              }}
+            >
+              Create position
+            </Button>
+          )}
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -412,11 +489,20 @@ export function AddLiquidityModal({
         </span>
         <Badge variant="accent">v4</Badge>
         <Badge>{formatFee(pool.fee)}</Badge>
+        <Badge className="bg-accent/15 text-accent text-[10px]">
+          Position #{pool.tokenId}
+        </Badge>
         <span className="flex items-center gap-1.5 text-xs text-text-tertiary ml-auto">
           <span className="w-2 h-2 rounded-full bg-success" />
           In range
         </span>
       </div>
+      {pool.tickLower != null && pool.tickUpper != null && (
+        <p className="text-xs text-text-tertiary px-0.5">
+          Deposits use this position&apos;s ticks [{pool.tickLower}, {pool.tickUpper}].
+          For a different range, create another position.
+        </p>
+      )}
 
       {/* Token 0 input */}
       <div
@@ -553,7 +639,7 @@ export function AddLiquidityModal({
             Use FROM_DELTAS
           </span>
           <p className="text-[10px] text-text-tertiary mt-0.5">
-            Auto-resolve amounts from pool manager deltas
+            SETTLE_PAIR pulls via transferFrom — approves PositionManager (no pre-transfer)
           </p>
         </div>
         <button

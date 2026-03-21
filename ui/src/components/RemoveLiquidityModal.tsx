@@ -21,7 +21,6 @@ import {
   encodeUnlockDataBurn,
 } from "@/lib/addLiquidity";
 import { hederaContractMulticall } from "@/lib/hederaContract";
-import { hederaContractExecute } from "@/lib/hederaContract";
 import { PositionManagerAbi } from "@/abis/PositionManager";
 import { PoolManagerAbi } from "@/abis/PoolManager";
 import { amountsForLiquidity, getSqrtPriceAtTick } from "@/lib/sqrtPriceMath";
@@ -226,11 +225,10 @@ export function RemoveLiquidityModal({
       // 100%: BURN_POSITION — removes all remaining liquidity and burns the NFT.
       let unlockData: `0x${string}`;
 
-      // For BURN_POSITION we need ERC721 approval:
-      // PositionManager._burn() uses onlyIfApproved(msgSender(), tokenId).
-      // So the account that sends modifyLiquidities must be approved (or be the owner).
-      const ensureBurnApproval = async () => {
-        if (percent !== 100) return;
+      // PositionManager checks onlyIfApproved(msgSender(), tokenId) for both
+      // decrease and burn. The connected sender must be owner, token-approved,
+      // or approved-for-all.
+      const ensureCallerCanModify = async () => {
         const spender =
           (accountEvmAlias?.toLowerCase() ?? accountIdToLongZero(accountId)?.toLowerCase()) ??
           null;
@@ -260,14 +258,7 @@ export function RemoveLiquidityModal({
           return;
         }
 
-        // If the connected wallet is not the ERC721 owner, we can't auto-approve;
-        // the owner must approve the sender.
-        if (ownerResolved !== spender) {
-          setError(
-            "Connected wallet is not the position NFT owner. Switch to the owner wallet or have the owner approve this NFT."
-          );
-          return;
-        }
+        if (ownerResolved === spender) return;
 
         const approved = (await publicClient.readContract({
           address: positionManagerAddress as `0x${string}`,
@@ -288,22 +279,13 @@ export function RemoveLiquidityModal({
 
         if (alreadyApproved) return;
 
-        // Approve spender to burn this specific token.
-        const approveArgs: readonly unknown[] = [spender as `0x${string}`, posTokenId];
-        await hederaContractExecute({
-          hashConnect: hc,
-          accountId,
-          contractId: positionManagerAddress,
-          abi: PositionManagerAbi,
-          functionName: "approve",
-          args: approveArgs,
-          gas: 2_000_000,
-        });
+        setError(
+          "Connected wallet is not owner/approved for this position. Use the owner wallet, or have owner call approve(tokenId) / setApprovalForAll."
+        );
+        throw new Error("Not owner/approved for position");
       };
 
-      if (percent === 100) {
-        await ensureBurnApproval();
-      }
+      await ensureCallerCanModify();
 
       if (percent === 100) {
         unlockData = encodeUnlockDataBurn(posTokenId, 0n, 0n);

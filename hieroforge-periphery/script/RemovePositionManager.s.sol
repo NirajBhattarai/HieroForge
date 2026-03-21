@@ -194,9 +194,15 @@ contract RemovePositionManagerScript is Script {
             }
         }
 
-        // --- Validate position and ownership ---
+        // --- Validate position and signer authorization ---
         require(tokenId != 0, "No position selected for removal");
-        require(pm.ownerOf(tokenId) == owner, "Not owner of position");
+        address tokenOwner = pm.ownerOf(tokenId);
+        bool isOwner = tokenOwner == sender;
+        bool isApproved = pm.getApproved(tokenId) == sender || pm.isApprovedForAll(tokenOwner, sender);
+        require(isOwner || isApproved, "Signer not owner/approved");
+
+        console.log("Signer:", sender);
+        console.log("Token owner:", tokenOwner);
 
         bool burnAfter = percent == 100 ? true : vm.envOr("BURN_AFTER", false);
         uint128 amount0Min = uint128(vm.envOr("AMOUNT0_MIN", uint256(0)));
