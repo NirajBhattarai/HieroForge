@@ -9,9 +9,6 @@ hieroforge-periphery/out/
 # Forge script broadcast output (deployment artifacts)
 broadcast/
 
-# Docs
-docs/
-
 # Dotenv file
 .env
 .env.bak

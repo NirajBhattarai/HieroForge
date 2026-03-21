@@ -17,6 +17,8 @@
 
 ## Architecture
 
+**Diagrams (Mermaid):** see **[docs/architecture.md](docs/architecture.md)** for context, containers, on-chain dependencies, and sequence flows.
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        User (Browser)                           │
