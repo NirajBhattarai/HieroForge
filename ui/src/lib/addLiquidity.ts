@@ -71,6 +71,31 @@ export function getPoolId(poolKey: PoolKey): `0x${string}` {
   return keccak256(encoded);
 }
 
+/**
+ * Encode unlockData for INCREASE_LIQUIDITY on an existing position NFT.
+ * Params match decodeModifyLiquidityParams: tokenId, liquidity, amount0Max, amount1Max, hookData.
+ */
+export function encodeUnlockDataIncrease(
+  tokenId: bigint,
+  liquidity: bigint,
+  amount0Max: bigint,
+  amount1Max: bigint,
+): `0x${string}` {
+  const increaseParam = encodeAbiParameters(
+    [
+      { type: "uint256", name: "tokenId" },
+      { type: "uint256", name: "liquidity" },
+      { type: "uint128", name: "amount0Max" },
+      { type: "uint128", name: "amount1Max" },
+      { type: "bytes", name: "hookData" },
+    ],
+    [tokenId, liquidity, amount0Max, amount1Max, "0x"],
+  );
+  const actions =
+    `0x${INCREASE_LIQUIDITY_ACTION.toString(16).padStart(2, "0")}` as `0x${string}`;
+  return encodeUnlockDataStrict(actions, [increaseParam]);
+}
+
 /** Encode unlockData for modifyLiquidities: abi.encode(actions, params) where actions = [MINT_POSITION], params = [mintParams]. */
 export function encodeUnlockDataMint(
   poolKey: PoolKey,
@@ -117,14 +142,8 @@ export function encodeUnlockDataMint(
   // actions = single byte MINT_POSITION (0x02), same as abi.encodePacked(uint8(0x02))
   const actions =
     `0x${MINT_POSITION_ACTION.toString(16).padStart(2, "0")}` as `0x${string}`;
-  // unlockData = abi.encode(bytes actions, bytes[] params)
-  return encodeAbiParameters(
-    [
-      { type: "bytes", name: "actions" },
-      { type: "bytes[]", name: "params" },
-    ],
-    [actions, [mintParam]],
-  ) as `0x${string}`;
+  // CalldataDecoder.decodeActionsRouterParams requires strict (bytes, bytes[]) layout
+  return encodeUnlockDataStrict(actions, [mintParam]);
 }
 
 /** Default sqrtPriceX96 for new pools (1:1). */
@@ -330,13 +349,7 @@ export function encodeUnlockDataIncreaseFromDeltas(
     PM_SETTLE_PAIR,
   );
 
-  return encodeAbiParameters(
-    [
-      { type: "bytes", name: "actions" },
-      { type: "bytes[]", name: "params" },
-    ],
-    [actions, [increaseParam, settlePairParam]],
-  ) as `0x${string}`;
+  return encodeUnlockDataStrict(actions, [increaseParam, settlePairParam]);
 }
 
 /**
@@ -401,11 +414,9 @@ export function encodeUnlockDataMintFromDeltasWithClose(
     PM_CLOSE_CURRENCY,
   );
 
-  return encodeAbiParameters(
-    [
-      { type: "bytes", name: "actions" },
-      { type: "bytes[]", name: "params" },
-    ],
-    [actions, [mintParam, close0Param, close1Param]],
-  ) as `0x${string}`;
+  return encodeUnlockDataStrict(actions, [
+    mintParam,
+    close0Param,
+    close1Param,
+  ]);
 }

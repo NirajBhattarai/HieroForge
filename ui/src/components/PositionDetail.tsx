@@ -136,14 +136,34 @@ export function PositionDetail({
           </svg>
           Your positions
         </button>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button variant="primary" size="sm" onClick={onAddLiquidity}>
-            Add liquidity
+            {pool.tokenId != null ? "Add liquidity" : "Create position"}
           </Button>
-          <Button variant="secondary" size="sm" onClick={onRemoveLiquidity}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onRemoveLiquidity}
+            disabled={pool.tokenId == null}
+            title={
+              pool.tokenId == null
+                ? "Create a position first"
+                : "Remove liquidity from this NFT"
+            }
+          >
             Remove liquidity
           </Button>
-          <Button variant="danger" size="sm" onClick={onBurnPosition}>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={onBurnPosition}
+            disabled={pool.tokenId == null}
+            title={
+              pool.tokenId == null
+                ? "Create a position first"
+                : "Burn this position NFT"
+            }
+          >
             Burn position
           </Button>
         </div>

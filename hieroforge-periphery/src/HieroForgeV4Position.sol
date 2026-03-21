@@ -412,8 +412,11 @@ contract HieroForgeV4Position is IPositionManager, IPoolInitializer_v4, Multical
 
     /// @dev Settles negative balance deltas with the pool manager (sync + transfer + settle)
     function _settlePoolDeltas(PoolKey memory poolKey, BalanceDelta liquidityDelta, BalanceDelta feesAccrued) internal {
-        int128 a0 = liquidityDelta.amount0() + feesAccrued.amount0();
-        int128 a1 = liquidityDelta.amount1() + feesAccrued.amount1();
+        // PoolManager.modifyLiquidity already returns callerDelta = principal + fees as first return value.
+        // Avoid double-counting fees here.
+        feesAccrued;
+        int128 a0 = liquidityDelta.amount0();
+        int128 a1 = liquidityDelta.amount1();
         if (a0 < 0) _settleCurrency(poolKey.currency0, uint256(uint128(-a0)));
         if (a1 < 0) _settleCurrency(poolKey.currency1, uint256(uint128(-a1)));
     }
@@ -505,8 +508,10 @@ contract HieroForgeV4Position is IPositionManager, IPoolInitializer_v4, Multical
 
     /// @dev Takes positive balance deltas from the pool manager (tokens out to executor)
     function _takePoolDeltas(PoolKey memory poolKey, BalanceDelta liquidityDelta, BalanceDelta feesAccrued) internal {
-        int128 a0 = liquidityDelta.amount0() + feesAccrued.amount0();
-        int128 a1 = liquidityDelta.amount1() + feesAccrued.amount1();
+        // PoolManager.modifyLiquidity already includes fees in liquidityDelta (callerDelta).
+        feesAccrued;
+        int128 a0 = liquidityDelta.amount0();
+        int128 a1 = liquidityDelta.amount1();
         address to = msgSender();
         // Uniswap v4-style: caller must both settle negative deltas and take positive deltas.
         if (a0 < 0) _settleCurrency(poolKey.currency0, uint256(uint128(-a0)));

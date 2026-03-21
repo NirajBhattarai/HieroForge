@@ -103,10 +103,13 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
   }));
 
   // Helper: resolve address from TokenOption (prefers .address field, falls back to static lookup)
-  const resolveAddress = (tok: TokenOption): string =>
-    (tok.address ?? getTokenAddress(tok.symbol)).toLowerCase();
-  const resolveDecimals = (tok: TokenOption): number =>
-    tok.decimals ?? getTokenDecimals(tok.symbol);
+  const resolveAddress = (tok: TokenOption | undefined | null): string => {
+    if (!tok) return "";
+    const raw = tok.address ?? getTokenAddress(tok.symbol);
+    return (raw ?? "").toLowerCase();
+  };
+  const resolveDecimals = (tok: TokenOption | undefined | null): number =>
+    tok?.decimals ?? getTokenDecimals(tok?.symbol ?? "");
 
   // Step 1: pair + fee
   const EMPTY_TOKEN: TokenOption = {
@@ -203,28 +206,39 @@ export function NewPosition({ onBack, preselectedPool }: NewPositionProps) {
   const { balanceFormatted: balance1Formatted, loading: balance1Loading } =
     useTokenBalance(addr1ForBalance, ownerForBalance, resolveDecimals(token1));
 
-  // Restore from preselected pool
+  // Restore from preselected pool (never set token0/token1 to undefined — token list may still be loading)
   useEffect(() => {
-    if (!preselectedPool) {
-      // Set defaults from dynamic list when it loads
-      if (tokenOptions.length >= 2) {
-        setToken0(tokenOptions[0]!);
-        setToken1(tokenOptions[1]!);
-      }
-      return;
-    }
-    const t0 =
-      tokenOptions.find((t) => t.symbol === preselectedPool.symbol0) ??
-      tokenOptions[0]!;
-    const t1 =
-      tokenOptions.find((t) => t.symbol === preselectedPool.symbol1) ??
-      tokenOptions[1]!;
-    setToken0(t0);
-    setToken1(t1);
+    if (!preselectedPool) return;
+
+    const match0 = tokenOptions.find(
+      (t) => t.symbol === preselectedPool.symbol0,
+    );
+    const match1 = tokenOptions.find(
+      (t) => t.symbol === preselectedPool.symbol1,
+    );
+
+    const fallback0: TokenOption = {
+      id: preselectedPool.currency0,
+      symbol: preselectedPool.symbol0 || "Token0",
+      address: preselectedPool.currency0,
+      decimals: preselectedPool.decimals0 ?? 18,
+      name: preselectedPool.symbol0 || "Token 0",
+    };
+    const fallback1: TokenOption = {
+      id: preselectedPool.currency1,
+      symbol: preselectedPool.symbol1 || "Token1",
+      address: preselectedPool.currency1,
+      decimals: preselectedPool.decimals1 ?? 18,
+      name: preselectedPool.symbol1 || "Token 1",
+    };
+
+    setToken0(match0 ?? fallback0);
+    setToken1(match1 ?? fallback1);
     setToken0Addr(preselectedPool.currency0);
     setToken1Addr(preselectedPool.currency1);
     setFee(preselectedPool.fee);
     setTickSpacing(preselectedPool.tickSpacing);
+    // tokenOptions.length only: the array is recreated each render; length tracks list load for symbol match upgrades.
   }, [preselectedPool, tokenOptions.length]);
 
   // Update addresses when dropdowns change

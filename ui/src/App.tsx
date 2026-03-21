@@ -148,12 +148,19 @@ function App() {
                   pool={selectedPoolDetail}
                   onBack={() => setSelectedPoolDetail(null)}
                   onAddLiquidity={() => {
-                    setAddLiquidityPool(selectedPoolDetail);
+                    if (selectedPoolDetail.tokenId == null) {
+                      setSelectedPoolForPosition(selectedPoolDetail);
+                      setShowNewPositionModal(true);
+                    } else {
+                      setAddLiquidityPool(selectedPoolDetail);
+                    }
                   }}
                   onRemoveLiquidity={() => {
+                    if (selectedPoolDetail.tokenId == null) return;
                     setRemoveLiquidityPool(selectedPoolDetail);
                   }}
                   onBurnPosition={() => {
+                    if (selectedPoolDetail.tokenId == null) return;
                     setBurnPositionPool(selectedPoolDetail);
                   }}
                 />
@@ -173,7 +180,7 @@ function App() {
           <Modal
             open={!!addLiquidityPool}
             onClose={() => setAddLiquidityPool(null)}
-            title="Add liquidity"
+            title="Add to position"
             headerRight={
               <button
                 type="button"

@@ -159,6 +159,69 @@ export async function hederaTokenTransfer(params: {
 }
 
 /**
+ * ERC20 approve(spender, amount) for HashPack — required when PositionManager settles
+ * via transferFrom (e.g. MINT_FROM_DELTAS + SETTLE_PAIR). Not used for plain MINT + transfer-to-PM.
+ */
+export async function hederaTokenApprove(params: {
+  hashConnect: HashConnect;
+  accountId: string;
+  tokenAddress: string;
+  spender: string;
+  amount: bigint;
+  gas?: number;
+}): Promise<void> {
+  const {
+    hashConnect,
+    accountId,
+    tokenAddress,
+    spender,
+    amount,
+    gas = 1_200_000,
+  } = params;
+
+  const { encodeFunctionData: encode } = await import("viem");
+  const calldata = encode({
+    abi: [
+      {
+        type: "function",
+        name: "approve",
+        inputs: [
+          { name: "spender", type: "address" },
+          { name: "amount", type: "uint256" },
+        ],
+        outputs: [{ name: "", type: "bool" }],
+        stateMutability: "nonpayable",
+      },
+    ] as const,
+    functionName: "approve",
+    args: [spender as `0x${string}`, amount],
+  });
+
+  const calldataBytes = Buffer.from(calldata.slice(2), "hex");
+  const senderAccountId = AccountId.fromString(accountId);
+  const cId = tokenAddress.startsWith("0x")
+    ? ContractId.fromEvmAddress(0, 0, tokenAddress)
+    : ContractId.fromString(tokenAddress);
+
+  const tx = new ContractExecuteTransaction()
+    .setContractId(cId)
+    .setGas(gas)
+    .setFunctionParameters(calldataBytes)
+    .setMaxTransactionFee(new Hbar(10));
+
+  const signer = hashConnect.getSigner(
+    senderAccountId as unknown as Parameters<typeof hashConnect.getSigner>[0],
+  );
+  const frozenTx = await tx.freezeWithSigner(signer as any);
+  const txResponse = await frozenTx.executeWithSigner(signer as any);
+  const txId =
+    txResponse?.transactionId?.toString() ?? `hedera-tx-${Date.now()}`;
+  console.log("[hederaTokenApprove] tx submitted:", txId);
+  await waitForTransactionSuccess(txId);
+  console.log("[hederaTokenApprove] tx confirmed SUCCESS:", txId);
+}
+
+/**
  * Execute a multicall on a contract via Hedera SDK.
  * Encodes multicall(bytes[] data) where each entry is a pre-encoded function calldata.
  * This is used by PositionManager to atomically initializePool + modifyLiquidities in one tx.
