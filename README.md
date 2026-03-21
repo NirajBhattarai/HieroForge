@@ -17,6 +17,8 @@
 
 ## Architecture
 
+**Diagrams (Mermaid):** see **[architecture/README.md](architecture/README.md)** for context, containers, on-chain dependencies, and sequence flows.
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        User (Browser)                           │
@@ -103,10 +105,7 @@ HieroForge/
 │   ├── scripts/              #   DynamoDB seed/register scripts
 │   └── public/               #   Static assets
 │
-├── docs/                     # Documentation
-│   ├── architecture.md       #   System architecture & smart contract diagrams
-│   ├── hts-token-foundry.md  #   HTS token creation guide
-│   └── v4-periphery-overview.md # Uniswap V4 periphery reference
+├── architecture/             # Mermaid diagrams: README.md (system), pool-manager.md (PoolManager core)
 │
 ├── .env.example              # Root env template (PRIVATE_KEY, RPC, etc.)
 └── .gitmodules               # Git submodules (hedera-smart-contracts, hedera-forking,
@@ -309,9 +308,8 @@ Open [http://localhost:3000](http://localhost:3000) and connect HashPack.
 
 | Document | Description |
 |----------|-------------|
-| [docs/architecture.md](docs/architecture.md) | System architecture, smart contract diagrams, Mermaid flowcharts |
-| [docs/hts-token-foundry.md](docs/hts-token-foundry.md) | How to create HTS tokens using Foundry scripts |
-| [docs/v4-periphery-overview.md](docs/v4-periphery-overview.md) | Uniswap V4 periphery reference (IV4Router, V4Router, PathKey, Actions) |
+| [architecture/README.md](architecture/README.md) | System architecture — context, containers, on-chain deps, swap & liquidity sequences (Mermaid) |
+| [architecture/pool-manager.md](architecture/pool-manager.md) | **PoolManager** only — singleton state, lock/unlock, flash deltas, sync/settle/take, hooks |
 | [hieroforge-core/README.md](hieroforge-core/README.md) | Core contracts — build, test, deploy, troubleshooting |
 | [hieroforge-periphery/README.md](hieroforge-periphery/README.md) | Periphery contracts — deploy, scripts, HTS compatibility |
 | [ui/README.md](ui/README.md) | Frontend — setup, environment, DynamoDB, HashPack |
