@@ -194,10 +194,10 @@ flowchart LR
 
 ```
 HieroForge/
+├── architecture/          # This document — system diagrams (Mermaid)
 ├── hieroforge-core/       # PoolManager, types, libraries, Foundry tests & deploy scripts
 ├── hieroforge-periphery/  # Router, PositionManager, Quoter, HieroForgeV4Position, scripts/
 ├── ui/                    # Next.js frontend + API routes
-├── docs/                  # This document and other technical notes
 └── .gitmodules            # forge-std, solmate, hedera-forking, etc.
 ```
 
@@ -205,10 +205,6 @@ HieroForge/
 
 ## Viewing these diagrams
 
-- **GitHub**: Mermaid renders automatically in `.md` files on github.com.
-- **VS Code**: Install a Mermaid preview extension, or paste into [mermaid.live](https://mermaid.live).
-- **Exports**: Use Mermaid CLI or mermaid.live to export **SVG** or **PNG** for slides or wikis.
-
----
-
-*Last updated on branch `docs/architecture-diagram` — align with `main` for the latest contract list.*
+- **GitHub**: Mermaid renders automatically in `README.md` on github.com.
+- **VS Code**: Mermaid preview extension, or [mermaid.live](https://mermaid.live).
+- **Exports**: Mermaid CLI or mermaid.live → SVG / PNG for slides.

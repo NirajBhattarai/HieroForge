@@ -9,6 +9,9 @@ hieroforge-periphery/out/
 # Forge script broadcast output (deployment artifacts)
 broadcast/
 
+# Local / scratch documentation (architecture lives in architecture/README.md)
+docs/
+
 # Dotenv file
 .env
 .env.bak
