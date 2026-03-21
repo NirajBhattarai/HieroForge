@@ -12,6 +12,9 @@ broadcast/
 # Local / scratch documentation (architecture lives in architecture/README.md)
 docs/
 
+# Obsidian (local vault metadata)
+**/.obsidian/
+
 # Dotenv file
 .env
 .env.bak

@@ -2,6 +2,8 @@
 
 Visual overview of how the **UI**, **off-chain services**, and **on-chain contracts** fit together. HieroForge is a Uniswap V4–style concentrated liquidity AMM on **Hedera** (chain id **296** testnet), with **HTS** token support.
 
+**PoolManager–only deep dive:** **[pool-manager.md](./pool-manager.md)** — singleton state, lock/unlock, deltas, `sync`/`settle`/`take`, hooks.
+
 ---
 
 ## 1. System context
@@ -194,7 +196,7 @@ flowchart LR
 
 ```
 HieroForge/
-├── architecture/          # This document — system diagrams (Mermaid)
+├── architecture/          # System diagrams (this README) + PoolManager deep dive (pool-manager.md)
 ├── hieroforge-core/       # PoolManager, types, libraries, Foundry tests & deploy scripts
 ├── hieroforge-periphery/  # Router, PositionManager, Quoter, HieroForgeV4Position, scripts/
 ├── ui/                    # Next.js frontend + API routes
