@@ -105,7 +105,7 @@ HieroForge/
 │   ├── scripts/              #   DynamoDB seed/register scripts
 │   └── public/               #   Static assets
 │
-├── architecture/             # Mermaid diagrams: README.md (system), pool-manager.md (PoolManager core)
+├── architecture/             # README.md (system), pool-manager.md, hiero-forge-v4-position.md
 │
 ├── .env.example              # Root env template (PRIVATE_KEY, RPC, etc.)
 └── .gitmodules               # Git submodules (hedera-smart-contracts, hedera-forking,
@@ -293,14 +293,18 @@ Open [http://localhost:3000](http://localhost:3000) and connect HashPack.
 
 ## Deployed Contracts (Hedera Testnet)
 
+**Network:** testnet · **Chain ID:** 296 · **Explorer:** [HashScan](https://hashscan.io/testnet)
+
+These are the addresses wired in [`ui/.env.example`](ui/.env.example) (`NEXT_PUBLIC_*`). Each name links to the contract on HashScan.
+
 | Contract | Address |
 |----------|---------|
-| PoolManager | `0xc96474B027344d486a0963B3Da45F9a6c34AA96B` |
-| PositionManager | `0x21ADCD6DE84afE088CD322B9ebdF7dfDF33f0B5A` |
-| UniversalRouter | `0x993027e4e258310DD872c132db5e9DEbF9578631` |
-| V4Quoter | `0xb0649244102C565653994bAd0F7473914037d459` |
-| TKA (HTS token) | `0x00000000000000000000000000000000007d6d03` |
-| TKB (HTS token) | `0x00000000000000000000000000000000007d6d06` |
+| PoolManager | [`0x3F3ED4342339DB8216734E6B8Df467e5e533EE98`](https://hashscan.io/testnet/contract/0x3F3ED4342339DB8216734E6B8Df467e5e533EE98) |
+| PositionManager | [`0x97DfF8C7C7ec86A0667C65fd9D731516B42d4d86`](https://hashscan.io/testnet/contract/0x97DfF8C7C7ec86A0667C65fd9D731516B42d4d86) |
+| UniversalRouter (V4) | [`0x613b73d632C675211F0B669b3d5c0B76D74B94F0`](https://hashscan.io/testnet/contract/0x613b73d632C675211F0B669b3d5c0B76D74B94F0) |
+| V4Quoter | [`0x8Bec1cE092C9852BB15670B03C618D34db80a205`](https://hashscan.io/testnet/contract/0x8Bec1cE092C9852BB15670B03C618D34db80a205) |
+| HieroForgeV4Position | [`0x03401a54406740040d34ee3d698064f7199a535d`](https://hashscan.io/testnet/contract/0x03401a54406740040d34ee3d698064f7199a535d) |
+| TWAP hook | [`0x3752B89d43262fC9B4A4664e18c856dABd636DE2`](https://hashscan.io/testnet/contract/0x3752B89d43262fC9B4A4664e18c856dABd636DE2) |
 
 ---
 
@@ -310,9 +314,14 @@ Open [http://localhost:3000](http://localhost:3000) and connect HashPack.
 |----------|-------------|
 | [architecture/README.md](architecture/README.md) | System architecture — context, containers, on-chain deps, swap & liquidity sequences (Mermaid) |
 | [architecture/pool-manager.md](architecture/pool-manager.md) | **PoolManager** only — singleton state, lock/unlock, flash deltas, sync/settle/take, hooks |
+| [architecture/hiero-forge-v4-position.md](architecture/hiero-forge-v4-position.md) | **HieroForgeV4Position** — HTS NFT positions vs ERC-721 `PositionManager`, deploy, parity table |
 | [hieroforge-core/README.md](hieroforge-core/README.md) | Core contracts — build, test, deploy, troubleshooting |
 | [hieroforge-periphery/README.md](hieroforge-periphery/README.md) | Periphery contracts — deploy, scripts, HTS compatibility |
 | [ui/README.md](ui/README.md) | Frontend — setup, environment, DynamoDB, HashPack |
+
+**External links:** [Foundry Book](https://book.getfoundry.sh/) · [Hedera docs](https://docs.hedera.com/) · [HashPack](https://www.hashpack.app/) · [WalletConnect Cloud](https://cloud.walletconnect.com/)
+
+**HTS fork testing:** [hedera-forking](https://github.com/hashgraph/hedera-forking) emulates the Hedera Token Service at `0x167` for Foundry fork tests (e.g. `forge test --fork-url https://testnet.hashio.io/api`). See that repo for `ffi`, RPC endpoints, and supported HTS methods.
 
 ---
 
@@ -331,25 +340,6 @@ Open [http://localhost:3000](http://localhost:3000) and connect HashPack.
 | Dependencies | hedera-smart-contracts, hedera-forking, forge-std, solmate, permit2 |
 
 ---
-
-## License
-
-See individual package files for license information.
-3. Optional: set `HEDERA_RPC_URL` (default: testnet hashio).
-4. From repo root: `cd hieroforge-core && forge script script/CreateHtsToken.s.sol:CreateHtsTokenScript --rpc-url $HEDERA_RPC_URL --broadcast --private-key $PRIVATE_KEY`
-
-For a **local Hedera node**, run the same command with `HEDERA_RPC_URL` pointing at your node’s EVM RPC (e.g. `http://127.0.0.1:7546`). The created token’s address is emitted in the `CreatedToken` event.
-
-## Documentation
-
-- [Foundry Book](https://book.getfoundry.sh/)
-- [Hedera](https://docs.hedera.com/)
-- [HashPack](https://www.hashpack.app/)
-- [WalletConnect Cloud](https://cloud.walletconnect.com/) (project ID for dApps)
-
-### For later: HTS fork testing
-
-- **[hedera-forking](https://github.com/hashgraph/hedera-forking)** — Foundry library (and Hardhat plugin) that emulates the Hedera Token Service at `0x167` so you can run **fork tests** against Hedera (e.g. `forge test --fork-url https://testnet.hashio.io/api`). Use `Hsc.htsSetup()` in test `setUp()` and optional `--skip-simulation` for scripts. Lets you test HTS token creation/transfers locally without a live node. See repo README for setup (`ffi = true`, RPC endpoints, and supported HTS methods).
 
 ## License
 
